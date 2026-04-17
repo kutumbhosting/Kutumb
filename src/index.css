@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 13% 13%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 13%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 13%;
+
+    /* Kutumb Primary Blue */
+    --primary: 210 70% 58%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 210 70% 85%;
+    --primary-dark: 210 70% 40%;
+
+    /* Kutumb Secondary Green */
+    --secondary: 166 70% 60%;
+    --secondary-foreground: 220 13% 13%;
+    --secondary-light: 166 70% 85%;
+
+    /* Kutumb Accent Orange */
+    --accent: 38 92% 55%;
+    --accent-foreground: 0 0% 100%;
+    --accent-light: 38 92% 85%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 220 13% 46%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 20% 90%;
+    --input: 210 20% 90%;
+    --ring: 210 70% 58%;
+
+    --radius: 0.75rem;
+
+    /* Community warmth gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(210 70% 58%), hsl(166 70% 60%));
+    --gradient-warm: linear-gradient(135deg, hsl(38 92% 55%), hsl(166 70% 60%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 20% 98%));
+    
+    /* Smooth transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* Shadows with primary color */
+    --shadow-sm: 0 2px 8px hsl(210 70% 58% / 0.08);
+    --shadow-md: 0 4px 16px hsl(210 70% 58% / 0.12);
+    --shadow-lg: 0 8px 32px hsl(210 70% 58% / 0.16);
+    --shadow-hover: 0 12px 40px hsl(210 70% 58% / 0.2);
+  }
+
+  .dark {
+    --background: 220 20% 10%;
+    --foreground: 210 20% 98%;
+
+    --card: 220 20% 12%;
+    --card-foreground: 210 20% 98%;
+
+    --popover: 220 20% 12%;
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 210 70% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 166 70% 60%;
+    --secondary-foreground: 220 13% 13%;
+
+    --accent: 38 92% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --muted: 220 20% 18%;
+    --muted-foreground: 210 20% 65%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 20%;
+    --input: 220 20% 20%;
+    --ring: 210 70% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold tracking-tight;
+  }
+
+  h1 {
+    @apply text-4xl md:text-5xl lg:text-6xl;
+  }
+
+  h2 {
+    @apply text-3xl md:text-4xl;
+  }
+
+  h3 {
+    @apply text-2xl md:text-3xl;
+  }
+}
+
+@layer components {
+  .btn-hero {
+    @apply bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-4 rounded-lg font-semibold transition-all duration-300 hover:shadow-lg hover:scale-105;
+  }
+
+  .btn-secondary-hero {
+    @apply bg-secondary hover:bg-secondary/90 text-secondary-foreground px-8 py-4 rounded-lg font-semibold transition-all duration-300 hover:shadow-lg hover:scale-105;
+  }
+
+  .btn-accent {
+    @apply bg-accent hover:bg-accent/90 text-accent-foreground px-6 py-3 rounded-lg font-semibold transition-all duration-300 hover:shadow-md hover:scale-105;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-2;
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-warm {
+    background: var(--gradient-warm);
+  }
+}
