@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo-tra.png";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,8 +26,8 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <img src={logo} alt="Kutumb Logo" className="h-12 w-12 transition-transform group-hover:scale-110" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            <img src={logo} alt="Kutumb Logo" className="h-16 w-16 transition-transform group-hover:scale-110" />
+            <span className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
               Kutumb
             </span>
           </Link>
@@ -38,7 +38,7 @@ const Navbar = () => {
               <Link
                 key={link.path}
                 to={link.path}
-                className={`text-sm font-medium transition-colors hover:text-primary ${
+                className={`text-lg font-medium transition-colors hover:text-primary ${
                   isActive(link.path) ? "text-primary" : "text-foreground/80"
                 }`}
               >
@@ -46,7 +46,7 @@ const Navbar = () => {
               </Link>
             ))}
             <Link to="/membership">
-              <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
+              <Button className="bg-accent hover:bg-accent/90 text-accent-foreground text-lg">
                 Join Us
               </Button>
             </Link>
