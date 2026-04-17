@@ -26,7 +26,7 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <img src={logo} alt="Kutumb Logo" className="h-16 w-16 transition-transform group-hover:scale-110" />
+            <img src={logo} alt="Kutumb Logo" className="h-14 w-14 transition-transform group-hover:scale-110" />
             <span className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
               Kutumb
             </span>
