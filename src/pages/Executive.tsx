@@ -2,56 +2,89 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Phone, Mail } from "lucide-react";
+import seemaImg from "@/assets/team/Seema.png";
+import rajImg from "@/assets/team/Raj.png";
+import ashokImg from "@/assets/team/Ashok.png";
+import anjaliImg from "@/assets/team/Anjali.png";
+import nareshImg from "@/assets/team/Naresh.png";
+import anilImg from "@/assets/team/Anil.png";
+import vikasImg from "@/assets/team/Vikas.png";
+import suruchiImg from "@/assets/team/Suruchi.png";
+import pramodhImg from "@/assets/team/Pramodh.png";
 
 const Executive = () => {
   const team = [
     {
-      name: "Rajesh Kumar",
+      name: "Seema Garg",
       role: "President",
-      phone: "+61 412 345 678",
-      email: "rajesh@kutumb.org.au",
-      bio: "Passionate community leader with over 10 years of experience in social impact initiatives. Dedicated to building inclusive communities and fostering positive change.",
-      imageInitials: "RK",
+      phone: "+61 432 716 406",
+      email: "seema@kutumb.org.au",
+      bio: "Passionate community leader with over 30 years of experience in social impact initiatives. Dedicated to building inclusive communities and fostering positive change.",
+      image: seemaImg,
     },
     {
-      name: "Priya Sharma",
+      name: "Raj Garg",
       role: "Vice President",
-      phone: "+61 423 456 789",
-      email: "priya@kutumb.org.au",
+      phone: "+61 411 766 170",
+      email: "raj@kutumb.org.au",
       bio: "Experienced nonprofit professional committed to community wellness and engagement. Specializes in program development and volunteer coordination.",
-      imageInitials: "PS",
+      image: rajImg,
     },
     {
-      name: "Amit Patel",
-      role: "Secretary",
-      phone: "+61 434 567 890",
-      email: "amit@kutumb.org.au",
+      name: "Ashok Gupta",
+      role: "Company Secretary and Principal Officer",
+      phone: "+61 412 830 048",
+      email: "ashok@kutumb.org.au",
       bio: "Detail-oriented administrator with a passion for organization excellence. Ensures smooth operations and effective communication within the organization.",
-      imageInitials: "AP",
+      image: ashokImg,
     },
     {
-      name: "Sunita Reddy",
+      name: "Naresh Kumar",
       role: "Treasurer",
-      phone: "+61 445 678 901",
-      email: "sunita@kutumb.org.au",
+      phone: "+61 434 679 126",
+      email: "naresh@kutumb.org.au",
       bio: "Financial professional dedicated to transparency and fiscal responsibility. Manages organizational finances with integrity and accountability.",
-      imageInitials: "SR",
+      image: nareshImg,
     },
     {
-      name: "Vikram Singh",
-      role: "Events Coordinator",
-      phone: "+61 456 789 012",
-      email: "vikram@kutumb.org.au",
+      name: "Suruchi Thapliyal",
+      role: "Coordinator, Event Performance",
+      phone: "+61 415 578 569",
+      email: "suruchi@kutumb.org.au",
       bio: "Creative event planner with expertise in community engagement. Designs and executes memorable events that bring people together.",
-      imageInitials: "VS",
+      image: suruchiImg,
     },
     {
-      name: "Anjali Mehta",
-      role: "Membership Coordinator",
-      phone: "+61 467 890 123",
+      name: "Anil Mishra",
+      role: "Coordinator, Online Presence",
+      phone: "+61 466 713 166",
+      email: "anil@kutumb.org.au",
+      bio: "A detail-oriented digital coordinator responsible for managing Kutumb’s online presence across platforms, ensuring consistent branding, engagement, and community outreach through effective digital communication.",
+      image: anilImg,
+    },
+    {
+      name: "Dr Vikas Kesarvani",
+      role: "Coordinator, Kutumb Men's Shed",
+      phone: "+61 449 843 496",
+      email: "vikash@kutumb.org.au",
+      bio: "Responsible for coordinating Kutumb’s Men’s Shed activities, organizing events that promote connection, wellbeing, and peer support among men in the community.",
+      image: vikasImg,
+    },
+    {
+      name: "Anjali Gupta",
+      role: "Committee Member",
+      phone: "+61 425 366 592",
       email: "anjali@kutumb.org.au",
       bio: "Warm and welcoming membership coordinator focused on building strong relationships. Ensures every member feels valued and connected.",
-      imageInitials: "AM",
+      image: anjaliImg,
+    },
+    {
+      name: "Pramodh Rai",
+      role: "Advisor",
+      phone: "+61 431 471 879",
+      email: "pramodh@kutumb.org.au",
+      bio: "A highly experienced community leader and advisor with a strong background in social and cultural engagement. An active member of organisations such as the Indian Diaspora Council and Arya Samaj Association, bringing valuable insight and guidance to Kutumb’s mission.",
+      image: pramodhImg,
     },
   ];
 
@@ -90,11 +123,20 @@ const Executive = () => {
                 <Card key={index} className="card-hover border-2 overflow-hidden">
                   <CardContent className="p-0">
                     {/* Avatar */}
-                    <div className={`h-48 flex items-center justify-center ${getGradientClass(index)}`}>
-                      <div className="text-6xl font-bold text-white">
-                        {member.imageInitials}
-                      </div>
-                    </div>
+
+<div className={`h-48 flex items-center justify-center ${getGradientClass(index)}`}>
+  {member.image ? (
+    <img
+      src={member.image}
+      alt={member.name}
+      className="w-48 h-48 object-cover rounded-full shadow-lg"
+    />
+  ) : (
+    <div className="text-6xl font-bold text-white">
+      {member.imageInitials}
+    </div>
+  )}
+</div>
                     
                     {/* Info */}
                     <div className="p-6">
@@ -153,3 +195,4 @@ const Executive = () => {
 };
 
 export default Executive;
+
