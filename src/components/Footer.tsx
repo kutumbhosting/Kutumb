@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Mail, Phone, MapPin, Facebook, Instagram, Twitter } from "lucide-react";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo-tra.png";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -11,14 +11,17 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
           {/* About Section */}
           <div>
-            <div className="flex items-center gap-3 mb-4">
-              <img src={logo} alt="Kutumb Logo" className="h-10 w-10" />
-              <span className="text-xl font-bold">Kutumb</span>
-            </div>
-            <p className="text-muted-foreground text-sm mb-4">
+          <div className="flex items-center gap-2 mb-4">
+             <img src={logo} alt="Kutumb Logo" className="h-8 w-8" />
+             <h3 className="font-semibold leading-none">
+               Kutumb
+             </h3>
+           </div>    
+           <Link to="/" onClick={() => window.scrollTo(0, 0)}
+              className="text-muted-foreground hover:text-primary transition-colors text-sm">
               Building stronger communities through social impact, engagement, and compassion.
-            </p>
-            <div className="flex gap-4">
+           </Link>
+           <div className="flex gap-6 mt-4">
               <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
                 <Facebook size={20} />
               </a>
@@ -28,7 +31,7 @@ const Footer = () => {
               <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
                 <Twitter size={20} />
               </a>
-            </div>
+           </div>
           </div>
 
           {/* Quick Links */}
@@ -36,22 +39,22 @@ const Footer = () => {
             <h3 className="font-semibold mb-4">Quick Links</h3>
             <ul className="space-y-2">
               <li>
-                <Link to="/about" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Link to="/about" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                   About Us
                 </Link>
               </li>
               <li>
-                <Link to="/executive" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Link to="/executive" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                   Executive Team
                 </Link>
               </li>
               <li>
-                <Link to="/activities" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Link to="/activities" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                   Activities
                 </Link>
               </li>
               <li>
-                <Link to="/events" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Link to="/events" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                   Events
                 </Link>
               </li>
@@ -63,17 +66,17 @@ const Footer = () => {
             <h3 className="font-semibold mb-4">Get Involved</h3>
             <ul className="space-y-2">
               <li>
-                <Link to="/membership" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Link to="/membership" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                   Become a Member
                 </Link>
               </li>
               <li>
-                <Link to="/events" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Link to="/events" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                   Register for Events
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Link to="/contact" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                   Contact Us
                 </Link>
               </li>
@@ -123,4 +126,5 @@ const Footer = () => {
 };
 
 export default Footer;
+
 
