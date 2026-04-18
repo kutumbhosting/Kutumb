@@ -29,8 +29,8 @@ const Contact = () => {
     {
       icon: Phone,
       title: "Phone",
-      details: "+61 XXX XXX XXX",
-      link: "tel:+61XXXXXXXXX",
+      details: "+61 412 830 048",
+      link: "tel:+61412830048",
       color: "text-secondary",
     },
     {
@@ -39,12 +39,6 @@ const Contact = () => {
       details: "info@kutumb.org.au",
       link: "mailto:info@kutumb.org.au",
       color: "text-accent",
-    },
-    {
-      icon: Clock,
-      title: "Office Hours",
-      details: "Mon - Fri: 9:00 AM - 5:00 PM",
-      color: "text-primary",
     },
   ];
 
@@ -108,7 +102,7 @@ const Contact = () => {
         {/* Contact Info Cards */}
         <section className="py-20">
           <div className="container mx-auto px-4">
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto mb-16">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto mb-16">
               {contactInfo.map((info, index) => {
                 const Icon = info.icon;
                 return (
@@ -218,29 +212,6 @@ const Contact = () => {
               <div className="space-y-8">
                 <Card className="border-2">
                   <CardContent className="p-8">
-                    <h3 className="text-2xl font-bold mb-4">Visit Us</h3>
-                    <p className="text-muted-foreground mb-6 leading-relaxed">
-                      We welcome visitors to our community center. Whether you want to learn more about our programs, volunteer, or simply meet the team, feel free to stop by during our office hours.
-                    </p>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-start gap-2">
-                        <MapPin size={18} className="text-primary mt-1" />
-                        <span className="text-muted-foreground">
-                          Sydney, New South Wales, Australia
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <Clock size={18} className="text-primary mt-1" />
-                        <span className="text-muted-foreground">
-                          Monday - Friday: 9:00 AM - 5:00 PM
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-2">
-                  <CardContent className="p-8">
                     <h3 className="text-2xl font-bold mb-4">Quick Links</h3>
                     <div className="space-y-3">
                       <a
@@ -343,3 +314,4 @@ const Contact = () => {
 };
 
 export default Contact;
+
