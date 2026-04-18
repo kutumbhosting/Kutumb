@@ -104,10 +104,17 @@ const Footer = () => {
         <div className="border-t border-border pt-8 mt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
             <p>© Kutumb Australia, {currentYear}. All rights reserved.</p>
-            <p>
-              Website developed by{" "}
-              <span className="text-primary font-semibold">Prama AI, Australia</span>
-            </p>
+<p>
+  Website developed by{" "}
+  <a
+    href="https://www.prama-ai.com"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-primary font-semibold hover:underline"
+  >
+    Prama AI, Australia
+  </a>
+</p>
           </div>
         </div>
       </div>
@@ -116,3 +123,4 @@ const Footer = () => {
 };
 
 export default Footer;
+
