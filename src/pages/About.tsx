@@ -49,7 +49,9 @@ const About = () => {
               <h2 className="mb-8 text-center">Our Story</h2>
               <div className="prose prose-lg max-w-none text-muted-foreground space-y-6">
                 <p>
-                  Kutumb was founded with a simple yet powerful vision: to create a community where everyone feels valued, supported, and empowered to make a positive difference. Registered with NSW Fair Trading as a non-profit organization, we are committed to serving our community with integrity and compassion.
+                  Kutumb was founded with a simple yet powerful vision: to create a community where everyone feels valued, supported, and empowered to make a positive difference. Registered with <a href="https://www.nsw.gov.au/departments-and-agencies/fair-trading" target="_blank" rel="noopener noreferrer">
+NSW Fair Trading
+</a> as a non-profit organization, we are committed to serving our community with integrity and compassion.
                 </p>
                 <p>
                   What started as a small group of passionate individuals has grown into a thriving community of members who share our values and dedication to social impact. Through our various programs and initiatives, we've touched the lives of hundreds of community members and continue to expand our reach.
@@ -131,13 +133,22 @@ const About = () => {
                   <div className="text-center space-y-4 text-muted-foreground">
                     <p className="text-lg">
                       Kutumb is a registered non-profit community organization with{" "}
-                      <span className="font-semibold text-primary">NSW Fair Trading</span>
+
+<a 
+  href="https://www.nsw.gov.au/departments-and-agencies/fair-trading" 
+  target="_blank" 
+  rel="noopener noreferrer"
+>
+  <span className="font-semibold text-primary">
+    NSW Fair Trading
+  </span>
+</a>
                     </p>
                     <p>
                       We operate with full transparency and accountability, ensuring that all our activities and programs serve the best interests of our community members and the wider society.
                     </p>
                     <p className="text-sm pt-4 border-t">
-                      <strong>Location:</strong> New South Wales, Australia
+                      <strong>Location:</strong> Sydney, New South Wales, Australia
                     </p>
                   </div>
                 </CardContent>
@@ -153,3 +164,4 @@ const About = () => {
 };
 
 export default About;
+
