@@ -3,18 +3,38 @@ import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import yogaImage from "@/assets/activity-yoga.jpg";
-import foodServiceImage from "@/assets/activity-food-service.jpg";
-import communityServiceImage from "@/assets/activity-community-service.jpg";
+
+import yogaImage from "@/assets/yoga.jpeg";
+import onlineyogaImage from "@/assets/online-yoga.jpeg";
+import foodImage from "@/assets/food-service.jpeg";
+import bhajanImage from "@/assets/bhajan.jpeg";
+import menImage from "@/assets/menshed.jpeg";
 
 const Activities = () => {
   const activities = [
     {
-      title: "Community Yoga",
-      image: yogaImage,
-      description: "Join our regular yoga sessions designed to promote physical wellness, mental clarity, and community bonding. Suitable for all levels, from beginners to advanced practitioners.",
-      schedule: "Every Sunday, 8:00 AM - 9:30 AM",
-      location: "Community Park, Sydney",
+      title: "Kutumb Yoga",
+      image1: yogaImage,
+      image2: onlineyogaImage,
+      description:
+        "Regular yoga sessions promoting physical wellness, mental clarity, and strong community bonding. Suitable for all levels.",
+      schedule:
+        "Daily on Zoom (5:30 AM - 6:45 AM) + in-person sessions at parks.",
+
+      onlineYoga: [
+        "Regular Zoom yoga on all days catering for Australian and Indian yogis",
+        "Over 250 members in WhatsApp Yoga Group",
+        "Dedicated Australian yoga teachers from Kutumb family",
+        "Under the guidance of Shri Arun Srivastav (Resident Expert & Yoga Guru)",
+      ],
+
+      inPersonYoga: [
+        "Continuing summer in-person yoga in The Ponds and Kellyville North parks",
+        "New location started at The Gables",
+        "Run by dedicated and passionate yoga teachers",
+        "Becoming very popular with locals",
+      ],
+
       benefits: [
         "Improve flexibility and strength",
         "Reduce stress and anxiety",
@@ -23,11 +43,11 @@ const Activities = () => {
       ],
     },
     {
-      title: "Food Service",
-      image: foodServiceImage,
-      description: "Our food distribution program serves nutritious meals to those in need within our community. Volunteers prepare and distribute meals with love and compassion.",
+      title: "Kutumb Food Distribution",
+      image: foodImage,
+      description:
+        "Our food distribution program serves nutritious meals to those in need within our community, like international students at Western Sydney University.",
       schedule: "Every Saturday, 12:00 PM - 3:00 PM",
-      location: "Various locations across Sydney",
       benefits: [
         "Support community members in need",
         "Reduce food waste",
@@ -36,16 +56,38 @@ const Activities = () => {
       ],
     },
     {
-      title: "Community Service",
-      image: communityServiceImage,
-      description: "Participate in various community improvement projects including park clean-ups, tree planting, and neighborhood beautification initiatives.",
-      schedule: "First Saturday of every month, 9:00 AM - 12:00 PM",
+      title: "Kutumb Bhajan Sandhya",
+      image: bhajanImage,
+      description:
+        "Monthly Bhajan Sandhya and special knowledge sessions bringing the community together in a spiritual and positive environment.",
+      schedule: "First Saturday of every month, 7:00 PM - 10:00 PM",
+
+      bhajanDetails: [
+        "Organised at Kutumb members' houses on rotation",
+        "Followed by shared food plates (bhojan prasad)",
+      ],
+
+      location: "Rotating locations",
+
+      benefits: [
+        "Promote Indian culture",
+        "Promote mental health and well-being",
+        "Meet spiritually inclined people",
+        "Create positive impact in the community",
+      ],
+    },
+    {
+      title: "Kutumb Men Shed",
+      image: menImage,
+      description:
+        "Organise Men shed activities like long walk, chit-chat sessions, movie night, clean-ups and indoor-outdoor games.",
+      schedule: "Fortnightly on Saturdays, 4:00 PM - 9:00 PM",
       location: "Rotating locations",
       benefits: [
-        "Beautify our neighborhoods",
-        "Promote environmental sustainability",
-        "Meet new people",
-        "Create visible positive impact",
+        "Promote men's mental health and well-being",
+        "Promote bond among members",
+        "Create positive impact in the community",
+        "Brainstorming for community betterment",
       ],
     },
   ];
@@ -53,19 +95,20 @@ const Activities = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      
+
       <main className="flex-grow">
-        {/* Hero Section */}
+        {/* Hero */}
         <section className="gradient-warm text-white py-20">
           <div className="container mx-auto px-4 text-center">
-            <h1 className="mb-6">Our Activities</h1>
+            <h1 className="mb-6">Our Regular Activities</h1>
             <p className="text-xl max-w-3xl mx-auto opacity-95">
-              Engage with your community through our diverse range of activities designed to promote wellness, compassion, and positive social impact.
+              Engage with your community through activities that promote wellness,
+              compassion, and social impact.
             </p>
           </div>
         </section>
 
-        {/* Activities List */}
+        {/* Activities */}
         <section className="py-20">
           <div className="container mx-auto px-4">
             <div className="space-y-16 max-w-6xl mx-auto">
@@ -76,53 +119,102 @@ const Activities = () => {
                     index % 2 === 1 ? "md:grid-flow-dense" : ""
                   }`}
                 >
-                  {/* Image */}
+                  {/* Image Section */}
                   <div className={index % 2 === 1 ? "md:col-start-2" : ""}>
-                    <div className="rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
-                      <img
-                        src={activity.image}
-                        alt={activity.title}
-                        className="w-full h-80 object-cover"
-                      />
+                    <div className="flex flex-col gap-4">
+                      {activity.image1 && (
+                        <img
+                          src={activity.image1}
+                          alt={activity.title}
+                          className="w-full h-72 object-cover rounded-xl shadow-lg"
+                        />
+                      )}
+
+                      {activity.image2 && (
+                        <img
+                          src={activity.image2}
+                          alt={activity.title}
+                          className="w-full h-72 object-cover rounded-xl shadow-lg"
+                        />
+                      )}
+
+                      {!activity.image1 && activity.image && (
+                        <img
+                          src={activity.image}
+                          alt={activity.title}
+                          className="w-full h-80 object-cover rounded-xl shadow-lg"
+                        />
+                      )}
                     </div>
                   </div>
 
                   {/* Content */}
-                  <div className={index % 2 === 1 ? "md:col-start-1 md:row-start-1" : ""}>
+                  <div
+                    className={
+                      index % 2 === 1
+                        ? "md:col-start-1 md:row-start-1"
+                        : ""
+                    }
+                  >
                     <Card className="border-2 h-full">
                       <CardContent className="p-8">
                         <h2 className="mb-4">{activity.title}</h2>
-                        <p className="text-muted-foreground mb-6 leading-relaxed">
+                        <p className="text-muted-foreground mb-6">
                           {activity.description}
                         </p>
 
-                        {/* Schedule Info */}
-                        <div className="space-y-3 mb-6 p-4 bg-muted/50 rounded-lg">
+                        {/* Schedule */}
+                        <div className="space-y-4 mb-6 p-4 bg-muted/50 rounded-lg">
                           <div>
-                            <span className="font-semibold text-primary">Schedule: </span>
-                            <span className="text-muted-foreground">{activity.schedule}</span>
+                            <span className="font-semibold text-primary">
+                              Schedule:{" "}
+                            </span>
+                            {activity.schedule}
                           </div>
-                          <div>
-                            <span className="font-semibold text-primary">Location: </span>
-                            <span className="text-muted-foreground">{activity.location}</span>
-                          </div>
+
+                          {activity.onlineYoga && (
+                            <ul className="text-sm">
+                              {activity.onlineYoga.map((item, i) => (
+                                <li key={i}>✓ {item}</li>
+                              ))}
+                            </ul>
+                          )}
+
+                          {activity.inPersonYoga && (
+                            <ul className="text-sm">
+                              {activity.inPersonYoga.map((item, i) => (
+                                <li key={i}>✓ {item}</li>
+                              ))}
+                            </ul>
+                          )}
+
+                          {activity.bhajanDetails && (
+                            <ul className="text-sm">
+                              {activity.bhajanDetails.map((item, i) => (
+                                <li key={i}>✓ {item}</li>
+                              ))}
+                            </ul>
+                          )}
+
+                          {activity.location && (
+                            <div>
+                              <span className="font-semibold text-primary">
+                                Location:{" "}
+                              </span>
+                              {activity.location}
+                            </div>
+                          )}
                         </div>
 
                         {/* Benefits */}
-                        <div className="mb-6">
-                          <h4 className="font-semibold mb-3">Benefits:</h4>
-                          <ul className="space-y-2">
-                            {activity.benefits.map((benefit, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                                <span className="text-secondary text-lg">✓</span>
-                                {benefit}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                        <ul className="mb-6 text-sm">
+                          {activity.benefits.map((b, i) => (
+                            <li key={i}>✓ {b}</li>
+                          ))}
+                        </ul>
 
                         <Link to="/events">
-                          <Button className="w-full bg-primary hover:bg-primary/90">
+                          <Button className="w-full">
                             Register for Upcoming Session
                           </Button>
                         </Link>
@@ -131,30 +223,6 @@ const Activities = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="py-20 bg-muted/30">
-          <div className="container mx-auto px-4">
-            <div className="max-w-3xl mx-auto text-center">
-              <h2 className="mb-6">Ready to Participate?</h2>
-              <p className="text-lg text-muted-foreground mb-8">
-                All our activities are open to community members. Join us and be part of something meaningful.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link to="/membership">
-                  <Button size="lg" className="bg-primary hover:bg-primary/90 px-10">
-                    Become a Member
-                  </Button>
-                </Link>
-                <Link to="/events">
-                  <Button size="lg" variant="outline" className="px-10">
-                    View Event Schedule
-                  </Button>
-                </Link>
-              </div>
             </div>
           </div>
         </section>
