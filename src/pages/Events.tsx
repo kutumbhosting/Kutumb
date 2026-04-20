@@ -21,57 +21,76 @@ const Events = () => {
 
   const upcomingEvents = [
     {
-      title: "Community Yoga Session",
-      date: "October 20, 2025",
-      time: "8:00 AM - 9:30 AM",
-      location: "Community Park, Sydney",
-      spots: "25",
-      description: "Join us for a peaceful morning yoga session suitable for all levels. Bring your mat and water bottle.",
-    },
-    {
       title: "Food Distribution Drive",
-      date: "October 25, 2025",
+      date: "TBA, 2026",
       time: "12:00 PM - 3:00 PM",
-      location: "Central Community Hall",
+      location: "University Campus",
       spots: "30",
-      description: "Help us prepare and distribute nutritious meals to community members in need. Volunteers welcome!",
+      description: "Help us prepare and distribute nutritious meals to university's international students. Volunteers welcome!",
     },
     {
-      title: "Community Clean-Up Day",
-      date: "November 5, 2025",
-      time: "9:00 AM - 12:00 PM",
-      location: "Riverside Park",
-      spots: "40",
-      description: "Let's make our neighborhood cleaner and greener. Gloves and bags provided.",
+      title: "International Yoga Day 2026",
+      date: "June 21, 2026",
+      time: "8:00 AM - 12:00 PM",
+      location: "TBA",
+      spots: "150",
+      description: "Join us on this speacial day of yoga to know benefits and impact of it in our mental and physical well being",
     },
     {
-      title: "Wellness Workshop",
-      date: "November 15, 2025",
-      time: "2:00 PM - 5:00 PM",
-      location: "Kutumb Community Center",
-      spots: "20",
-      description: "Learn about holistic wellness, mindfulness, and stress management techniques.",
+      title: "Guru Purnima Celebration",
+      date: "September, 2026",
+      time: "TBA",
+      location: "TBA",
+      spots: "100",
+      description: "Join us in celebrating Guru Purnima Purv as we honor and express our gratitude to the teachers and gurus who have deeply influenced our lives.",
+    },
+
+    {
+      title: "Diwali and Multi Cultural Event",
+      date: "October, 2026",
+      time: "6:00 PM - 10:00 PM",
+      location: "TBA",
+      spots: "300",
+      description: "Celebrate Diwali with family and friends, great cultural programs and foods.",
     },
   ];
 
   const pastEvents = [
     {
-      title: "Annual Community Festival 2024",
-      date: "September 10, 2024",
-      description: "Our biggest event of the year brought together over 500 community members for a day of celebration, cultural performances, food, and fun. The festival showcased the diversity and unity of our community.",
+      title: "Sri Ramcharitmanas Satsang 2026",
+      date: "April 11-15, 2026",
+      description: "Joined Hands with Hanumant Seva Trust to organise a 5 day Sundarkand and Ramcharitmanas program with Shri Dhaval Kumar ji. Completely free event for members and their family and friends. Attended by over 100 Kutumbians.",
+      images: ["A very spiritual and devotional atmosphere, great sessions on ram bhakts like Hanuman ji, Kewat Ji, nice prasadam on each day"],
+    },
+    {
+      title: "Kutumb Yoga Picnic 2025",
+      date: "December 7, 2025",
+      description: "Bring your health questions and dicover insights on well-beingthrough yoga and home remedies. Over 100 participants joined us for a special yoga picnic and get together session in the park.",
+      images: ["A meaningful yoga and home remedies session, favourite home cooked dish to share, peaceful atmosphere"],
+    },
+    {
+      title: "Kutumb Pariwar Diwali Party 2025",
+      date: "October 26, 2025",
+      description: "Our biggest event of the year brought together over 300 community members for a day of celebration, cultural performances, food, and fun. The festival showcased the diversity and unity of our community.",
       images: ["Event featured cultural dances, food stalls, kids activities, and community performances"],
     },
     {
-      title: "Winter Food Drive",
-      date: "July 15, 2024",
-      description: "Our volunteers prepared and distributed over 300 warm meals to community members in need during the winter season. The event was a huge success with overwhelming support from volunteers.",
+      title: "International Yoga Day 2025",
+      date: "June 21, 2025",
+      description: "Over 100 participants joined us for a special yoga session in the park to celebrate International Yoga Day. The session focused on unity, wellness, and community bonding.",
+      images: ["Large group yoga session in the park, diverse participants, peaceful atmosphere"],
+    },
+    {
+      title: "Kutumb Holi Celebration 2025",
+      date: "March 16, 2025",
+      description: "Joined Hands with Darpan Radio to organise a Community Holi Celebration. Completely free event for members and their family and friends. Attended by over 100 Kutumbians including kids. Lots of Masti with singing and dancing; and traditional Holi sweets and savouries",
       images: ["Volunteers preparing meals, distribution to community members, smiling faces"],
     },
     {
-      title: "International Yoga Day Celebration",
-      date: "June 21, 2024",
-      description: "Over 100 participants joined us for a special yoga session in the park to celebrate International Yoga Day. The session focused on unity, wellness, and community bonding.",
-      images: ["Large group yoga session in the park, diverse participants, peaceful atmosphere"],
+      title: "Kutumb NewYear SundarkandPath 2025",
+      date: "January 1, 2025",
+      description: "Event for members and their family and friends. For a perfect and devotional start of the year. Joined hands with our own Nand and Rajni Upadhyay by sponsoring the hall rental.",
+      images: ["Large group session in the hall, devotional atmosphere"],
     },
   ];
 
@@ -277,3 +296,4 @@ const Events = () => {
 };
 
 export default Events;
+
