@@ -38,14 +38,17 @@ const Home = () => {
       
       <main className="flex-grow">
         {/* Hero Section */}
-        <section className="relative h-[600px] lg:h-[700px] flex items-center justify-center overflow-hidden">
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${heroImage})` }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-primary/90 to-secondary/80" />
-          </div>
+        <section className="relative h-[600px] lg:h-[700px] flex items-center justify-center overflow-hidden gradient-warm">
           
+          {/* Subtle Background Image */}
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ backgroundImage: `url(${heroImage})` }}
+          />
+
+          {/* Soft overlay for blending */}
+          <div className="absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
+
           <div className="container mx-auto px-4 relative z-10 text-center text-white">
             <h1 className="mb-6 animate-fade-in">
               Building Stronger Communities Together
@@ -148,7 +151,7 @@ const Home = () => {
         </section>
 
         {/* CTA Section */}
-        <section className="py-20 gradient-hero">
+        <section className="py-20 bg-accent">
           <div className="container mx-auto px-4 text-center text-white">
             <h2 className="mb-6">Ready to Make a Difference?</h2>
             <p className="text-xl mb-8 max-w-2xl mx-auto opacity-95">
