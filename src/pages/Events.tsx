@@ -34,6 +34,7 @@ import yogapic1_25 from "@/assets/events/25yogapicnic1.jpeg";
 import yogapic2_25 from "@/assets/events/25yogapicnic2.jpeg";
 import yogapic3_25 from "@/assets/events/25yogapicnic3.jpeg";
 import yogapicvideo_25 from "@/assets/events/25yogapicnicvideo.mp4";
+import { upcomingEvents } from "@/data/eventsData";
 
 const Events = () => {
   const { toast } = useToast();
@@ -44,40 +45,6 @@ const Events = () => {
     comments: "",
   });
 
-  const upcomingEvents = [
-    {
-      title: "Food Distribution Drive",
-      date: "TBA, 2026",
-      time: "12:00 PM - 3:00 PM",
-      location: "University Campus",
-      spots: "30",
-      description: "Help us prepare and distribute nutritious meals to university's international students. Volunteers welcome!",
-    },
-    {
-      title: "International Yoga Day 2026",
-      date: "June 21, 2026",
-      time: "8:00 AM - 12:00 PM",
-      location: "TBA",
-      spots: "150",
-      description: "Join us on this speacial day of yoga to know benefits and impact of it in our mental and physical well being",
-    },
-    {
-      title: "Guru Purnima Celebration",
-      date: "September, 2026",
-      time: "TBA",
-      location: "TBA",
-      spots: "100",
-      description: "Join us in celebrating Guru Purnima Purv as we honor and express our gratitude to the teachers and gurus who have deeply influenced our lives.",
-    },
-    {
-      title: "Diwali and Multi Cultural Event",
-      date: "October, 2026",
-      time: "6:00 PM - 10:00 PM",
-      location: "TBA",
-      spots: "300",
-      description: "Celebrate Diwali with family and friends, great cultural programs and foods.",
-    },
-  ];
 
   const pastEvents = [
     {
