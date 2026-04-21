@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import logo from "@/assets/logo-tra.png";
+import logo from "@/assets/kutumb-logo.png";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,10 +26,7 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <img src={logo} alt="Kutumb Logo" className="h-14 w-14 transition-transform group-hover:scale-110" />
-            <span className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-              Kutumb
-            </span>
+            <img src={logo} alt="Kutumb Logo" className="h-14 w-30 transition-transform group-hover:scale-110" />
           </Link>
 
           {/* Desktop Navigation */}
@@ -92,3 +89,4 @@ const Navbar = () => {
 };
 
 export default Navbar;
+
