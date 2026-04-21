@@ -41,7 +41,7 @@ const Executive = () => {
     {
       name: "Naresh Kumar",
       role: "Treasurer",
-      //phone: "+61 434 679 126",
+      phone: "+61 xxx xxx xxx",
       email: "naresh@kutumb.org.au",
       bio: "Financial professional dedicated to transparency and fiscal responsibility. Manages organizational finances with integrity and accountability.",
       image: nareshImg,
