@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Mail, Phone, MapPin, Facebook, Instagram, Twitter } from "lucide-react";
-import logo from "@/assets/logo-tra.png";
+import logo from "@/assets/kutumb-logo.png";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -12,10 +12,7 @@ const Footer = () => {
           {/* About Section */}
           <div>
           <div className="flex items-center gap-2 mb-4">
-             <img src={logo} alt="Kutumb Logo" className="h-8 w-8" />
-             <h3 className="font-semibold leading-none">
-               Kutumb
-             </h3>
+             <img src={logo} alt="Kutumb Logo" className="h-10 w-25" />
            </div>    
            <Link to="/" onClick={() => window.scrollTo(0, 0)}
               className="text-muted-foreground hover:text-primary transition-colors text-sm">
@@ -126,6 +123,7 @@ const Footer = () => {
 };
 
 export default Footer;
+
 
 
 
