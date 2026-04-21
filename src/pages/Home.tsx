@@ -5,6 +5,7 @@ import { Users, Heart, Calendar, TrendingUp } from "lucide-react";
 import heroImage from "@/assets/hero-community.jpg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { upcomingEvents } from "@/data/eventsData";
 
 const Home = () => {
   const stats = [
@@ -12,24 +13,6 @@ const Home = () => {
     { icon: Heart, value: "50+", label: "Events Organized" },
     { icon: Calendar, value: "100+", label: "Volunteer Hours" },
     { icon: TrendingUp, value: "Growing", label: "Social Impact" },
-  ];
-
-  const upcomingEvents = [
-    {
-      title: "Community Yoga Session",
-      date: "October 20, 2025",
-      description: "Join us for a peaceful morning yoga session in the park.",
-    },
-    {
-      title: "Food Distribution Drive",
-      date: "October 25, 2025",
-      description: "Help us serve meals to those in need in our community.",
-    },
-    {
-      title: "Community Clean-Up",
-      date: "November 5, 2025",
-      description: "Let's make our neighborhood cleaner and greener together.",
-    },
   ];
 
   return (
@@ -125,7 +108,7 @@ const Home = () => {
               </p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-              {upcomingEvents.map((event, index) => (
+              {upcomingEvents.slice(0, 3).map((event, index) => (
                 <Card key={index} className="card-hover border-2">
                   <CardContent className="p-6">
                     <div className="text-sm text-primary font-semibold mb-2">{event.date}</div>
