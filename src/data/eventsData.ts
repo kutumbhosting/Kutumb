@@ -6,7 +6,7 @@ export const upcomingEvents = [
     location: "Dural Memorial Hall",
     spots: "100",
     description:
-      "Please bring a Thali for the potluck of your favourite dish, snacks, and songs/poems/dance/anecdots to share",
+      "Please bring a Thali for the potluck of your favourite dish, snacks, and songs/poems/dance/anecdots to share.",
   },
   {
     title: "International Yoga Day 2026",
