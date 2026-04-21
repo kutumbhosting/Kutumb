@@ -15,7 +15,7 @@ export const upcomingEvents = [
     location: "TBA",
     spots: "150",
     description:
-      "Join us on this speacial day of yoga to know benefits and impact of it in our mental and physical well being",
+      "Join us on this speacial day of yoga to know benefits and impact of it in our mental and physical well being.",
   },
   {
     title: "Guru Purnima Celebration",
