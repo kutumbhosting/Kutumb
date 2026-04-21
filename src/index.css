@@ -8,7 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 30 40% 97%;
     --foreground: 220 13% 13%;
 
     --card: 0 0% 100%;
@@ -33,7 +33,7 @@ All colors MUST be HSL.
     --accent-foreground: 0 0% 100%;
     --accent-light: 38 92% 85%;
 
-    --muted: 210 20% 96%;
+    --muted: 30 30% 94%;
     --muted-foreground: 220 13% 46%;
 
     --destructive: 0 84.2% 60.2%;
@@ -45,15 +45,26 @@ All colors MUST be HSL.
 
     --radius: 0.75rem;
 
-    /* Community warmth gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(210 70% 58%), hsl(166 70% 60%));
-    --gradient-warm: linear-gradient(135deg, hsl(38 92% 55%), hsl(166 70% 60%));
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 20% 98%));
+    /* ✅ UPDATED HERO GRADIENT (blue → green → saffron) */
+    --gradient-hero: linear-gradient(
+      135deg,
+      hsl(210 70% 55%) 0%,
+      hsl(166 65% 55%) 50%,
+      hsl(38 92% 55%) 100%
+    );
+
+    /* ✅ UPDATED CTA GRADIENT (warm dominant) */
+    --gradient-warm: linear-gradient(
+      135deg,
+      hsl(38 92% 55%) 0%,
+      hsl(20 85% 60%) 40%,
+      hsl(166 60% 50%) 100%
+    );
+
+    --gradient-card: linear-gradient(180deg, hsl(30 40% 99%), hsl(30 30% 96%));
     
-    /* Smooth transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     
-    /* Shadows with primary color */
     --shadow-sm: 0 2px 8px hsl(210 70% 58% / 0.08);
     --shadow-md: 0 4px 16px hsl(210 70% 58% / 0.12);
     --shadow-lg: 0 8px 32px hsl(210 70% 58% / 0.16);
