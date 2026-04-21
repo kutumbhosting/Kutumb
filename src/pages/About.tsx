@@ -2,6 +2,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Target, Eye, Heart, Users } from "lucide-react";
+import heroImage from "@/assets/hero-community.jpg";
 
 const About = () => {
   const values = [
@@ -32,8 +33,8 @@ const About = () => {
       <Navbar />
       
       <main className="flex-grow">
-        {/* Hero Section */}
-        <section className="gradient-hero text-white py-20">
+        {/* Hero Section - UPDATED to match Membership style */}
+        <section className="gradient-warm text-white py-20">
           <div className="container mx-auto px-4 text-center">
             <h1 className="mb-6">About Kutumb</h1>
             <p className="text-xl max-w-3xl mx-auto opacity-95">
@@ -49,9 +50,15 @@ const About = () => {
               <h2 className="mb-8 text-center">Our Story</h2>
               <div className="prose prose-lg max-w-none text-muted-foreground space-y-6">
                 <p>
-                  Kutumb was founded with a simple yet powerful vision: to create a community where everyone feels valued, supported, and empowered to make a positive difference. Registered with <a href="https://www.nsw.gov.au/departments-and-agencies/fair-trading" target="_blank" rel="noopener noreferrer">
-NSW Fair Trading
-</a> as a non-profit organization, we are committed to serving our community with integrity and compassion.
+                  Kutumb was founded with a simple yet powerful vision: to create a community where everyone feels valued, supported, and empowered to make a positive difference. Registered with{" "}
+                  <a
+                    href="https://www.nsw.gov.au/departments-and-agencies/fair-trading"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    NSW Fair Trading
+                  </a>{" "}
+                  as a non-profit organization, we are committed to serving our community with integrity and compassion.
                 </p>
                 <p>
                   What started as a small group of passionate individuals has grown into a thriving community of members who share our values and dedication to social impact. Through our various programs and initiatives, we've touched the lives of hundreds of community members and continue to expand our reach.
@@ -68,10 +75,10 @@ NSW Fair Trading
         <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4">
             <div className="grid md:grid-cols-2 gap-12 max-w-6xl mx-auto">
-              <Card className="border-2 border-primary/20">
+              <Card className="border-2">
                 <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-6">
-                    <Target className="w-8 h-8 text-primary" />
+                  <div className="w-16 h-16 bg-gradient-hero rounded-full flex items-center justify-center mb-6">
+                    <Target className="w-8 h-8 text-white" />
                   </div>
                   <h2 className="mb-4">Our Mission</h2>
                   <p className="text-muted-foreground leading-relaxed">
@@ -80,10 +87,10 @@ NSW Fair Trading
                 </CardContent>
               </Card>
 
-              <Card className="border-2 border-secondary/20">
+              <Card className="border-2">
                 <CardContent className="p-8">
-                  <div className="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center mb-6">
-                    <Eye className="w-8 h-8 text-secondary" />
+                  <div className="w-16 h-16 bg-gradient-hero rounded-full flex items-center justify-center mb-6">
+                    <Eye className="w-8 h-8 text-white" />
                   </div>
                   <h2 className="mb-4">Our Vision</h2>
                   <p className="text-muted-foreground leading-relaxed">
@@ -104,11 +111,12 @@ NSW Fair Trading
                 These principles guide everything we do and shape the culture of our community
               </p>
             </div>
+
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-6xl mx-auto">
               {values.map((value, index) => {
                 const Icon = value.icon;
                 return (
-                  <Card key={index} className="text-center card-hover">
+                  <Card key={index} className="text-center card-hover border-2">
                     <CardContent className="p-6">
                       <div className="w-16 h-16 bg-gradient-hero rounded-full flex items-center justify-center mx-auto mb-4">
                         <Icon className="w-8 h-8 text-white" />
@@ -133,16 +141,15 @@ NSW Fair Trading
                   <div className="text-center space-y-4 text-muted-foreground">
                     <p className="text-lg">
                       Kutumb is a registered non-profit community organization with{" "}
-
-<a 
-  href="https://www.nsw.gov.au/departments-and-agencies/fair-trading" 
-  target="_blank" 
-  rel="noopener noreferrer"
->
-  <span className="font-semibold text-primary">
-    NSW Fair Trading
-  </span>
-</a>
+                      <a
+                        href="https://www.nsw.gov.au/departments-and-agencies/fair-trading"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <span className="font-semibold text-primary">
+                          NSW Fair Trading
+                        </span>
+                      </a>
                     </p>
                     <p>
                       We operate with full transparency and accountability, ensuring that all our activities and programs serve the best interests of our community members and the wider society.
