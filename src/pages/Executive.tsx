@@ -41,7 +41,7 @@ const Executive = () => {
     {
       name: "Naresh Kumar",
       role: "Treasurer",
-      phone: "+61 xxx xxx xxx",
+      phone: "+61 434 679 126",
       email: "naresh@kutumb.org.au",
       bio: "Financial professional dedicated to transparency and fiscal responsibility. Manages organizational finances with integrity and accountability.",
       image: nareshImg,
@@ -90,12 +90,13 @@ const Executive = () => {
 
   const getGradientClass = (index: number) => {
     const gradients = [
-      "bg-gradient-to-br from-primary to-primary-dark",
-      "bg-gradient-to-br from-secondary to-emerald-600",
-      "bg-gradient-to-br from-accent to-orange-600",
-      "bg-gradient-to-br from-purple-500 to-purple-700",
-      "bg-gradient-to-br from-blue-500 to-blue-700",
-      "bg-gradient-to-br from-pink-500 to-pink-700",
+      "bg-gradient-hero",
+      "bg-gradient-to-br from-primary/80 to-primary",
+      "bg-gradient-to-br from-secondary/80 to-emerald-600",
+      "bg-gradient-to-br from-accent/80 to-orange-600",
+      "bg-gradient-to-br from-purple-500/80 to-purple-700",
+      "bg-gradient-to-br from-blue-500/80 to-blue-700",
+      "bg-gradient-to-br from-pink-500/80 to-pink-700",
     ];
     return gradients[index % gradients.length];
   };
@@ -103,10 +104,10 @@ const Executive = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      
+
       <main className="flex-grow">
-        {/* Hero Section */}
-        <section className="gradient-hero text-white py-20">
+        {/* Hero Section - MATCHED */}
+        <section className="gradient-warm text-white py-20">
           <div className="container mx-auto px-4 text-center">
             <h1 className="mb-6">Executive Team</h1>
             <p className="text-xl max-w-3xl mx-auto opacity-95">
@@ -122,30 +123,31 @@ const Executive = () => {
               {team.map((member, index) => (
                 <Card key={index} className="card-hover border-2 overflow-hidden">
                   <CardContent className="p-0">
-                    {/* Avatar */}
 
-<div className={`h-48 flex items-center justify-center ${getGradientClass(index)}`}>
-  {member.image ? (
-    <img
-      src={member.image}
-      alt={member.name}
-      className="w-48 h-48 object-cover rounded-full shadow-lg"
-    />
-  ) : (
-    <div className="text-6xl font-bold text-white">
-      {member.imageInitials}
-    </div>
-  )}
-</div>
-                    
+                    {/* Avatar Section */}
+                    <div className={`h-48 flex items-center justify-center ${getGradientClass(index)}`}>
+                      {member.image ? (
+                        <img
+                          src={member.image}
+                          alt={member.name}
+                          className="w-40 h-40 object-cover rounded-full shadow-lg border-4 border-white"
+                        />
+                      ) : (
+                        <div className="text-6xl font-bold text-white">
+                          {member.name.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Info */}
                     <div className="p-6">
                       <h3 className="text-xl font-bold mb-1">{member.name}</h3>
                       <div className="text-primary font-semibold mb-4">{member.role}</div>
+
                       <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
                         {member.bio}
                       </p>
-                      
+
                       {/* Contact */}
                       <div className="space-y-2 pt-4 border-t">
                         <a
@@ -155,6 +157,7 @@ const Executive = () => {
                           <Phone size={16} className="text-primary" />
                           {member.phone}
                         </a>
+
                         <a
                           href={`mailto:${member.email}`}
                           className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
@@ -164,6 +167,7 @@ const Executive = () => {
                         </a>
                       </div>
                     </div>
+
                   </CardContent>
                 </Card>
               ))}
@@ -171,13 +175,13 @@ const Executive = () => {
           </div>
         </section>
 
-        {/* Join Team CTA */}
+        {/* CTA - MATCHED */}
         <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4">
             <div className="max-w-3xl mx-auto text-center">
               <h2 className="mb-6">Want to Get Involved?</h2>
               <p className="text-lg text-muted-foreground mb-8">
-                We're always looking for passionate individuals who want to make a difference in our community. If you're interested in joining our team or volunteering, we'd love to hear from you.
+                We're always looking for passionate individuals who want to make a difference in our community.
               </p>
               <a href="/contact">
                 <button className="btn-hero">
