@@ -4,11 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 
-import yogaImage from "@/assets/yoga.jpeg";
-import onlineyogaImage from "@/assets/online-yoga.jpeg";
-import foodImage from "@/assets/food-service.jpeg";
-import bhajanImage from "@/assets/bhajan.jpeg";
-import menImage from "@/assets/menshed.jpeg";
+import yogaImage from "@/data/activities/yoga.jpeg";
+import onlineyogaImage from "@/data/activities/online-yoga.jpeg";
+import foodImage from "@/data/activities/food-service.jpeg";
+import bhajanImage from "@/data/activities/bhajan.jpeg";
+import menImage from "@/data/activities/menshed.jpeg";
 
 const Activities = () => {
   const activities = [
