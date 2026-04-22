@@ -50,7 +50,7 @@ const Events = () => {
               el.getBoundingClientRect().top + window.pageYOffset;
 
             window.scrollTo({
-              top: y - 120,
+              top: y - 90,
               behavior: "smooth",
             });
           }
