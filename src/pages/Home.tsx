@@ -5,7 +5,7 @@ import { Users, Heart, Calendar, TrendingUp } from "lucide-react";
 import heroImage from "@/assets/hero-community.jpg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { upcomingEvents } from "@/data/eventsData";
+import { upcomingEvents } from "@/data/upcomingEventsData";
 
 const Home = () => {
   const stats = [
@@ -40,7 +40,7 @@ const Home = () => {
               Kutumb is a registered non-profit organization dedicated to creating positive social impact through community engagement, compassion, and service.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/membership">
+              <Link to="/membership" state={{ scrollTo: "membership" }}>
                 <Button size="lg" className="btn-accent text-lg px-10 py-6">
                   Become a Member
                 </Button>
@@ -48,7 +48,7 @@ const Home = () => {
               <Link to="/events">
                 <Button
                   size="lg"
-                  variant="outline"
+                  variant="outline" onClick={() => window.scrollTo(0, 0)}
                   className="text-lg px-10 py-6 bg-white/10 backdrop-blur-sm border-white text-white hover:bg-white hover:text-primary"
                 >
                   View Events
@@ -90,7 +90,7 @@ const Home = () => {
                 wellness activities, and community engagement programs.
               </p>
               <Link to="/about">
-                <Button size="lg" variant="outline" className="text-primary border-primary hover:bg-primary hover:text-white">
+                <Button size="lg" variant="outline" onClick={() => window.scrollTo(0, 0)} className="text-primary border-primary hover:bg-primary hover:text-white">
                   Learn More About Us
                 </Button>
               </Link>
@@ -114,7 +114,7 @@ const Home = () => {
                     <div className="text-sm text-primary font-semibold mb-2">{event.date}</div>
                     <h3 className="text-xl font-bold mb-3">{event.title}</h3>
                     <p className="text-muted-foreground mb-4">{event.description}</p>
-                    <Link to="/events">
+                    <Link to="/events" state={{ scrollTo: "registration", eventTitle: event.title }}>
                       <Button variant="outline" className="w-full">
                         Register Now
                       </Button>
@@ -125,7 +125,7 @@ const Home = () => {
             </div>
             <div className="text-center mt-12">
               <Link to="/events">
-                <Button size="lg" className="bg-primary hover:bg-primary/90">
+                <Button size="lg" onClick={() => window.scrollTo(0, 0)} className="bg-primary hover:bg-primary/90">
                   View All Events
                 </Button>
               </Link>
@@ -141,13 +141,13 @@ const Home = () => {
               Join our growing community of compassionate individuals dedicated to creating positive change
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/membership">
+              <Link to="/membership" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
                 <Button size="lg" className="bg-white text-primary hover:bg-white/90 px-10 py-6">
                   Join Kutumb Today
                 </Button>
               </Link>
-              <Link to="/contact">
-                <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/20 px-10 py-6">
+              <Link to="/contact" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                <Button size="lg" variant="outline" className="border-white text-blue-500 hover:bg-white/20 px-10 py-6">
                   Get in Touch
                 </Button>
               </Link>
