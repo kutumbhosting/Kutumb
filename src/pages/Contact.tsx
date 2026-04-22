@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { MapPin, Phone, Mail } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Contact = () => {
   const { toast } = useToast();
@@ -189,12 +190,11 @@ const Contact = () => {
                       Become a member and be part of meaningful community change.
                     </p>
 
-                    <a href="/membership">
-                      <Button className="w-full bg-white text-primary hover:bg-white/90">
-                        Join Now
-                      </Button>
-                    </a>
-
+<Link to="/membership" state={{ scrollTo: "membership" }}>
+  <Button className="w-full bg-white text-primary hover:bg-white/90">
+    Join Now
+  </Button>
+</Link>
                   </CardContent>
                 </Card>
 
