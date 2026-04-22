@@ -1,25 +1,25 @@
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
-import { Target, Eye, Heart, Users } from "lucide-react";
+import { Target, Eye, Brain, Heart} from "lucide-react";
 import heroImage from "@/assets/hero-community.jpg";
 
 const About = () => {
   const values = [
+    {
+      icon: Brain,
+      title: "Vasudhaiv kutumbkam",
+      description: "We encourages values like compassion, gloabl community, and mutual respect, just as we would treat members of our own family.",
+    },
     {
       icon: Heart,
       title: "Compassion",
       description: "We believe in treating everyone with kindness, empathy, and respect.",
     },
     {
-      icon: Users,
-      title: "Community",
-      description: "Together we are stronger. We foster connections and build lasting relationships.",
-    },
-    {
       icon: Target,
-      title: "Impact",
-      description: "We are committed to creating measurable, positive change in our community.",
+      title: "Community Impact",
+      description: "We foster connections and build lasting relationships. We are committed to creating measurable, positive change in our community.",
     },
     {
       icon: Eye,
