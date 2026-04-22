@@ -2,15 +2,15 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Phone, Mail } from "lucide-react";
-import seemaImg from "@/assets/team/Seema.png";
-import rajImg from "@/assets/team/Raj.png";
-import ashokImg from "@/assets/team/Ashok.png";
-import anjaliImg from "@/assets/team/Anjali.png";
-import nareshImg from "@/assets/team/Naresh.png";
-import anilImg from "@/assets/team/Anil.png";
-import vikasImg from "@/assets/team/Vikas.png";
-import suruchiImg from "@/assets/team/Suruchi.png";
-import pramodhImg from "@/assets/team/Pramodh.png";
+import seemaImg from "@/data/team/Seema.png";
+import rajImg from "@/data/team/Raj.png";
+import ashokImg from "@/data/team/Ashok.png";
+import anjaliImg from "@/data/team/Anjali.png";
+import nareshImg from "@/data/team/Naresh.png";
+import anilImg from "@/data/team/Anil.png";
+import vikasImg from "@/data/team/Vikas.png";
+import suruchiImg from "@/data/team/Suruchi.png";
+import pramodhImg from "@/data/team/Pramodh.png";
 
 const Executive = () => {
   const team = [
