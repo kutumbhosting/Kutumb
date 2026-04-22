@@ -1,3 +1,5 @@
+import { useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -18,6 +20,25 @@ const Membership = () => {
     address: "",
     interests: [] as string[],
   });
+
+const location = useLocation();
+useEffect(() => {
+  if (location.state?.scrollTo === "membership") {
+    setTimeout(() => {
+      const el = document.getElementById("membership-form");
+
+      if (el) {
+        const y =
+          el.getBoundingClientRect().top + window.pageYOffset;
+
+        window.scrollTo({
+          top: y - 50, // adjust for navbar
+          behavior: "smooth",
+        });
+      }
+    }, 200);
+  }
+}, [location]);
 
   const benefits = [
     {
@@ -160,7 +181,7 @@ const Membership = () => {
         {/* Registration Form */}
         <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4">
-            <div className="max-w-3xl mx-auto">
+            <div id="membership-form" className="max-w-3xl mx-auto">
               <Card className="border-2">
                 <CardContent className="p-8 md:p-12">
                   <h2 className="mb-8 text-center">Membership Registration</h2>
@@ -278,3 +299,4 @@ const Membership = () => {
 };
 
 export default Membership;
+
