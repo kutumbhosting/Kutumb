@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import logo from "@/assets/kutumb-logo.png";
+import { useEffect } from "react";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -18,6 +19,10 @@ const Navbar = () => {
     { name: "Contact", path: "/contact" },
   ];
 
+useEffect(() => {
+  window.scrollTo(0, 0);
+}, [location.pathname]);
+
   const isActive = (path: string) => location.pathname === path;
 
   return (
@@ -25,8 +30,8 @@ const Navbar = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 group">
-            <img src={logo} alt="Kutumb Logo" className="h-14 w-30 transition-transform group-hover:scale-110" />
+          <Link to="/" onClick={() => window.scrollTo(0, 0)} className="flex items-center gap-3 group">
+              <img src={logo} alt="Kutumb Logo" className="h-14 w-30 transition-transform group-hover:scale-110" />
           </Link>
 
           {/* Desktop Navigation */}
@@ -42,7 +47,7 @@ const Navbar = () => {
                 {link.name}
               </Link>
             ))}
-            <Link to="/membership">
+            <Link to="/membership" state={{ scrollTo: "membership" }}>
               <Button className="bg-accent hover:bg-accent/90 text-accent-foreground text-lg">
                 Join Us
               </Button>
@@ -89,4 +94,5 @@ const Navbar = () => {
 };
 
 export default Navbar;
+
 
