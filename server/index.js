@@ -208,26 +208,26 @@ app.post("/api/members", (req, res) => {
    🚀 START SERVER + FRONTEND
 ------------------------------*/
 import { fileURLToPath } from "url";
+import path from "path";
 
 // fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // -----------------------------
-// 🚀 Serve React frontend
+// 🚀 IMPORTANT: correct dist path for Docker
 // -----------------------------
-app.use(express.static(path.join(__dirname, "../dist")));
+const DIST_PATH = path.join(__dirname, "dist");
 
-// -----------------------------
-// 🚀 React Router fallback
-// -----------------------------
+// Serve React build
+app.use(express.static(DIST_PATH));
+
+// React Router fallback
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../dist/index.html"));
+  res.sendFile(path.join(DIST_PATH, "index.html"));
 });
 
-// -----------------------------
-// 🚀 Start server
-// -----------------------------
+// Start server
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
