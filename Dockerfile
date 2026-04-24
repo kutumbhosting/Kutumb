@@ -7,10 +7,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Copy project files
+# Copy entire project (src + server + data)
 COPY . .
 
-# Build the Vite app
+# Build Vite frontend
 RUN npm run build
 
 
@@ -19,14 +19,21 @@ FROM node:18
 
 WORKDIR /app
 
-# Install lightweight static server
-RUN npm install -g serve
+# Install production dependencies only
+COPY package*.json ./
+RUN npm install --omit=dev
 
-# Copy built files from build stage
+# Copy full project (IMPORTANT: keeps /server intact)
+COPY . .
+
+# Copy built frontend from build stage
 COPY --from=build /app/dist ./dist
 
-# Expose port (Northflank expects this)
-EXPOSE 8080
+# Ensure data directories exist (your file-based DB)
+RUN mkdir -p server/data/events server/data/members
 
-# Start server
-CMD ["serve", "-s", "dist", "-l", "8080"]
+# Expose backend port
+EXPOSE 5000
+
+# Start Express backend from /server folder
+CMD ["node", "server/index.js"]
