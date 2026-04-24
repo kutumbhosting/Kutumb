@@ -221,7 +221,7 @@ const DIST_PATH = path.join(process.cwd(), "dist");
 app.use(express.static(DIST_PATH));
 
 // React Router fallback
-app.get(/^(?!\/api).*/,, (req, res) => {
+app.get(/^(?!\/api).*/, (req, res) => {
   res.sendFile(path.join(DIST_PATH, "index.html"));
 });
 
