@@ -19,11 +19,12 @@ const Events = () => {
 
   const location = useLocation();
   const [activeEvent, setActiveEvent] = useState<string>("");
-  const eventTitle = location.state?.eventTitle || "";
+  const eventName = location.state?.eventName || "";
 
   const [submitMessage, setSubmitMessage] = useState<string>("");
   const [formData, setFormData] = useState({
-    event: "",
+    eventName: "",
+    eventDate:"",
     name: "",
     email: "",
     phone: "",
@@ -34,21 +35,17 @@ const Events = () => {
 
   useEffect(() => {
     if (location.state) {
-      // ✅ Set event name
-      if (location.state.eventTitle) {
-        setFormData((prev) => ({
-          ...prev,
-          event: location.state.eventTitle,
-        }));
-      }
+      setFormData((prev) => ({
+        ...prev,
+        eventName: location.state.eventName || "",
+        eventDate: location.state.eventDate || "",
+      }));
 
-      // ✅ Scroll to form
       if (location.state.scrollTo === "registration") {
         setTimeout(() => {
           const el = document.getElementById("registration-form");
           if (el) {
-            const y =
-              el.getBoundingClientRect().top + window.pageYOffset;
+            const y = el.getBoundingClientRect().top + window.pageYOffset;
 
             window.scrollTo({
               top: y - 90,
@@ -112,8 +109,8 @@ setTimeout(() => setSubmitMessage(""), 5000);
 
     // ✅ RESET FORM TO INITIAL STATE
     const initialState = {
-      event: location.state?.eventTitle || "",
-      date: location.state?.eventDate || "",
+      eventName: location.state?.eventName || "",
+      eventDate: location.state?.eventDate || "",
       name: "",
       email: "",
       phone: "",
