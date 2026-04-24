@@ -207,17 +207,18 @@ app.post("/api/members", (req, res) => {
 /* -----------------------------
    🚀 START SERVER
 ------------------------------*/
+const __dirname = path.resolve();
 
 // serve frontend
-const __dirname = path.resolve();
 app.use(express.static(path.join(__dirname, "dist")));
 
-// fallback to React app
-app.get("*", (req, res) => {
+// API routes above this...
+
+// fallback (Express 5 compatible)
+app.get("/*", (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
-// start server
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
