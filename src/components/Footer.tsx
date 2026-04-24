@@ -77,16 +77,13 @@ const Footer = () => {
                   Contact Us
                 </Link>
               </li>
-<li>
-  <a
-    href="/admin"
-    target="_blank"
-    rel="noopener noreferrer"
-    className="text-muted-foreground hover:text-primary transition-colors text-sm"
-  >
-    Admin
-  </a>
-</li>
+<Link
+  to="/admin"
+  onClick={() => window.scrollTo(0, 0)}
+  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+>
+  Admin
+</Link>
 
             </ul>
           </div>
