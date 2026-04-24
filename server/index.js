@@ -219,3 +219,17 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on", PORT);
 });
+
+import { fileURLToPath } from "url";
+
+// fix __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ✅ Serve frontend static files
+app.use(express.static(path.join(__dirname, "../dist")));
+
+// ✅ Catch ALL non-API routes and return React app
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../dist/index.html"));
+});
