@@ -215,7 +215,7 @@ const __dirname = path.dirname(__filename);
 // -----------------------------
 // 🚀 IMPORTANT: correct dist path for Docker
 // -----------------------------
-const DIST_PATH = path.join(__dirname, "dist");
+const DIST_PATH = path.join(process.cwd(), "dist");
 
 // Serve React build
 app.use(express.static(DIST_PATH));
