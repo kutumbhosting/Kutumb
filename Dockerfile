@@ -33,7 +33,7 @@ COPY --from=build /app/dist ./dist
 RUN mkdir -p server/data/events server/data/members
 
 # Expose backend port
-EXPOSE 5000
+EXPOSE 8080
 
 # Start Express backend from /server folder
 CMD ["node", "server/index.js"]
