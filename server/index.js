@@ -104,10 +104,10 @@ app.post("/api/events", (req, res) => {
 
   // ✅ Extract year from date
   const yearMatch = eventDate?.match(/\d{4}/);
-  const year = yearMatch ? yearMatch[0] : "unknown";
+  const eventYear = yearMatch ? yearMatch[0] : "unknown";
 
   // ✅ File path
-  const fileName = `${eventId}-${year}.json`;
+  const fileName = `${eventId}-${eventYear}.json`;
   const filePath = path.join(BASE_DIR, fileName);
 
   let data = readFile(filePath);
@@ -123,7 +123,7 @@ app.post("/api/events", (req, res) => {
 
   data.push({
     eventName,
-    eventYear: year, // ✅ ADD THIS
+    eventYear, 
     name,
     email,
     phone,
@@ -199,17 +199,17 @@ app.get("/api/events", (req, res) => {
 
       data.forEach((entry) => {
         // ✅ fallback safety (IMPORTANT)
-        let year = entry.eventYear;
+        let eventYear = entry.eventYear;
 
-        if (!year && entry.eventDate) {
+        if (!eventYear && entry.eventDate) {
           const match = entry.eventDate.match(/\d{4}/);
-          year = match ? match[0] : "unknown";
+          eventYear = match ? match[0] : "unknown";
         }
 
         allData.push({
           ...entry,
           eventName: entry.eventName,
-          eventYear: year,
+          eventYear,
         });
       });
     });
@@ -358,29 +358,8 @@ app.post("/api/members/update", (req, res) => {
 });
 
 /* -----------------------------
-   🚀 START SERVER + FRONTEND
+   🚀 START SERVER
 ------------------------------*/
-import { fileURLToPath } from "url";
-// fix __dirname for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// -----------------------------
-// 🚀 IMPORTANT: correct dist path for Docker
-// -----------------------------
-const DIST_PATH = path.join(process.cwd(), "dist");
-
-// Serve React build
-app.use(express.static(DIST_PATH));
-
-// React Router fallback
-app.get(/^(?!\/api).*/, (req, res) => {
-  res.sendFile(path.join(DIST_PATH, "index.html"));
-});
-
-// Start server
-const PORT = process.env.PORT || 8080;
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("Server running on", PORT);
+app.listen(5000, () => {
+  console.log("Server running on http://localhost:5000");
 });
