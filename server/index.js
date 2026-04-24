@@ -208,7 +208,11 @@ app.post("/api/members", (req, res) => {
    🚀 START SERVER
 ------------------------------*/
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
+
+if (!PORT) {
+  throw new Error("PORT not provided by environment");
+}
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on", PORT);
