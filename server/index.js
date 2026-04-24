@@ -357,9 +357,32 @@ app.post("/api/members/update", (req, res) => {
   }
 });
 
-/* -----------------------------
-   🚀 START SERVER
+/* ----------------------------- 
+🚀 START SERVER + FRONTEND 
 ------------------------------*/
-app.listen(5000, () => {
-  console.log("Server running on http://localhost:5000");
+import { fileURLToPath } from "url";
+
+// fix __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// -----------------------------
+// 🚀 Serve React frontend
+// -----------------------------
+app.use(express.static(path.join(__dirname, "../dist")));
+
+// -----------------------------
+// 🚀 React Router fallback
+// -----------------------------
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../dist/index.html"));
+});
+
+// -----------------------------
+// 🚀 Start server
+// -----------------------------
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("Server running on", PORT);
 });
