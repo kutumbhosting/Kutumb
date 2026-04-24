@@ -113,6 +113,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
     // ✅ RESET FORM TO INITIAL STATE
     const initialState = {
       event: location.state?.eventTitle || "",
+      date: location.state?.eventDate || "",
       name: "",
       email: "",
       phone: "",
@@ -204,10 +205,11 @@ setTimeout(() => setSubmitMessage(""), 5000);
                         <Button
                           className="w-full btn-hero"
                           onClick={() => {
-                            const eventName = event.title;
+
 
                             setFormData({
-                              event: eventName,
+                              eventName: event.title,
+                              eventDate: event.date,
                               name: "",
                               email: "",
                               phone: "",
@@ -248,8 +250,19 @@ setTimeout(() => setSubmitMessage(""), 5000);
                           <Label htmlFor="event">Event Name *</Label>
                           <Input
                             id="event"
-                            value={formData.event}
+                            value={formData.eventName}
                             placeholder="Enter event name"
+                            readOnly
+                            className="mt-2 bg-muted"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="event">Event Date *</Label>
+                          <Input
+                            id="date"
+                            value={formData.eventDate}
+                            placeholder="Enter event date"
                             readOnly
                             className="mt-2 bg-muted"
                           />
