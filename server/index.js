@@ -207,22 +207,27 @@ app.post("/api/members", (req, res) => {
 /* -----------------------------
    🚀 START SERVER + FRONTEND
 ------------------------------*/
-
 import { fileURLToPath } from "url";
 
 // fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ Serve frontend build
+// -----------------------------
+// 🚀 Serve React frontend
+// -----------------------------
 app.use(express.static(path.join(__dirname, "../dist")));
 
-// ✅ React Router fallback (VERY IMPORTANT)
+// -----------------------------
+// 🚀 React Router fallback
+// -----------------------------
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 
-// ✅ Start server
+// -----------------------------
+// 🚀 Start server
+// -----------------------------
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
