@@ -208,8 +208,6 @@ app.post("/api/members", (req, res) => {
    🚀 START SERVER + FRONTEND
 ------------------------------*/
 import { fileURLToPath } from "url";
-import path from "path";
-
 // fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
