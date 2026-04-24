@@ -3,14 +3,11 @@ FROM node:18 AS build
 
 WORKDIR /app
 
-# Install dependencies
 COPY package*.json ./
 RUN npm install
 
-# Copy entire project (src + server + data)
 COPY . .
 
-# Build Vite frontend
 RUN npm run build
 
 
@@ -19,21 +16,19 @@ FROM node:18
 
 WORKDIR /app
 
-# Install production dependencies only
+# install only backend deps
 COPY package*.json ./
 RUN npm install --omit=dev
 
-# Copy full project (IMPORTANT: keeps /server intact)
+# copy backend + frontend build
 COPY . .
-
-# Copy built frontend from build stage
 COPY --from=build /app/dist ./dist
 
-# Ensure data directories exist (your file-based DB)
+# ensure folders exist
 RUN mkdir -p server/data/events server/data/members
 
-# Expose backend port
+# IMPORTANT: Northflank uses PORT env
+ENV PORT=8080
 EXPOSE 8080
 
-# Start Express backend from /server folder
 CMD ["node", "server/index.js"]
