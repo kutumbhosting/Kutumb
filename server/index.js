@@ -208,14 +208,9 @@ app.post("/api/members", (req, res) => {
    🚀 START SERVER
 ------------------------------*/
 const __dirname = path.resolve();
-
-// serve frontend
+// serve static frontend
 app.use(express.static(path.join(__dirname, "dist")));
-
-// API routes above this...
-
-// fallback (Express 5 compatible)
-app.get("/*", (req, res) => {
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
