@@ -21,6 +21,7 @@ const Events = () => {
   const [activeEvent, setActiveEvent] = useState<string>("");
   const eventTitle = location.state?.eventTitle || "";
 
+  const [submitMessage, setSubmitMessage] = useState<string>("");
   const [formData, setFormData] = useState({
     event: "",
     name: "",
@@ -59,55 +60,88 @@ const Events = () => {
     }
   }, [location]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (formData.adults <= 0) {
-      toast({
-        title: "Invalid Entry",
-        description: "At least 1 adult is required.",
-        variant: "destructive",
-      });
-      return;
-    }
+  if (!formData.name || !formData.email || !formData.phone) {
+    toast({
+      title: "Missing Information",
+      description: "Please fill in all required fields.",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    if (!formData.name || !formData.email || !formData.phone) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(formData.email)) {
+    toast({
+      title: "Invalid Email",
+      description: "Please enter a valid email address.",
+      variant: "destructive",
+    });
+    return;
+  }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      toast({
-        title: "Invalid Email",
-        description: "Please enter a valid email address.",
-        variant: "destructive",
-      });
-      return;
-    }
+  try {
+    const res = await fetch("http://localhost:5000/api/events", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(formData),
+});
 
-    console.log("Event Registration:", formData);
+const data = await res.json();
 
+if (res.status === 409) {
+  setSubmitMessage("You are already registered for this event.");
+  setTimeout(() => setSubmitMessage(""), 5000);
+  return;
+}
+
+if (!res.ok) {
+  throw new Error(data.message || "Server error");
+}
+
+setSubmitMessage("Registration successful!");
+setTimeout(() => setSubmitMessage(""), 5000);
+
+    // ✅ SUCCESS MESSAGE
     toast({
       title: "Registration Successful!",
-      description:
-        "We've received your registration. You'll receive a confirmation email shortly.",
+      description: "We’ve received your registration.",
     });
 
-    setFormData({
-      event: location.state.eventTitle,
+    // ✅ RESET FORM TO INITIAL STATE
+    const initialState = {
+      event: location.state?.eventTitle || "",
       name: "",
       email: "",
       phone: "",
       comments: "",
       adults: 0,
       children: 0,
+    };
+
+    setFormData(initialState);
+
+    // ✅ SCROLL BACK TO TOP OF FORM
+    setTimeout(() => {
+      const el = document.getElementById("registration-form");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
+
+  } catch (error) {
+    console.error("API Error:", error);
+setSubmitMessage("Submission failed. Try again.");
+setTimeout(() => setSubmitMessage(""), 5000);
+    toast({
+      title: "Submission Failed",
+      description: "Backend not running or API not reachable.",
+      variant: "destructive",
     });
-  };
+  }
+};
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -320,6 +354,17 @@ const Events = () => {
                         >
                           Submit Registration
                         </Button>
+{submitMessage && (
+  <p
+    className={`mt-4 text-center text-sm ${
+      submitMessage === "Registration successful!"
+        ? "text-green-600"
+        : "text-red-600"
+    }`}
+  >
+    {submitMessage}
+  </p>
+)}
                       </form>
                     </CardContent>
                   </Card>
