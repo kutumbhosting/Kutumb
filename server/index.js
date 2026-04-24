@@ -205,20 +205,8 @@ app.post("/api/members", (req, res) => {
 });
 
 /* -----------------------------
-   🚀 START SERVER
+   🚀 START SERVER + FRONTEND
 ------------------------------*/
-const __dirname = path.resolve();
-// serve static frontend
-app.use(express.static(path.join(__dirname, "dist")));
-app.use((req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
-
-const PORT = process.env.PORT || 8080;
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("Server running on", PORT);
-});
 
 import { fileURLToPath } from "url";
 
@@ -226,10 +214,17 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ✅ Serve frontend static files
+// ✅ Serve frontend build
 app.use(express.static(path.join(__dirname, "../dist")));
 
-// ✅ Catch ALL non-API routes and return React app
+// ✅ React Router fallback (VERY IMPORTANT)
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "../dist/index.html"));
+});
+
+// ✅ Start server
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log("Server running on", PORT);
 });
