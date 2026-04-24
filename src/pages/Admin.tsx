@@ -23,8 +23,13 @@ const [loginData, setLoginData] = useState({
 
 const [groupedEvents, setGroupedEvents] = useState<Record<string, any[]>>({});
 const [memberData, setMemberData] = useState<any[]>([]);
+const [selectedEventRows, setSelectedEventRows] = useState<string[]>([]);
+const [selectedMemberRows, setSelectedMemberRows] = useState<string[]>([]);
+const [editingMember, setEditingMember] = useState<any | null>(null);
 
 const [selectedEventKey, setSelectedEventKey] = useState<string>("");
+
+const [eventActionMessage, setEventActionMessage] = useState("");
 
 const selectedEvent =
   selectedEventKey && groupedEvents[selectedEventKey]?.length
@@ -64,6 +69,22 @@ const rows = memberData.map((row) =>
   }).join(",")
 );
 
+const toggleEventRow = (email: string) => {
+  setSelectedEventRows((prev) =>
+    prev.includes(email)
+      ? prev.filter((e) => e !== email)
+      : [...prev, email]
+  );
+};
+
+const toggleMemberRow = (email: string) => {
+  setSelectedMemberRows((prev) =>
+    prev.includes(email)
+      ? prev.filter((e) => e !== email)
+      : [...prev, email]
+  );
+};
+
   // ================= LOGIN =================
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,9 +96,9 @@ const rows = memberData.map((row) =>
       setIsLoggedIn(true);
 
       toast({
-        title: "Login Successful",
-        description: "Welcome Admin",
-      });
+  title: "Login Successful",
+  description: "Welcome Admin",
+});
 
       fetchData();
     } else {
@@ -104,7 +125,7 @@ const fetchData = async () => {
     const members = await membersRes.json();
 
     const grouped = events.reduce((acc: any, item: any) => {
-      const key = `${item.eventName} ${item.eventYear}`;
+      const key = item.eventName + "_" + item.eventYear;
       if (!acc[key]) acc[key] = [];
       acc[key].push(item);
       return acc;
@@ -117,6 +138,43 @@ const fetchData = async () => {
   }
 };
 
+const deleteMemberRows = async () => {
+  await fetch("http://localhost:5000/api/members/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emails: selectedMemberRows }),
+  });
+
+  setSelectedMemberRows([]);
+  fetchData();
+};
+
+const deleteEventRows = async () => {
+  try {
+    const res = await fetch("http://localhost:5000/api/events/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+           eventName: selectedEvent.eventName,
+           eventYear: selectedEvent.eventYear,
+           emails: selectedEventRows,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Delete failed");
+    }
+
+    setEventActionMessage(`✅ ${data.message || "Deleted successfully"}`);
+
+    setSelectedEventRows([]);
+    fetchData();
+  } catch (err: any) {
+    setEventActionMessage(`❌ ${err.message}`);
+  }
+};
 
   // ================= CSV DOWNLOAD =================
 const normalizeInterests = (interests: any) => {
@@ -284,11 +342,26 @@ const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
         </Button>
 
       </div>
+{selectedEventRows.length > 0 && (
+  <Button
+    variant="destructive"
+    className="mb-3"
+    onClick={deleteEventRows}
+  >
+    Delete Selected
+  </Button>
+)}
+{eventActionMessage && (
+  <div className="mt-3 text-sm font-medium text-blue-600">
+    {eventActionMessage}
+  </div>
+)}
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b">
+              <th className="p-2"></th>
               <th className="p-2 text-left">Name</th>
               <th className="p-2 text-left">Email</th>
               <th className="p-2 text-left">Phone</th>
@@ -301,6 +374,13 @@ const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
           <tbody>
             {selectedEvent?.members?.map((item, i) => (
               <tr key={i} className="border-b">
+                <td className="p-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedEventRows.includes(item.email)}
+                    onChange={() => toggleEventRow(item.email)}
+                  />
+                </td>
                 <td className="p-2">{item.name}</td>
                 <td className="p-2">{item.email}</td>
                 <td className="p-2">{item.phone}</td>
@@ -331,11 +411,42 @@ const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
                           Download CSV
                         </Button>
                       </div>
+{selectedMemberRows.length > 0 && (
+  <Button
+    variant="destructive"
+    className="mb-3"
+    onClick={deleteMemberRows}
+  >
+    Delete Selected
+  </Button>
+)}
+<Button
+  onClick={() => {
+    const member = memberData.find(m => m.email === selectedMemberRows[0]);
+
+    if (!member) return;
+
+    setEditingMember({
+      ...member,
+      interests: Array.isArray(member.interests)
+        ? member.interests.join(", ")
+        : typeof member.interests === "object" && member.interests !== null
+        ? Object.keys(member.interests)
+            .filter(k => member.interests[k])
+            .join(", ")
+        : member.interests || "",
+    });
+  }}
+  disabled={selectedMemberRows.length !== 1}
+>
+  Modify Selected
+</Button>
 
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b">
+                              <th className="p-2"></th>
                               <th className="p-2 text-left">Name</th>
                               <th className="p-2 text-left">Email</th>
                               <th className="p-2 text-left">Phone</th>
@@ -347,6 +458,13 @@ const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
                           <tbody>
                             {memberData.map((item, i) => (
                               <tr key={i} className="border-b">
+                                <td className="p-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedMemberRows.includes(item.email)}
+                                    onChange={() => toggleMemberRow(item.email)}
+                                  />
+                                </td>
                                 <td className="p-2">{item.name}</td>
                                 <td className="p-2">{item.email}</td>
                                 <td className="p-2">{item.phone}</td>
@@ -358,6 +476,65 @@ const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
                             ))}
                           </tbody>
                         </table>
+
+{editingMember && (
+  <Card className="mt-4">
+    <CardContent className="p-4 space-y-3">
+
+      <h3 className="font-bold">Edit Member</h3>
+
+      <Input
+        value={editingMember.name}
+        onChange={(e) =>
+          setEditingMember({ ...editingMember, name: e.target.value })
+        }
+      />
+
+      <Input
+        value={editingMember.phone}
+        onChange={(e) =>
+          setEditingMember({ ...editingMember, phone: e.target.value })
+        }
+      />
+
+<Input
+  value={editingMember.address}
+  onChange={(e) =>
+    setEditingMember({ ...editingMember, address: e.target.value })
+  }
+/>
+
+<Input
+  value={editingMember.interests || ""}
+  onChange={(e) =>
+    setEditingMember({
+      ...editingMember,
+      interests: e.target.value,
+    })
+  }
+/>
+      <Button
+        onClick={async () => {
+          await fetch("http://localhost:5000/api/members/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: editingMember.email,
+              updatedData: editingMember,
+            }),
+          });
+
+          setEditingMember(null);
+          setSelectedMemberRows([]);
+          fetchData();
+        }}
+      >
+        Save Changes
+      </Button>
+
+    </CardContent>
+  </Card>
+)}
                       </div>
                     </CardContent>
                   </Card>
