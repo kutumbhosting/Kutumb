@@ -12,7 +12,7 @@ const Footer = () => {
           {/* About Section */}
           <div>
           <div className="flex items-center gap-2 mb-4">
-             <img src={logo} alt="Kutumb Logo" className="h-9 w-25" />
+             <img src={logo} alt="Kutumb Logo" className="h-9 w-auto" />
            </div>    
            <Link to="/" onClick={() => window.scrollTo(0, 0)}
               className="text-muted-foreground hover:text-primary transition-colors text-sm">
@@ -77,8 +77,20 @@ const Footer = () => {
                   Contact Us
                 </Link>
               </li>
+<li>
+  <a
+    href="/admin"
+    target="_blank"
+    rel="noopener noreferrer"
+    className="text-muted-foreground hover:text-primary transition-colors text-sm"
+  >
+    Admin
+  </a>
+</li>
+
             </ul>
           </div>
+
 
           {/* Contact Info */}
           <div>
@@ -123,6 +135,7 @@ const Footer = () => {
 };
 
 export default Footer;
+
 
 
 
