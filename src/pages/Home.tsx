@@ -114,7 +114,7 @@ const Home = () => {
                     <div className="text-sm text-primary font-semibold mb-2">{event.date}</div>
                     <h3 className="text-xl font-bold mb-3">{event.title}</h3>
                     <p className="text-muted-foreground mb-4">{event.description}</p>
-                    <Link to="/events" state={{ scrollTo: "registration", eventTitle: event.title }}>
+                    <Link to="/events" state={{ scrollTo: "registration", eventName: event.title, eventDate: event.date }} replace={false}>
                       <Button variant="outline" className="w-full">
                         Register Now
                       </Button>
