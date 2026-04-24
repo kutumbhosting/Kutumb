@@ -125,7 +125,7 @@ const fetchData = async () => {
     const members = await membersRes.json();
 
     const grouped = events.reduce((acc: any, item: any) => {
-      const key = item.eventName + "-" + item.eventYear;
+      const key = item.eventName + "_" + item.eventYear;
       if (!acc[key]) acc[key] = [];
       acc[key].push(item);
       return acc;
