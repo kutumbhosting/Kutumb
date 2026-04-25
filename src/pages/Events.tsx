@@ -11,11 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, MapPin, Users, Clock } from "lucide-react";
-import { upcomingEvents } from "@/data/upcomingEventsData";
 import { pastEvents } from "@/data/pastEventsData";
 
 const Events = () => {
   const { toast } = useToast();
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
 
   const location = useLocation();
   const [activeEvent, setActiveEvent] = useState<string>("");
@@ -56,6 +56,16 @@ const Events = () => {
       }
     }
   }, [location]);
+
+useEffect(() => {
+  fetchUpcomingEvents();
+}, []);
+
+const fetchUpcomingEvents = async () => {
+  const res = await fetch("http://localhost:5000/api/upcoming-events");
+  const data = await res.json();
+  setUpcomingEvents(data);
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -171,7 +181,9 @@ setTimeout(() => setSubmitMessage(""), 5000);
 
               <TabsContent value="upcoming" className="space-y-12">
                 <div className="grid md:grid-cols-2 gap-8">
-                  {upcomingEvents.map((event, index) => (
+                  {upcomingEvents
+                    .filter((event) => event.isActive)   // 👈 ONLY ACTIVE EVENTS
+                    .map((event, index) => (
                     <Card key={index} className="card-hover border border-border">
                       <CardContent className="p-6">
                         <h3 className="text-xl font-bold mb-4">{event.title}</h3>
