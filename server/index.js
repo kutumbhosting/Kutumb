@@ -374,9 +374,17 @@ app.use(express.static(path.join(__dirname, "../dist")));
 // -----------------------------
 // 🚀 React Router fallback
 // -----------------------------
-app.get(/.*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "../dist/index.html"));
+app.use((req, res, next) => {
+  if (req.method === "GET" && req.accepts("html")) {
+    res.sendFile(path.join(__dirname, "../dist/index.html"));
+  } else {
+    next();
+  }
 });
+
+//app.get(/.*/, (req, res) => {
+  //res.sendFile(path.join(__dirname, "../dist/index.html"));
+//});
 
 // -----------------------------
 // 🚀 Start server
