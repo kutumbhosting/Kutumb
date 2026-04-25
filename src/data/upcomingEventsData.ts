@@ -9,7 +9,7 @@ export const upcomingEvents = [
       "Please bring a Thali for the potluck of your favourite dish, snacks, and songs/poems/dance/anecdots to share",
   },
   {
-    title: "International Yoga Day 2026",
+    title: "International Yoga Day",
     date: "June 21, 2026",
     time: "8:00 AM - 12:00 PM",
     location: "TBA",
