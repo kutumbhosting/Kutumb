@@ -1,12 +1,12 @@
 export const upcomingEvents = [
   {
     title: "Kutumb Musical Afternoon",
-    date: "May 3, 2026",
+    date: "May 9, 2026 <-- Date Changed",
     time: "2:30 PM - 5:00 PM",
     location: "Dural Memorial Hall",
     spots: "100",
     description:
-      "Please bring a Thali for the potluck of your favourite dish, snacks, and songs/poems/dance/anecdots to share",
+      "Please bring your favourite dish for the potluck, and songs/poems/dance/anecdots to share",
   },
   {
     title: "International Yoga Day",
