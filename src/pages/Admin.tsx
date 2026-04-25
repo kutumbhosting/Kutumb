@@ -31,6 +31,16 @@ const [selectedEventKey, setSelectedEventKey] = useState<string>("");
 
 const [eventActionMessage, setEventActionMessage] = useState("");
 
+const [newEvent, setNewEvent] = useState({
+  title: "",
+  date: "",
+  time: "",
+  location: "",
+  spots: "",
+  description: "",
+  isActive: true,
+});
+
 const selectedEvent =
   selectedEventKey && groupedEvents[selectedEventKey]?.length
     ? {
@@ -85,30 +95,22 @@ const toggleMemberRow = (email: string) => {
   );
 };
 
-  // ================= LOGIN =================
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
+const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
 
-    if (
-      loginData.user === ADMIN_USER &&
-      loginData.password === ADMIN_PASSWORD
-    ) {
-      setIsLoggedIn(true);
+const fetchUpcomingEvents = async () => {
+  try {
+    const res = await fetch("http://localhost:5000/api/upcoming-events");
+    const data = await res.json();
+    setUpcomingEvents(data);
+  } catch (err) {
+    console.error(err);
+  }
+};
 
-      toast({
-  title: "Login Successful",
-  description: "Welcome Admin",
-});
+useEffect(() => {
+  fetchUpcomingEvents();
+}, []);
 
-      fetchData();
-    } else {
-      toast({
-        title: "Invalid Credentials",
-        description: "Incorrect email or password",
-        variant: "destructive",
-      });
-    }
-  };
 
   // ================= FETCH DATA =================
 
@@ -155,8 +157,8 @@ const deleteEventRows = async () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-           eventName: selectedEvent.eventName,
-           eventYear: selectedEvent.eventYear,
+           eventName: selectedEvent?.eventName,
+           eventYear: selectedEvent?.eventYear,
            emails: selectedEventRows,
       }),
     });
@@ -176,6 +178,32 @@ const deleteEventRows = async () => {
   }
 };
 
+  // ================= LOGIN =================
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (
+      loginData.user === ADMIN_USER &&
+      loginData.password === ADMIN_PASSWORD
+    ) {
+      setIsLoggedIn(true);
+
+      toast({
+  title: "Login Successful",
+  description: "Welcome Admin",
+});
+
+      fetchData();
+    } else {
+      toast({
+        title: "Invalid Credentials",
+        description: "Incorrect email or password",
+        variant: "destructive",
+      });
+    }
+  };
+
+
   // ================= CSV DOWNLOAD =================
 const normalizeInterests = (interests: any) => {
   if (Array.isArray(interests)) return interests.join(" | ");
@@ -189,7 +217,7 @@ const normalizeInterests = (interests: any) => {
 
     const headers = Object.keys(data[0]).join(",");
 
-const rows = data.map((row) => {
+const csvrows = data.map((row) => {
   const cleanRow = {
     ...row,
     interests: normalizeInterests(row.interests),
@@ -199,7 +227,7 @@ const rows = data.map((row) => {
 });
 
 
-    const csv = [headers, ...rows].join("\n");
+    const csv = [headers, ...csvrows].join("\n");
 
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -285,9 +313,10 @@ const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
             <div className="container mx-auto px-4">
 
               <Tabs defaultValue="events" className="max-w-7xl mx-auto">
-                <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-12">
+                <TabsList className="grid w-full max-w-md mx-auto grid-cols-3 mb-12">
                   <TabsTrigger value="events">Event Registrations</TabsTrigger>
                   <TabsTrigger value="members">Members</TabsTrigger>
+                  <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
                 </TabsList>
 
   {/* ✅ EVENTS TAB FIXED */}
@@ -539,6 +568,286 @@ const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
                     </CardContent>
                   </Card>
                 </TabsContent>
+<TabsContent value="upcoming">
+  <Card className="border">
+    <CardContent className="p-6">
+      {/* HEADER (same pattern as other tabs) */}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold">
+          Upcoming Events Management
+        </h2>
+
+        <Button
+          onClick={() =>
+            downloadCSV(upcomingEvents, "upcoming-events.csv")
+          }
+        >
+          Download CSV
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="p-2 text-left">Active</th>
+              <th className="p-2 text-left">Title</th>
+              <th className="p-2 text-left">Date</th>
+              <th className="p-2 text-left">Time</th>
+              <th className="p-2 text-left">Location</th>
+              <th className="p-2 text-left">Spots</th>
+              <th className="p-2 text-left">Description</th>
+              <th className="p-2 text-left">Action</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {upcomingEvents.map((event, index) => (
+              <tr key={index} className="border-b">
+
+                {/* ACTIVE */}
+                <td className="p-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={!!event.isActive}
+                    onChange={async (e) => {
+                      const updated = {
+                        ...event,
+                        isActive: e.target.checked,
+                      };
+
+                      await fetch(
+                        "http://localhost:5000/api/upcoming-events/update",
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify(updated),
+                        }
+                      );
+
+                      fetchUpcomingEvents();
+                    }}
+                  />
+                </td>
+
+                {/* TITLE */}
+                <td className="p-2">
+                  <Input
+                    value={event.title}
+                    onChange={(e) =>
+                      setUpcomingEvents((prev) =>
+                        prev.map((ev, i) =>
+                          i === index
+                            ? { ...ev, title: e.target.value }
+                            : ev
+                        )
+                      )
+                    }
+                  />
+                </td>
+
+                <td className="p-2">
+                  <Input
+                    value={event.date}
+                    onChange={(e) =>
+                      setUpcomingEvents((prev) =>
+                        prev.map((ev, i) =>
+                          i === index
+                            ? { ...ev, date: e.target.value }
+                            : ev
+                        )
+                      )
+                    }
+                  />
+                </td>
+
+                <td className="p-2">
+                  <Input
+                    value={event.time}
+                    onChange={(e) =>
+                      setUpcomingEvents((prev) =>
+                        prev.map((ev, i) =>
+                          i === index
+                            ? { ...ev, time: e.target.value }
+                            : ev
+                        )
+                      )
+                    }
+                  />
+                </td>
+
+                <td className="p-2">
+                  <Input
+                    value={event.location}
+                    onChange={(e) =>
+                      setUpcomingEvents((prev) =>
+                        prev.map((ev, i) =>
+                          i === index
+                            ? { ...ev, location: e.target.value }
+                            : ev
+                        )
+                      )
+                    }
+                  />
+                </td>
+
+                <td className="p-2">
+                  <Input
+                    value={event.spots}
+                    onChange={(e) =>
+                      setUpcomingEvents((prev) =>
+                        prev.map((ev, i) =>
+                          i === index
+                            ? { ...ev, spots: e.target.value }
+                            : ev
+                        )
+                      )
+                    }
+                  />
+                </td>
+
+                <td className="p-2">
+                  <Input
+                    value={event.description}
+                    onChange={(e) =>
+                      setUpcomingEvents((prev) =>
+                        prev.map((ev, i) =>
+                          i === index
+                            ? { ...ev, description: e.target.value }
+                            : ev
+                        )
+                      )
+                    }
+                  />
+                </td>
+
+                {/* SAVE */}
+                <td className="p-2 flex gap-2">
+  
+  {/* SAVE BUTTON (existing) */}
+  <Button
+    onClick={async () => {
+      await fetch("http://localhost:5000/api/upcoming-events/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(event),
+      });
+
+      fetchUpcomingEvents();
+    }}
+  >
+    Save
+  </Button>
+
+  {/* DELETE BUTTON */}
+<Button
+  variant="destructive"
+  onClick={async () => {
+    console.log("Deleting event:", event.title);
+
+    const res = await fetch("http://localhost:5000/api/upcoming-events/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: event.title }),
+    });
+
+    const data = await res.json();
+    console.log("DELETE RESPONSE:", data);
+
+    fetchUpcomingEvents();
+  }}
+>
+  Delete
+</Button>
+
+</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </CardContent>
+  </Card>
+
+<div className="mb-8 p-4 border rounded space-y-3">
+  <h3 className="font-bold text-lg">Add New Upcoming Event</h3>
+
+  <Input
+    placeholder="Title"
+    value={newEvent.title}
+    onChange={(e) =>
+      setNewEvent({ ...newEvent, title: e.target.value })
+    }
+  />
+
+  <Input
+    placeholder="Date"
+    value={newEvent.date}
+    onChange={(e) =>
+      setNewEvent({ ...newEvent, date: e.target.value })
+    }
+  />
+
+  <Input
+    placeholder="Time"
+    value={newEvent.time}
+    onChange={(e) =>
+      setNewEvent({ ...newEvent, time: e.target.value })
+    }
+  />
+
+  <Input
+    placeholder="Location"
+    value={newEvent.location}
+    onChange={(e) =>
+      setNewEvent({ ...newEvent, location: e.target.value })
+    }
+  />
+
+  <Input
+    placeholder="Spots"
+    value={newEvent.spots}
+    onChange={(e) =>
+      setNewEvent({ ...newEvent, spots: e.target.value })
+    }
+  />
+
+  <Input
+    placeholder="Description"
+    value={newEvent.description}
+    onChange={(e) =>
+      setNewEvent({ ...newEvent, description: e.target.value })
+    }
+  />
+
+  <Button
+    onClick={async () => {
+      await fetch("http://localhost:5000/api/upcoming-events/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newEvent),
+      });
+
+      setNewEvent({
+        title: "",
+        date: "",
+        time: "",
+        location: "",
+        spots: "",
+        description: "",
+        isActive: true,
+      });
+
+      fetchUpcomingEvents();
+    }}
+  >
+    Add Event
+  </Button>
+</div>
+
+</TabsContent>
 
               </Tabs>
             </div>
