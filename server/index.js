@@ -2,6 +2,7 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import cors from "cors";
+import { slugify } from "./utils/stringUtils.js";
 
 const app = express();
 app.use(cors());
@@ -32,31 +33,30 @@ if (!fs.existsSync(MEMBERS_FILE)) {
 /* -----------------------------
    🧼 HELPERS
 ------------------------------*/
+
+const year = (text) => {
+  const match = text?.match(/\d{4}/);
+  return match ? match[0] : "unknown";
+};
+
 const getEventFilePath = (event) => {
   const parts = event.split("\n").map(s => s.trim());
+  const eventName = slugify(parts[0] || event);
+  const eventDate = parts[1] || "";
 
-  const title = (parts[0] || event)
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
+  // ✅ call function properly
+  const eventYear = year(eventDate);
 
-  // 🔥 extract year from entire event string
-  const yearMatch = event.match(/\b(19|20)\d{2}\b/);
-  const year = yearMatch ? yearMatch[0] : "unknown";
-
-  const fileName = `${title}-${year}.json`;
+  const fileName = `${eventName}-${eventYear}.json`;
 
   return path.join(BASE_DIR, fileName);
 };
 
+
 // read JSON file safely
 const readFile = (filePath) => {
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-
   try {
+    if (!fs.existsSync(filePath)) return [];
     const content = fs.readFileSync(filePath, "utf-8");
     return JSON.parse(content || "[]");
   } catch (err) {
@@ -73,15 +73,13 @@ const writeFile = (filePath, data) => {
 const parseEvent = (event) => {
   const parts = event.split("\n").map(s => s.trim());
 
-  const title = parts[0] || "";
+  const eventName = parts[0] || "";
   const date = parts[1] || "";
-
-  const yearMatch = date.match(/\d{4}/);
-  const year = yearMatch ? yearMatch[0] : "";
+  const eventYear = year(date);
 
   return {
-    eventName: title,
-    eventYear: year,
+    eventName,
+    eventYear,
   };
 };
 
@@ -96,25 +94,18 @@ app.post("/api/events", (req, res) => {
   }
 
   // ✅ Create safe event ID
-  const eventId = eventName
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
-
-  // ✅ Extract year from date
-  const yearMatch = eventDate?.match(/\d{4}/);
-  const eventYear = yearMatch ? yearMatch[0] : "unknown";
+  const eventId = slugify(eventName);
+  const eventYear = year(eventDate); 
 
   // ✅ File path
   const fileName = `${eventId}-${eventYear}.json`;
   const filePath = path.join(BASE_DIR, fileName);
 
-  let data = readFile(filePath);
-  if (!data) data = [];
+  const data = readFile(filePath);
 
   const exists = data.some(
-    (r) => r.email?.toLowerCase() === email.toLowerCase()
+    (r) => r.email?.toLowerCase() === email.toLowerCase() && 
+           r.eventYear === eventYear
   );
 
   if (exists) {
@@ -188,7 +179,6 @@ app.post("/api/members", (req, res) => {
 app.get("/api/events", (req, res) => {
   try {
     const files = fs.readdirSync(BASE_DIR);
-
     const allData = [];
 
     files.forEach((file) => {
@@ -198,18 +188,10 @@ app.get("/api/events", (req, res) => {
       if (!data) return;
 
       data.forEach((entry) => {
-        // ✅ fallback safety (IMPORTANT)
-        let eventYear = entry.eventYear;
-
-        if (!eventYear && entry.eventDate) {
-          const match = entry.eventDate.match(/\d{4}/);
-          eventYear = match ? match[0] : "unknown";
-        }
-
         allData.push({
           ...entry,
           eventName: entry.eventName,
-          eventYear,
+          eventYear: entry.eventYear,
         });
       });
     });
@@ -224,8 +206,12 @@ app.get("/api/events", (req, res) => {
 /* -----------------------------
    📊 GET SINGLE EVENT
 ------------------------------*/
-app.get("/api/events/:eventName", (req, res) => {
-  const filePath = getEventFilePath(req.params.eventName);
+app.get("/api/events/:eventName/:eventYear", (req, res) => {
+  const { eventName, eventYear } = req.params;
+
+  const fileName = `${slugify(eventName)}-${eventYear}.json`;
+  const filePath = path.join(BASE_DIR, fileName);
+
   const data = readFile(filePath);
   res.json(data);
 });
@@ -274,12 +260,7 @@ app.post("/api/events/delete", (req, res) => {
     }
 
     // ✅ Build filename SAME as POST logic
-    const eventId = eventName
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "");
-
+    const eventId = slugify(eventName);
     const fileName = `${eventId}-${eventYear}.json`;
     const filePath = path.join(BASE_DIR, fileName);
 
@@ -355,6 +336,100 @@ app.post("/api/members/update", (req, res) => {
     console.error(err);
     res.status(500).json({ message: "Update failed" });
   }
+});
+
+/* -----------------------------
+   ✅ UPCOMING EVENTS 
+------------------------------*/
+
+app.get("/api/upcoming-events", (req, res) => {
+  const filePath = path.join(process.cwd(), "server", "data", "upcomingEvents.json");
+
+  if (!fs.existsSync(filePath)) {
+    return res.json([]);
+  }
+
+  const allEvents = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+
+  // 🔥 ONLY ACTIVE EVENTS
+  //const activeEvents = allEvents.filter(event => event.isActive);
+
+  res.json(allEvents);
+});
+
+
+app.post("/api/upcoming-events/update", (req, res) => {
+  const filePath = path.join(
+    process.cwd(),
+    "server",
+    "data",
+    "upcomingEvents.json"
+  );
+
+  const newEvent = req.body;
+
+  let data = [];
+
+  if (fs.existsSync(filePath)) {
+    data = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+  }
+
+  // -----------------------------
+  // ✅ CHECK EXISTING EVENT
+  // (use title as unique key — you can change later to id)
+  // -----------------------------
+  const index = data.findIndex(
+    (e) => e.title === newEvent.title
+  );
+
+  if (index !== -1) {
+    // -----------------------------
+    // 🔁 UPDATE EXISTING EVENT
+    // -----------------------------
+    data[index] = {
+      ...data[index],
+      ...newEvent, // updates everything (content + flag)
+      updatedAt: new Date().toISOString(),
+    };
+  } else {
+    // -----------------------------
+    // ➕ CREATE NEW EVENT
+    // -----------------------------
+    data.push({
+      ...newEvent,
+      published: newEvent.published ?? true, // default true
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+
+  res.json({
+    message: index !== -1 ? "Event updated" : "Event added",
+  });
+});
+
+    // -----------------------------
+    // ➕ DELETE AN EVENT
+    // -----------------------------
+
+app.post("/api/upcoming-events/delete", (req, res) => {
+  const filePath = path.join(
+    process.cwd(),
+    "server",
+    "data",
+    "upcomingEvents.json"
+  );
+
+  const { title } = req.body;
+
+  let data = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+
+  const updated = data.filter((event) => event.title !== title);
+
+  fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
+
+  res.json({ message: "Event deleted successfully" });
 });
 
 /* ----------------------------- 
