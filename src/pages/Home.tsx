@@ -5,7 +5,23 @@ import { Users, Heart, Calendar, TrendingUp } from "lucide-react";
 import heroImage from "@/assets/hero-community.jpg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { upcomingEvents } from "@/data/upcomingEventsData";
+import { useEffect, useState } from "react";
+
+
+const [upcomingEvents, setUpcomingEvents] = useState([]);
+useEffect(() => {
+  fetchUpcomingEvents();
+}, []);
+
+const fetchUpcomingEvents = async () => {
+  try {
+    const res = await fetch("/api/upcoming-events"); // ✅ IMPORTANT (no localhost)
+    const data = await res.json();
+    setUpcomingEvents(data);
+  } catch (err) {
+    console.error("Failed to load events", err);
+  }
+};
 
 const Home = () => {
   const stats = [
@@ -108,7 +124,7 @@ const Home = () => {
               </p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-              {upcomingEvents.slice(0, 3).map((event, index) => (
+              {upcomingEvents.filter((event) => event.isActive).slice(0, 3).map((event, index) => (
                 <Card key={index} className="card-hover border-2">
                   <CardContent className="p-6">
                     <div className="text-sm text-primary font-semibold mb-2">{event.date}</div>
