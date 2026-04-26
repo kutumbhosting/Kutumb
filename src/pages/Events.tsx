@@ -181,70 +181,93 @@ setTimeout(() => setSubmitMessage(""), 5000);
 
               <TabsContent value="upcoming" className="space-y-12">
                 <div className="grid md:grid-cols-2 gap-8">
-                  {upcomingEvents
-                    .filter((event) => event.isActive)   // 👈 ONLY ACTIVE EVENTS
-                    .map((event, index) => (
-                    <Card key={index} className="card-hover border border-border">
-                      <CardContent className="p-6">
-                        <h3 className="text-xl font-bold mb-4">{event.title}</h3>
-
-                        <div className="space-y-3 mb-6">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Calendar size={18} className="text-primary" />
-                            <span>{event.date}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Clock size={18} className="text-primary" />
-                            <span>{event.time}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <MapPin size={18} className="text-primary" />
-                            <span>{event.location}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Users size={18} className="text-primary" />
-                            <span>{event.spots} spots available</span>
-                          </div>
-                        </div>
-
-                        <p className="text-muted-foreground mb-6">
-                          {event.description}
-                        </p>
-
-                        <Button
-                          className="w-full btn-hero"
-                          onClick={() => {
 
 
-                            setFormData({
-                              eventName: event.title,
-                              eventDate: event.date,
-                              name: "",
-                              email: "",
-                              phone: "",
-                              comments: "",
-                              adults: 0,
-                              children: 0,
-                            });
+{upcomingEvents
+  .filter((event) => event.isActive)
+  .map((event, index) => {
+    const hasFlyer = !!event.hasFlyer;
 
-                            setTimeout(() => {
-                              const el = document.getElementById("registration-form");
+    return (
+      <Card key={index} className="card-hover border border-border">
+        <CardContent className="p-6">
+          <div className={`grid gap-6 ${hasFlyer ? "md:grid-cols-2" : ""}`}>
 
-                              if (el) {
-                                el.scrollIntoView({
-                                  behavior: "smooth",
-                                  block: "start",
-                                });
-                              }
-                            }, 0);
-                          }}
-                        >
-                          Register for This Event
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
+            {/* LEFT */}
+            <div>
+              <h3 className="text-xl font-bold mb-4">{event.title}</h3>
+
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar size={18} className="text-primary" />
+                  <span>{event.date}</span>
                 </div>
+
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock size={18} className="text-primary" />
+                  <span>{event.time}</span>
+                </div>
+
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <MapPin size={18} className="text-primary" />
+                  <span>{event.location}</span>
+                </div>
+
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Users size={18} className="text-primary" />
+                  <span>{event.spots} spots available</span>
+                </div>
+              </div>
+
+              <p className="text-muted-foreground">
+                {event.description}
+              </p>
+            </div>
+
+            {/* RIGHT (IMAGE) */}
+            {hasFlyer && (
+              <div className="flex justify-center items-start">
+                <img
+                  src={`http://localhost:5000/eventflyer/${event.flyerImage}`}
+                  alt={event.title}
+                  className="rounded-lg shadow-md max-h-[350px] object-contain"
+                />
+              </div>
+            )}
+
+            {/* ✅ BUTTON → FULL WIDTH (SPANS BOTH COLUMNS) */}
+            <div className={hasFlyer ? "md:col-span-2" : ""}>
+              <Button
+                className="w-full btn-hero mt-4"
+                onClick={() => {
+                  setFormData({
+                    eventName: event.title,
+                    eventDate: event.date,
+                    name: "",
+                    email: "",
+                    phone: "",
+                    comments: "",
+                    adults: 0,
+                    children: 0,
+                  });
+
+                  setTimeout(() => {
+                    document
+                      .getElementById("registration-form")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }, 0);
+                }}
+              >
+                Register for This Event
+              </Button>
+            </div>
+
+          </div>
+        </CardContent>
+      </Card>
+    );
+  })}
+</div>
 
                 <div
                   id="registration-form"
