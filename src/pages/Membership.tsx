@@ -128,7 +128,7 @@ const Membership = () => {
 
     try {
       const res = await fetch(
-        "http://localhost:5000/api/members",
+        "api/members",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
