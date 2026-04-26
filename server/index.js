@@ -2,11 +2,18 @@ import express from "express";
 import fs from "fs";
 import path from "path";
 import cors from "cors";
+import multer from "multer";
 import { slugify } from "./utils/stringUtils.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+app.use(
+  "/eventflyer",
+  express.static(path.join(process.cwd(), "server", "data", "eventflyer"))
+);
+
 
 /* -----------------------------
    📂 BASE DIRECTORY
@@ -171,7 +178,6 @@ app.post("/api/members", (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 /* -----------------------------
    📊 GET ALL EVENTS (ADMIN)
@@ -351,12 +357,30 @@ app.get("/api/upcoming-events", (req, res) => {
 
   const allEvents = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
 
-  // 🔥 ONLY ACTIVE EVENTS
-  //const activeEvents = allEvents.filter(event => event.isActive);
+  const eventsWithFlyerCheck = allEvents.map((event) => {
+    const flyerPath = path.join(
+      process.cwd(),
+      "server",
+      "data",
+      "eventflyer",
+      event.flyerImage || ""
+    );
 
-  res.json(allEvents);
+    const hasFlyer =
+      event.flyerImage && fs.existsSync(flyerPath);
+
+    return {
+      ...event,
+      hasFlyer, // ✅ send this to frontend
+    };
+  });
+
+  res.json(eventsWithFlyerCheck);
 });
 
+/* -----------------------------
+   ✅ UPCOMING EVENTS UPDATE
+------------------------------*/
 
 app.post("/api/upcoming-events/update", (req, res) => {
   const filePath = path.join(
@@ -374,10 +398,9 @@ app.post("/api/upcoming-events/update", (req, res) => {
     data = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
   }
 
-  // -----------------------------
-  // ✅ CHECK EXISTING EVENT
-  // (use title as unique key — you can change later to id)
-  // -----------------------------
+ /* -----------------------------
+   ✅ CHECK EXISTING EVENT
+  ----------------------------- */
   const index = data.findIndex(
     (e) => e.title === newEvent.title
   );
@@ -389,9 +412,12 @@ app.post("/api/upcoming-events/update", (req, res) => {
     data[index] = {
       ...data[index],
       ...newEvent, // updates everything (content + flag)
+      flyerImage: newEvent.flyerImage || data[index].flyerImage,
+
       updatedAt: new Date().toISOString(),
     };
   } else {
+
     // -----------------------------
     // ➕ CREATE NEW EVENT
     // -----------------------------
@@ -409,9 +435,9 @@ app.post("/api/upcoming-events/update", (req, res) => {
   });
 });
 
-    // -----------------------------
-    // ➕ DELETE AN EVENT
-    // -----------------------------
+ /* -----------------------------
+   ✅ DELETE AN EVENT
+ ----------------------------- */
 
 app.post("/api/upcoming-events/delete", (req, res) => {
   const filePath = path.join(
@@ -430,6 +456,89 @@ app.post("/api/upcoming-events/delete", (req, res) => {
   fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
 
   res.json({ message: "Event deleted successfully" });
+});
+
+ /* -----------------------------
+   ✅ FLYER STORAGE
+ ----------------------------- */
+
+/* -----------------------------
+   📁 FLYER STORAGE
+----------------------------- */
+
+const FLYER_DIR = path.join(process.cwd(), "server", "data", "eventflyer");
+
+if (!fs.existsSync(FLYER_DIR)) {
+  fs.mkdirSync(FLYER_DIR, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, FLYER_DIR);
+  },
+
+  filename: (req, file, cb) => {
+    const title = req.body.title || "event";
+
+    const eventYear = req.body.eventYear || "";
+
+    const safeTitle = slugify(title);
+    const safeYear = slugify(eventYear);
+
+    const ext = path.extname(file.originalname) || ".jpg";
+
+    const finalName =
+      safeYear
+        ? `${safeTitle}-${safeYear}${ext}`
+        : `${safeTitle}${ext}`;
+
+    cb(null, finalName);
+  },
+});
+
+const upload = multer({ storage });
+
+ /* -----------------------------
+   ✅ FLYER UPDATE
+ ----------------------------- */
+
+app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
+  try {
+    const { title } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const fileName = req.file.filename;
+
+    // ✅ update upcomingEvents.json
+    const filePath = path.join(
+      process.cwd(),
+      "server",
+      "data",
+      "upcomingEvents.json"
+    );
+
+    let data = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+
+    data = data.map((event) =>
+      event.title?.trim().toLowerCase() === title?.trim().toLowerCase() &&  
+      event.eventYear?.toString() === req.body.eventYear?.toString()
+        ? { ...event, flyerImage: fileName }
+        : event
+    );
+
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+
+    res.json({
+      message: "Flyer uploaded",
+      fileName,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Upload failed" });
+  }
 });
 
 /* ----------------------------- 
