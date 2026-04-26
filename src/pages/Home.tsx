@@ -22,6 +22,16 @@ const Home = () => {
   useEffect(() => {
     fetchUpcomingEvents();
   }, []);
+
+  const fetchUpcomingEvents = async () => {
+    try {
+      const res = await fetch("/api/upcoming-events");
+      const data = await res.json();
+      setUpcomingEvents(data);
+    } catch (err) {
+      console.error("Failed to load events", err);
+    }
+  };
   
   const stats = [
     { icon: Users, value: "500+", label: "Community Members" },
