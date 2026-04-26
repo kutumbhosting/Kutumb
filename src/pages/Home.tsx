@@ -7,12 +7,6 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useEffect, useState } from "react";
 
-
-const [upcomingEvents, setUpcomingEvents] = useState([]);
-useEffect(() => {
-  fetchUpcomingEvents();
-}, []);
-
 const fetchUpcomingEvents = async () => {
   try {
     const res = await fetch("/api/upcoming-events"); // ✅ IMPORTANT (no localhost)
@@ -24,6 +18,11 @@ const fetchUpcomingEvents = async () => {
 };
 
 const Home = () => {
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  useEffect(() => {
+    fetchUpcomingEvents();
+  }, []);
+  
   const stats = [
     { icon: Users, value: "500+", label: "Community Members" },
     { icon: Heart, value: "50+", label: "Events Organized" },
