@@ -3,7 +3,6 @@ import fs from "fs";
 import path from "path";
 import cors from "cors";
 import multer from "multer";
-import { slugify } from "./utils/stringUtils.js";
 
 const app = express();
 app.use(cors());
@@ -14,6 +13,13 @@ app.use(
   express.static(path.join(process.cwd(), "server", "data", "eventflyer"))
 );
 
+const slugify = (text) =>
+  text
+    ?.toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^\w-]+/g, "");
 
 /* -----------------------------
    📂 BASE DIRECTORY
