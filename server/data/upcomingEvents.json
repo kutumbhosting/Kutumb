@@ -20,7 +20,8 @@
     "description": "Join us on this special day of yoga to know benefits and impact of it in our mental and physical well being",
     "isActive": true,
     "flyerImage": "intyoga-2026.jpeg",
-    "updatedAt": "2026-04-25T09:38:38.060Z"
+    "updatedAt": "2026-04-25T09:38:38.060Z",
+    "hasFlyer": false
   },
   {
     "title": "Guru Purnima Celebration",
@@ -31,7 +32,8 @@
     "description": "Join us in celebrating Guru Purnima Purv as we honor and express our gratitude to the teachers and gurus who have deeply influenced our lives.",
     "isActive": true,
     "flyerImage": "gurupurnima.jpeg",
-    "updatedAt": "2026-04-25T09:38:39.075Z"
+    "updatedAt": "2026-04-25T09:38:39.075Z",
+    "hasFlyer": false
   },
   {
     "title": "Diwali and Multi Cultural Event",
@@ -42,6 +44,7 @@
     "description": "Celebrate Diwali with family and friends, great cultural programs and foods.",
     "isActive": true,
     "flyerImage": "diwali-2026.jpeg",
-    "updatedAt": "2026-04-25T08:35:27.967Z"
+    "updatedAt": "2026-04-25T08:35:27.967Z",
+    "hasFlyer": false
   }
 ]
