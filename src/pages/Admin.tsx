@@ -100,7 +100,7 @@ const Admin = () => {
 
   const fetchUpcomingEvents = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/upcoming-events");
+      const res = await fetch("api/upcoming-events");
       const data = await res.json();
       setUpcomingEvents(data);
     } catch (err) {
@@ -116,8 +116,8 @@ const Admin = () => {
 
   const fetchData = async () => {
     try {
-      const eventsRes = await fetch("http://localhost:5000/api/events");
-      const membersRes = await fetch("http://localhost:5000/api/members");
+      const eventsRes = await fetch("api/events");
+      const membersRes = await fetch("api/members");
 
       if (!eventsRes.ok || !membersRes.ok) {
         throw new Error("API failed");
@@ -141,7 +141,7 @@ const Admin = () => {
   };
 
   const deleteMemberRows = async () => {
-    await fetch("http://localhost:5000/api/members/delete", {
+    await fetch("api/members/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ emails: selectedMemberRows }),
@@ -153,7 +153,7 @@ const Admin = () => {
 
   const deleteEventRows = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/events/delete", {
+      const res = await fetch("api/events/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -546,7 +546,7 @@ const Admin = () => {
 
                               <Button
                                 onClick={async () => {
-                                  await fetch("http://localhost:5000/api/members/update", {
+                                  await fetch("api/members/update", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -622,7 +622,7 @@ const Admin = () => {
               isActive: e.target.checked,
             };
 
-            await fetch("http://localhost:5000/api/upcoming-events/update", {
+            await fetch("api/upcoming-events/update", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(updated),
@@ -733,7 +733,7 @@ const Admin = () => {
             formData.append("title", event.title);
             formData.append("eventYear", event.date?.slice(0, 4));
 
-            const res = await fetch("http://localhost:5000/api/upload-flyer", {
+            const res = await fetch("api/upload-flyer", {
               method: "POST",
               body: formData,
             });
@@ -755,7 +755,7 @@ const Admin = () => {
 
         {event.flyerImage && (
           <img
-            src={`http://localhost:5000/eventflyer/${event.flyerImage}`}
+            src={`eventflyer/${event.flyerImage}`}
             className="mt-2 max-h-[60px] rounded"
           />
         )}
@@ -765,7 +765,7 @@ const Admin = () => {
       <td className="p-2 flex gap-2">
         <Button
           onClick={async () => {
-            await fetch("http://localhost:5000/api/upcoming-events/update", {
+            await fetch("api/upcoming-events/update", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(event),
@@ -780,7 +780,7 @@ const Admin = () => {
         <Button
           variant="destructive"
           onClick={async () => {
-            const res = await fetch("http://localhost:5000/api/upcoming-events/delete", {
+            const res = await fetch("api/upcoming-events/delete", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ title: event.title }),
@@ -884,7 +884,7 @@ const Admin = () => {
     try {
       // 1. create event
       const res = await fetch(
-        "http://localhost:5000/api/upcoming-events/update",
+        "api/upcoming-events/update",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -904,7 +904,7 @@ const Admin = () => {
         formData.append("eventYear", newEvent.date?.slice(0, 4));
 
         const flyerRes = await fetch(
-          "http://localhost:5000/api/upload-flyer",
+          "api/upload-flyer",
           {
             method: "POST",
             body: formData,
