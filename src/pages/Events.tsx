@@ -12,11 +12,11 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, MapPin, Users, Clock } from "lucide-react";
 import { pastEvents } from "@/data/pastEventsData";
-const [debugInfo, setDebugInfo] = useState<any>({});
 
 const Events = () => {
   const { toast } = useToast();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [debugInfo, setDebugInfo] = useState<any>({});
 
   const location = useLocation();
   const [activeEvent, setActiveEvent] = useState<string>("");
