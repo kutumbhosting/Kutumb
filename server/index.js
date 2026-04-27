@@ -50,8 +50,8 @@ if (!fs.existsSync(MEMBERS_FILE)) {
 
 const UPCOMING_EVENTS_DIR = path.join(DATA_ROOT, "upcomingevents");
 
-if (!fs.existsSync(EVENTS_DIR)) {
-  fs.mkdirSync(EVENTS_DIR, { recursive: true });
+if (!fs.existsSync(UPCOMING_EVENTS_DIR)) {
+  fs.mkdirSync(UPCOMING_EVENTS_DIR, { recursive: true });
 }
 
 const UPCOMING_EVENTS_FILE = path.join(UPCOMING_EVENTS_DIR, "upcomingEvents.json");
