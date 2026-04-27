@@ -496,7 +496,7 @@ const Admin = () => {
           onClick={async () => {
             try {
               const res = await fetch(
-                "http://localhost:5000/api/events/update",
+                "/api/events/update",
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
