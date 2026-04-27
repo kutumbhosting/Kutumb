@@ -62,22 +62,21 @@ useEffect(() => {
   const fetchUpcomingEvents = async () => {
     try {
       const res = await fetch("/api/upcoming-events");
-
       const text = await res.text();
 
-      console.log("API STATUS:", res.status);
-      console.log("API RAW RESPONSE:", text);
+      setDebug(`STATUS: ${res.status}\nRAW: ${text}`);
 
       const data = JSON.parse(text);
       setUpcomingEvents(data);
-
     } catch (err) {
-      console.error("FETCH ERROR:", err);
+      setDebug(`ERROR: ${String(err)}`);
+      console.error(err);
     }
   };
 
   fetchUpcomingEvents();
 }, []);
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -221,6 +220,12 @@ setTimeout(() => setSubmitMessage(""), 5000);
               Join us for upcoming community events or explore our past activities and impact.
             </p>
           </div>
+          {debug && (
+  <div className="p-4 m-4 bg-black text-green-400 text-xs rounded whitespace-pre-wrap">
+    <h3 className="font-bold mb-2">DEBUG OUTPUT</h3>
+    {debug}
+  </div>
+)}
         </section>
 
         {/* Events Tabs */}
