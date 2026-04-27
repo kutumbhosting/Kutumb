@@ -54,7 +54,7 @@ if (!fs.existsSync(EVENTS_DIR)) {
   fs.mkdirSync(EVENTS_DIR, { recursive: true });
 }
 
-const MEMBERS_FILE = path.join(EVENTS_DIR, "upcomingEvents.json");
+const EVENTS_FILE = path.join(EVENTS_DIR, "upcomingEvents.json");
 
 if (!fs.existsSync(MEMBERS_FILE)) {
   fs.writeFileSync(MEMBERS_FILE, "[]");
