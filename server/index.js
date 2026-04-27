@@ -138,7 +138,7 @@ app.get("/api/debug-events-path", (req, res) => {
       upcomingEvents: {
   path: path.join(root, "upcomingevents"),
   exists: fs.existsSync(path.join(root, "upcomingevents")),
-  file: path.join(root, "comingevents", "upcomingEvents.json"),
+  file: path.join(root, "upcomingevents", "upcomingEvents.json"),
   fileExists: fs.existsSync(
     path.join(root, "upcomingevents", "upcomingEvents.json")
   ),
