@@ -24,14 +24,15 @@ const slugify = (text) =>
 /* -----------------------------
    📂 BASE DIRECTORY
 ------------------------------*/
-const BASE_DIR = path.join(process.cwd(), "server", "data", "events");
+const DATA_ROOT = path.join(__dirname, "data");
+const BASE_DIR = path.join(DATA_ROOT, "server", "data", "events");
 
 // ensure folder exists
 if (!fs.existsSync(BASE_DIR)) {
   fs.mkdirSync(BASE_DIR, { recursive: true });
 }
 
-const MEMBERS_DIR = path.join(process.cwd(), "server", "data", "members");
+const MEMBERS_DIR = path.join(DATA_ROOT, "server", "data", "members");
 
 if (!fs.existsSync(MEMBERS_DIR)) {
   fs.mkdirSync(MEMBERS_DIR, { recursive: true });
