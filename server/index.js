@@ -326,6 +326,49 @@ app.get("/api/members", (req, res) => {
 });
 
 /* -----------------------------
+   ✅ UPDATE EVENT REGISTRATION
+------------------------------*/
+
+app.post("/api/events/update", (req, res) => {
+  try {
+    const { eventName, eventYear, email, updatedData } = req.body;
+
+    if (!eventName || !eventYear || !email) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const eventId = slugify(eventName);
+    const fileName = `${eventId}-${eventYear}.json`;
+    const filePath = path.join(BASE_DIR, fileName);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Event file not found" });
+    }
+
+    const data = readFile(filePath);
+
+    const updated = data.map((entry) => {
+      if (entry.email?.toLowerCase() === email.toLowerCase()) {
+        return {
+          ...entry,
+          ...updatedData,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return entry;
+    });
+
+    writeFile(filePath, updated);
+
+    res.json({ message: "Event registration updated successfully" });
+
+  } catch (err) {
+    console.error("EVENT UPDATE ERROR:", err);
+    res.status(500).json({ message: "Update failed" });
+  }
+});
+
+/* -----------------------------
    ✅ DELETE MEMBER AND EVENT
 ------------------------------*/
 
