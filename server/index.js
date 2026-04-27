@@ -361,7 +361,15 @@ app.get("/api/upcoming-events", (req, res) => {
     return res.json([]);
   }
 
-  const allEvents = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+let allEvents = [];
+
+try {
+  if (fs.existsSync(filePath)) {
+    allEvents = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+  }
+} catch (err) {
+  console.error("JSON ERROR:", err);
+}
 
   const eventsWithFlyerCheck = allEvents.map((event) => {
     const flyerPath = path.join(
@@ -566,7 +574,11 @@ app.use(express.static(path.join(__dirname, "../dist")));
 // 🚀 React Router fallback
 // -----------------------------
 app.use((req, res, next) => {
-  if (req.method === "GET" && req.accepts("html")) {
+  if (
+    req.method === "GET" &&
+    !req.path.startsWith("/api") &&   // 🔥 CRITICAL FIX
+    req.accepts("html")
+  ) {
     res.sendFile(path.join(__dirname, "../dist/index.html"));
   } else {
     next();
