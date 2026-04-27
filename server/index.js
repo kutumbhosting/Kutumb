@@ -35,8 +35,6 @@ if (!fs.existsSync(BASE_DIR)) {
   fs.mkdirSync(BASE_DIR, { recursive: true });
 }
 
-const MEMBERS_DIR = path.join(process.cwd(), "server", "data", "members");
-
 if (!fs.existsSync(MEMBERS_DIR)) {
   fs.mkdirSync(MEMBERS_DIR, { recursive: true });
 }
