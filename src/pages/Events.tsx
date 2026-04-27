@@ -61,10 +61,18 @@ useEffect(() => {
   fetchUpcomingEvents();
 }, []);
 
-const fetchUpcomingEvents = async () => {
-  const res = await fetch("api/upcoming-events");
-  const data = await res.json();
-  setUpcomingEvents(data);
+  const fetchUpcomingEvents = async () => {
+  try {
+    const res = await fetch("/api/upcoming-events");
+
+    if (!res.ok) throw new Error("Failed to fetch");
+
+    const data = await res.json();
+    setUpcomingEvents(data);
+  } catch (err) {
+    console.error("Failed to load events", err);
+    setUpcomingEvents([]); // safe fallback
+  }
 };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,7 +98,7 @@ const fetchUpcomingEvents = async () => {
   }
 
   try {
-    const res = await fetch("api/events", {
+    const res = await fetch("/api/events", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(formData),
