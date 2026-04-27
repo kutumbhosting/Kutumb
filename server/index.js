@@ -49,15 +49,14 @@ if (!fs.existsSync(MEMBERS_FILE)) {
 }
 
 const UPCOMING_EVENTS_DIR = path.join(DATA_ROOT, "upcomingevents");
+const UPCOMING_EVENTS_FILE = path.join(UPCOMING_EVENTS_DIR, "upcomingEvents.json");
 
 if (!fs.existsSync(UPCOMING_EVENTS_DIR)) {
   fs.mkdirSync(UPCOMING_EVENTS_DIR, { recursive: true });
 }
 
-const UPCOMING_EVENTS_FILE = path.join(UPCOMING_EVENTS_DIR, "upcomingEvents.json");
-
-if (!fs.existsSync(UPCOMING_EVENTS_DIR)) {
-  fs.mkdirSync(UPCOMING_EVENTS_DIR, { recursive: true });
+if (!fs.existsSync(UPCOMING_EVENTS_FILE)) {
+  fs.writeFileSync(UPCOMING_EVENTS_FILE, "[]");
 }
 
 /* -----------------------------
@@ -151,6 +150,37 @@ app.get("/api/debug-events-path", (req, res) => {
   };
 
   res.json(info);
+});
+
+app.get("/api/debug-upcoming-events-file", (req, res) => {
+  try {
+    const filePath = UPCOMING_EVENTS_FILE;
+
+    const exists = fs.existsSync(filePath);
+
+    const raw = exists
+      ? fs.readFileSync(filePath, "utf-8")
+      : null;
+
+    let parsed = null;
+
+    try {
+      parsed = raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      parsed = { error: "Invalid JSON", raw };
+    }
+
+    res.json({
+      filePath,
+      exists,
+      raw,
+      parsed,
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err.message,
+    });
+  }
 });
 
 /* -----------------------------
