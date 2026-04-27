@@ -24,16 +24,14 @@ const slugify = (text) =>
 /* -----------------------------
    📂 BASE DIRECTORY
 ------------------------------*/
-const DATA_ROOT = process.env.DATA_DIR || path.join(process.cwd(), "server", "data");
-
-const BASE_DIR = path.join(DATA_ROOT, "events");
-const MEMBERS_DIR = path.join(DATA_ROOT, "members");
-const FLYER_DIR = path.join(DATA_ROOT, "eventflyer");
+const BASE_DIR = path.join(process.cwd(), "server", "data", "events");
 
 // ensure folder exists
 if (!fs.existsSync(BASE_DIR)) {
   fs.mkdirSync(BASE_DIR, { recursive: true });
 }
+
+const MEMBERS_DIR = path.join(process.cwd(), "server", "data", "members");
 
 if (!fs.existsSync(MEMBERS_DIR)) {
   fs.mkdirSync(MEMBERS_DIR, { recursive: true });
@@ -474,6 +472,8 @@ app.post("/api/upcoming-events/delete", (req, res) => {
    📁 FLYER STORAGE
 ----------------------------- */
 
+const FLYER_DIR = path.join(process.cwd(), "server", "data", "eventflyer");
+
 if (!fs.existsSync(FLYER_DIR)) {
   fs.mkdirSync(FLYER_DIR, { recursive: true });
 }
@@ -546,6 +546,7 @@ app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
     res.status(500).json({ message: "Upload failed" });
   }
 });
+
 
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
