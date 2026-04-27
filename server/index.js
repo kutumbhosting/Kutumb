@@ -99,6 +99,29 @@ const parseEvent = (event) => {
     eventYear,
   };
 };
+/* -----------------------------
+   ✅ DEBUG
+------------------------------*/
+app.get("/api/debug-events-path", (req, res) => {
+  const filePath = path.join(process.cwd(), "server", "data", "upcomingEvents.json");
+
+  let info = {
+    cwd: process.cwd(),
+    dirname: __dirname,
+    filePath,
+    exists: fs.existsSync(filePath),
+  };
+
+  if (fs.existsSync(filePath)) {
+    try {
+      info.sampleData = JSON.parse(fs.readFileSync(filePath, "utf-8")).slice(0, 3);
+    } catch (err) {
+      info.error = err.message;
+    }
+  }
+
+  res.json(info);
+});
 
 /* -----------------------------
    ✅ REGISTER EVENT
