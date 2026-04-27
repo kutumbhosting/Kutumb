@@ -388,22 +388,14 @@ app.get("/api/upcoming-events", (req, res) => {
     return res.json([]);
   }
 
-let allEvents = [];
+  let allEvents = [];
 
-try {
-  const readFile = (filePath) => {
   try {
-    if (!fs.existsSync(filePath)) return [];
-    return JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+    allEvents = readFile(filePath); // ✅ use global helper
   } catch (err) {
-    console.error("JSON ERROR:", filePath, err);
-    return [];
+    console.error("JSON ERROR:", err);
+    return res.status(500).json([]);
   }
-};
-  }
-} catch (err) {
-  console.error("JSON ERROR:", err);
-}
 
   const eventsWithFlyerCheck = allEvents.map((event) => {
     const flyerPath = path.join(
@@ -419,7 +411,7 @@ try {
 
     return {
       ...event,
-      hasFlyer, // ✅ send this to frontend
+      hasFlyer,
     };
   });
 
