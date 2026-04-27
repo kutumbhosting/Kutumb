@@ -23,7 +23,8 @@ const slugify = (text) =>
 /* -----------------------------
    📂 BASE DIRECTORY
 ------------------------------*/
-const DATA_ROOT = process.env.DATA_ROOT || path.join(__dirname, "data");
+const DATA_ROOT = process.env.DATA_ROOT || "/data";
+
 const BASE_DIR = path.join(DATA_ROOT, "events");
 app.use(
   "/eventflyer",
@@ -415,9 +416,7 @@ app.get("/api/upcoming-events", (req, res) => {
 
 app.post("/api/upcoming-events/update", (req, res) => {
   const filePath = path.join(
-    process.cwd(),
-    "server",
-    "data",
+    DATA_ROOT,
     "upcomingEvents.json"
   );
 
@@ -472,9 +471,7 @@ app.post("/api/upcoming-events/update", (req, res) => {
 
 app.post("/api/upcoming-events/delete", (req, res) => {
   const filePath = path.join(
-    process.cwd(),
-    "server",
-    "data",
+    DATA_ROOT,
     "upcomingEvents.json"
   );
 
@@ -497,7 +494,7 @@ app.post("/api/upcoming-events/delete", (req, res) => {
    📁 FLYER STORAGE
 ----------------------------- */
 
-const FLYER_DIR = path.join(process.cwd(), "server", "data", "eventflyer");
+const FLYER_DIR = path.join(DATA_ROOT, "eventflyer");
 
 if (!fs.existsSync(FLYER_DIR)) {
   fs.mkdirSync(FLYER_DIR, { recursive: true });
@@ -545,9 +542,7 @@ app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
 
     // ✅ update upcomingEvents.json
     const filePath = path.join(
-      process.cwd(),
-      "server",
-      "data",
+      DATA_ROOT,
       "upcomingEvents.json"
     );
 
