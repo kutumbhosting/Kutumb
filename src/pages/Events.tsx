@@ -16,7 +16,6 @@ import { pastEvents } from "@/data/pastEventsData";
 const Events = () => {
   const { toast } = useToast();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
-  const [debugInfo, setDebugInfo] = useState<any>({});
 
   const location = useLocation();
   const [activeEvent, setActiveEvent] = useState<string>("");
@@ -59,24 +58,14 @@ const Events = () => {
   }, [location]);
 
 useEffect(() => {
-  const fetchUpcomingEvents = async () => {
-    try {
-      const res = await fetch("/api/upcoming-events");
-      const text = await res.text();
-
-      setDebugInfo({status: res.status,raw: text,});
-
-      const data = JSON.parse(text);
-      setUpcomingEvents(data);
-    } catch (err) {
-      setDebugInfo(ERROR: String(err));
-      console.error(err);
-    }
-  };
-
   fetchUpcomingEvents();
 }, []);
-  
+
+const fetchUpcomingEvents = async () => {
+  const res = await fetch("http://localhost:5000/api/upcoming-events");
+  const data = await res.json();
+  setUpcomingEvents(data);
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -89,7 +78,7 @@ useEffect(() => {
     });
     return;
   }
-    
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(formData.email)) {
     toast({
@@ -101,7 +90,7 @@ useEffect(() => {
   }
 
   try {
-    const res = await fetch("/api/events", {
+    const res = await fetch("http://localhost:5000/api/events", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(formData),
@@ -175,12 +164,6 @@ setTimeout(() => setSubmitMessage(""), 5000);
               Join us for upcoming community events or explore our past activities and impact.
             </p>
           </div>
-          {debugInfo && (
-  <div className="p-4 m-4 bg-black text-green-400 text-xs rounded whitespace-pre-wrap">
-    <h3 className="font-bold mb-2">DEBUG OUTPUT</h3>
-    {JSON.stringify(debugInfo, null, 2)}
-  </div>
-)}
         </section>
 
         {/* Events Tabs */}
@@ -199,11 +182,11 @@ setTimeout(() => setSubmitMessage(""), 5000);
               <TabsContent value="upcoming" className="space-y-12">
                 <div className="grid md:grid-cols-2 gap-8">
 
-{
- (Array.isArray(upcomingEvents) ? upcomingEvents : [])
+
+{upcomingEvents
   .filter((event) => event.isActive)
   .map((event, index) => {
-    const hasFlyer = event.hasFlyer && event.flyerImage;
+    const hasFlyer = !!event.hasFlyer;
 
     return (
       <Card key={index} className="card-hover border border-border">
@@ -245,7 +228,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
             {hasFlyer && (
               <div className="flex justify-center items-start">
                 <img
-                  src={`/eventflyer/${event.flyerImage}`}
+                  src={`http://localhost:5000/eventflyer/${event.flyerImage}`}
                   alt={event.title}
                   className="rounded-lg shadow-md max-h-[350px] object-contain"
                 />
@@ -283,8 +266,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
         </CardContent>
       </Card>
     );
-  })
-}
+  })}
 </div>
 
                 <div
