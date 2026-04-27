@@ -54,10 +54,14 @@ if (!fs.existsSync(EVENTS_DIR)) {
   fs.mkdirSync(EVENTS_DIR, { recursive: true });
 }
 
-const EVENTS_FILE = path.join(EVENTS_DIR, "upcomingEvents.json");
+const UPCOMING_EVENTS_FILE = path.join(EVENTS_DIR, "upcomingEvents.json");
 
-if (!fs.existsSync(MEMBERS_FILE)) {
-  fs.writeFileSync(MEMBERS_FILE, "[]");
+if (!fs.existsSync(EVENTS_DIR)) {
+  fs.mkdirSync(EVENTS_DIR, { recursive: true });
+}
+
+if (!fs.existsSync(UPCOMING_EVENTS_FILE)) {
+  fs.writeFileSync(UPCOMING_EVENTS_FILE, "[]", "utf-8");
 }
 
 /* -----------------------------
