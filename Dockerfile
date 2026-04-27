@@ -36,6 +36,11 @@ RUN echo "[]" > server/data/upcomingEvents.json
 RUN echo "[]" > server/data/members/members.json
 
 # -----------------------------
+# PERSISTENT VOLUME (IMPORTANT)
+# -----------------------------
+VOLUME ["/app/server/data"]
+
+# -----------------------------
 # ENV
 # -----------------------------
 ENV PORT=8080
