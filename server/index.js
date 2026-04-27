@@ -106,46 +106,35 @@ const parseEvent = (event) => {
 app.get("/api/debug-events-path", (req, res) => {
   const root = DATA_ROOT;
 
-  const paths = {
-    root,
-    eventsDir: path.join(root, "events"),
-    membersDir: path.join(root, "members"),
-    upcomingEventsFile: path.join(root, "upcomingEvents.json"),
-    eventFlyerDir: path.join(root, "eventflyer"),
-  };
-
-  const result = {
+  const info = {
     cwd: process.cwd(),
     dirname: __dirname,
     dataRoot: root,
-    structure: {},
+    exists: fs.existsSync(root),
+    structure: {
+      events: {
+        path: path.join(root, "events"),
+        exists: fs.existsSync(path.join(root, "events")),
+        files: fs.existsSync(path.join(root, "events"))
+          ? fs.readdirSync(path.join(root, "events")).slice(0, 5)
+          : [],
+      },
+      members: {
+        path: path.join(root, "members"),
+        exists: fs.existsSync(path.join(root, "members")),
+      },
+      upcomingEvents: {
+        path: path.join(root, "upcomingEvents.json"),
+        exists: fs.existsSync(path.join(root, "upcomingEvents.json")),
+      },
+      flyers: {
+        path: path.join(root, "eventflyer"),
+        exists: fs.existsSync(path.join(root, "eventflyer")),
+      },
+    },
   };
 
-  // check existence safely
-  for (const [key, p] of Object.entries(paths)) {
-    result.structure[key] = {
-      path: p,
-      exists: fs.existsSync(p),
-    };
-
-    // preview files if directory
-    if (fs.existsSync(p) && fs.lstatSync(p).isDirectory()) {
-      result.structure[key].files = fs.readdirSync(p).slice(0, 10);
-    }
-
-    // preview JSON if file
-    if (fs.existsSync(p) && p.endsWith(".json")) {
-      try {
-        result.structure[key].sample = JSON.parse(
-          fs.readFileSync(p, "utf-8") || "[]"
-        ).slice(0, 3);
-      } catch (err) {
-        result.structure[key].error = err.message;
-      }
-    }
-  }
-
-  res.json(result);
+  res.json(info);
 });
 
 /* -----------------------------
