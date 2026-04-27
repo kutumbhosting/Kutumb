@@ -256,7 +256,7 @@ const Admin = () => {
         {/* HERO */}
         <section className="gradient-warm text-white py-20">
           <div className="container mx-auto px-4 text-center">
-            <h1 className="mb-6">Admin Dashboard</h1>
+            <h1 className="mb-6">Admin Console</h1>
             <p className="text-xl max-w-3xl mx-auto opacity-95">
               Manage event registrations and memberships
             </p>
