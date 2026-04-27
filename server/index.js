@@ -384,38 +384,29 @@ app.post("/api/members/update", (req, res) => {
 app.get("/api/upcoming-events", (req, res) => {
   const filePath = path.join(DATA_ROOT, "upcomingEvents.json");
 
-  if (!fs.existsSync(filePath)) {
+  try {
+    const allEvents = fs.existsSync(filePath)
+      ? JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]")
+      : [];
+
+    const eventsWithFlyerCheck = allEvents.map((event) => {
+      const flyerPath = path.join(
+        DATA_ROOT,
+        "eventflyer",
+        event.flyerImage || ""
+      );
+
+      return {
+        ...event,
+        hasFlyer: !!event.flyerImage && fs.existsSync(flyerPath),
+      };
+    });
+
+    return res.json(eventsWithFlyerCheck);
+  } catch (err) {
+    console.error("UPCOMING EVENTS ERROR:", err);
     return res.json([]);
   }
-
-  let allEvents = [];
-
-  try {
-    allEvents = readFile(filePath); // ✅ use global helper
-  } catch (err) {
-    console.error("JSON ERROR:", err);
-    return res.status(500).json([]);
-  }
-
-  const eventsWithFlyerCheck = allEvents.map((event) => {
-    const flyerPath = path.join(
-      process.cwd(),
-      "server",
-      "data",
-      "eventflyer",
-      event.flyerImage || ""
-    );
-
-    const hasFlyer =
-      event.flyerImage && fs.existsSync(flyerPath);
-
-    return {
-      ...event,
-      hasFlyer,
-    };
-  });
-
-  res.json(eventsWithFlyerCheck);
 });
 
 /* -----------------------------
