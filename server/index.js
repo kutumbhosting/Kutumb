@@ -391,8 +391,15 @@ app.get("/api/upcoming-events", (req, res) => {
 let allEvents = [];
 
 try {
-  if (fs.existsSync(filePath)) {
-    allEvents = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+  const readFile = (filePath) => {
+  try {
+    if (!fs.existsSync(filePath)) return [];
+    return JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+  } catch (err) {
+    console.error("JSON ERROR:", filePath, err);
+    return [];
+  }
+};
   }
 } catch (err) {
   console.error("JSON ERROR:", err);
