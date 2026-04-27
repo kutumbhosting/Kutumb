@@ -16,7 +16,7 @@ RUN npm install --omit=dev
 COPY . .
 COPY --from=build /app/dist ./dist
 
-ENV DATA_ROOT=/data
+ENV DATA_ROOT=/app/server/data
 ENV PORT=8080
 
 EXPOSE 8080
