@@ -24,7 +24,11 @@ const slugify = (text) =>
 /* -----------------------------
    📂 BASE DIRECTORY
 ------------------------------*/
-const BASE_DIR = path.join(process.cwd(), "server", "data", "events");
+const DATA_ROOT = process.env.DATA_DIR || path.join(process.cwd(), "server", "data");
+
+const BASE_DIR = path.join(DATA_ROOT, "events");
+const MEMBERS_DIR = path.join(DATA_ROOT, "members");
+const FLYER_DIR = path.join(DATA_ROOT, "eventflyer");
 
 // ensure folder exists
 if (!fs.existsSync(BASE_DIR)) {
