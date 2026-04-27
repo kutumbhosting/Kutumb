@@ -24,7 +24,7 @@ const slugify = (text) =>
    📂 BASE DIRECTORY
 ------------------------------*/
 const DATA_ROOT = path.join(__dirname, "data");
-const BASE_DIR = path.join(DATA_ROOT, "server", "data", "events");
+const BASE_DIR = path.join(DATA_ROOT, "events");
 app.use(
   "/eventflyer",
   express.static(path.join(DATA_ROOT, "eventflyer"))
@@ -35,7 +35,7 @@ if (!fs.existsSync(BASE_DIR)) {
   fs.mkdirSync(BASE_DIR, { recursive: true });
 }
 
-const MEMBERS_DIR = path.join(DATA_ROOT, "server", "data", "members");
+const MEMBERS_DIR = path.join(DATA_ROOT, "members");
 
 if (!fs.existsSync(MEMBERS_DIR)) {
   fs.mkdirSync(MEMBERS_DIR, { recursive: true });
