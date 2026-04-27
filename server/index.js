@@ -48,20 +48,16 @@ if (!fs.existsSync(MEMBERS_FILE)) {
   fs.writeFileSync(MEMBERS_FILE, "[]");
 }
 
-const EVENTS_DIR = path.join(DATA_ROOT, "comingevents");
+const UPCOMING_EVENTS_DIR = path.join(DATA_ROOT, "upcomingevents");
 
 if (!fs.existsSync(EVENTS_DIR)) {
   fs.mkdirSync(EVENTS_DIR, { recursive: true });
 }
 
-const UPCOMING_EVENTS_FILE = path.join(EVENTS_DIR, "upcomingEvents.json");
+const UPCOMING_EVENTS_FILE = path.join(UPCOMING_EVENTS_DIR, "upcomingEvents.json");
 
-if (!fs.existsSync(EVENTS_DIR)) {
-  fs.mkdirSync(EVENTS_DIR, { recursive: true });
-}
-
-if (!fs.existsSync(UPCOMING_EVENTS_FILE)) {
-  fs.writeFileSync(UPCOMING_EVENTS_FILE, "[]", "utf-8");
+if (!fs.existsSync(UPCOMING_EVENTS_DIR)) {
+  fs.mkdirSync(UPCOMING_EVENTS_DIR, { recursive: true });
 }
 
 /* -----------------------------
@@ -140,11 +136,11 @@ app.get("/api/debug-events-path", (req, res) => {
         exists: fs.existsSync(path.join(root, "members")),
       },
       upcomingEvents: {
-  path: path.join(root, "comingevents"),
-  exists: fs.existsSync(path.join(root, "comingevents")),
+  path: path.join(root, "upcomingevents"),
+  exists: fs.existsSync(path.join(root, "upcomingevents")),
   file: path.join(root, "comingevents", "upcomingEvents.json"),
   fileExists: fs.existsSync(
-    path.join(root, "comingevents", "upcomingEvents.json")
+    path.join(root, "upcomingevents", "upcomingEvents.json")
   ),
 },
       flyers: {
@@ -416,15 +412,9 @@ app.post("/api/members/update", (req, res) => {
 ------------------------------*/
 
 app.get("/api/upcoming-events", (req, res) => {
-  const filePath = path.join(DATA_ROOT, "upcomingEvents.json");
-
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, "[]");
-  }
-
   try {
-    const allEvents = fs.existsSync(filePath)
-      ? JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]")
+    const allEvents = fs.existsSync(UPCOMING_EVENTS_FILE)
+      ? JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]")
       : [];
 
     const eventsWithFlyerCheck = allEvents.map((event) => {
@@ -452,17 +442,12 @@ app.get("/api/upcoming-events", (req, res) => {
 ------------------------------*/
 
 app.post("/api/upcoming-events/update", (req, res) => {
-  const filePath = path.join(
-    DATA_ROOT,
-    "upcomingEvents.json"
-  );
-
   const newEvent = req.body;
 
   let data = [];
 
-  if (fs.existsSync(filePath)) {
-    data = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
+  if (fs.existsSync(UPCOMING_EVENTS_FILE)) {
+    data = JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]");
   }
 
  /* -----------------------------
@@ -495,7 +480,7 @@ app.post("/api/upcoming-events/update", (req, res) => {
     });
   }
 
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  fs.writeFileSync(UPCOMING_EVENTS_FILE, JSON.stringify(data, null, 2));
 
   res.json({
     message: index !== -1 ? "Event updated" : "Event added",
@@ -507,25 +492,12 @@ app.post("/api/upcoming-events/update", (req, res) => {
  ----------------------------- */
 
 app.post("/api/upcoming-events/delete", (req, res) => {
-  const filePath = path.join(
-    DATA_ROOT,
-    "upcomingEvents.json"
-  );
-
   const { title } = req.body;
-
-  let data = JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]");
-
+  let data = JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]");
   const updated = data.filter((event) => event.title !== title);
-
-  fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
-
+  fs.writeFileSync(UPCOMING_EVENTS_FILE, JSON.stringify(updated, null, 2));
   res.json({ message: "Event deleted successfully" });
 });
-
- /* -----------------------------
-   ✅ FLYER STORAGE
- ----------------------------- */
 
 /* -----------------------------
    📁 FLYER STORAGE
@@ -608,10 +580,6 @@ app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
 ------------------------------*/
-
-// -----------------------------
-// 🚀 Serve React frontend
-// -----------------------------
 app.use(express.static(path.join(__dirname, "../dist")));
 
 // -----------------------------
