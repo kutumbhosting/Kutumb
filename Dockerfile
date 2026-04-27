@@ -27,6 +27,7 @@ COPY --from=build /app/dist ./dist
 # -----------------------------
 # IMPORTANT: ensure runtime data structure exists
 # -----------------------------
+
 RUN mkdir -p server/data/events \
     server/data/members \
     server/data
@@ -43,6 +44,7 @@ VOLUME ["/app/server/data"]
 # -----------------------------
 # ENV
 # -----------------------------
+ENV DATA_ROOT=/app/server/data
 ENV PORT=8080
 EXPOSE 8080
 
