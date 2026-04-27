@@ -32,9 +32,9 @@ app.use(
 );
 
 // ensure folder exists
-if (!fs.existsSync(BASE_DIR)) {
-  fs.mkdirSync(BASE_DIR, { recursive: true });
-}
+//if (!fs.existsSync(BASE_DIR)) {
+//  fs.mkdirSync(BASE_DIR, { recursive: true });
+//}
 
 const MEMBERS_DIR = path.join(DATA_ROOT, "members");
 
