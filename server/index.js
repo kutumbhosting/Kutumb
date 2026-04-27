@@ -563,11 +563,6 @@ app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
 ------------------------------*/
-import { fileURLToPath } from "url";
-
-// fix __dirname for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // -----------------------------
 // 🚀 Serve React frontend
