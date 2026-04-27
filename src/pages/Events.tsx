@@ -58,22 +58,20 @@ const Events = () => {
   }, [location]);
 
 useEffect(() => {
+  const fetchUpcomingEvents = async () => {
+    try {
+      const res = await fetch("/api/upcoming-events");
+      if (!res.ok) throw new Error("Failed");
+      const data = await res.json();
+      setUpcomingEvents(data);
+    } catch (err) {
+      console.error("Failed to load events", err);
+      setUpcomingEvents([]); // safe fallback
+    }
+  };
+
   fetchUpcomingEvents();
 }, []);
-
-  const fetchUpcomingEvents = async () => {
-  try {
-    const res = await fetch("/api/upcoming-events");
-
-    if (!res.ok) throw new Error("Failed to fetch");
-
-    const data = await res.json();
-    setUpcomingEvents(data);
-  } catch (err) {
-    console.error("Failed to load events", err);
-    setUpcomingEvents([]); // safe fallback
-  }
-};
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -191,10 +189,10 @@ setTimeout(() => setSubmitMessage(""), 5000);
                 <div className="grid md:grid-cols-2 gap-8">
 
 
-{upcomingEvents
+(Array.isArray(upcomingEvents) ? upcomingEvents : [])
   .filter((event) => event.isActive)
   .map((event, index) => {
-    const hasFlyer = !!event.hasFlyer;
+    const hasFlyer = event.hasFlyer && event.flyerImage;
 
     return (
       <Card key={index} className="card-hover border border-border">
@@ -236,7 +234,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
             {hasFlyer && (
               <div className="flex justify-center items-start">
                 <img
-                  src={`eventflyer/${event.flyerImage}`}
+                  app.use("/eventflyer", express.static(...))
                   alt={event.title}
                   className="rounded-lg shadow-md max-h-[350px] object-contain"
                 />
