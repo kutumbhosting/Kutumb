@@ -48,6 +48,18 @@ if (!fs.existsSync(MEMBERS_FILE)) {
   fs.writeFileSync(MEMBERS_FILE, "[]");
 }
 
+const EVENTS_DIR = path.join(DATA_ROOT, "comingevents");
+
+if (!fs.existsSync(EVENTS_DIR)) {
+  fs.mkdirSync(EVENTS_DIR, { recursive: true });
+}
+
+const MEMBERS_FILE = path.join(EVENTS_DIR, "upcomingEvents.json");
+
+if (!fs.existsSync(MEMBERS_FILE)) {
+  fs.writeFileSync(MEMBERS_FILE, "[]");
+}
+
 /* -----------------------------
    🧼 HELPERS
 ------------------------------*/
@@ -124,8 +136,8 @@ app.get("/api/debug-events-path", (req, res) => {
         exists: fs.existsSync(path.join(root, "members")),
       },
       upcomingEvents: {
-        path: path.join(root, "upcomingEvents.json"),
-        exists: fs.existsSync(path.join(root, "upcomingEvents.json")),
+        path: path.join(root, "comingevents"),
+        exists: fs.existsSync(path.join(root, "comingEvents")),
       },
       flyers: {
         path: path.join(root, "eventflyer"),
