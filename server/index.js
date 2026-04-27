@@ -103,7 +103,7 @@ const parseEvent = (event) => {
    ✅ DEBUG
 ------------------------------*/
 app.get("/api/debug-events-path", (req, res) => {
-  const filePath = path.join(process.cwd(), "server", "data", "upcomingEvents.json");
+  const filePath = path.join(DATA_ROOT, "upcomingEvents.json");
 
   let info = {
     cwd: process.cwd(),
@@ -382,7 +382,7 @@ app.post("/api/members/update", (req, res) => {
 ------------------------------*/
 
 app.get("/api/upcoming-events", (req, res) => {
-  const filePath = path.join(process.cwd(), "server", "data", "upcomingEvents.json");
+  const filePath = path.join(DATA_ROOT, "upcomingEvents.json");
 
   if (!fs.existsSync(filePath)) {
     return res.json([]);
