@@ -199,8 +199,8 @@ setTimeout(() => setSubmitMessage(""), 5000);
               <TabsContent value="upcoming" className="space-y-12">
                 <div className="grid md:grid-cols-2 gap-8">
 
-
-(Array.isArray(upcomingEvents) ? upcomingEvents : [])
+{
+ (Array.isArray(upcomingEvents) ? upcomingEvents : [])
   .filter((event) => event.isActive)
   .map((event, index) => {
     const hasFlyer = event.hasFlyer && event.flyerImage;
@@ -283,7 +283,8 @@ setTimeout(() => setSubmitMessage(""), 5000);
         </CardContent>
       </Card>
     );
-  })}
+  })
+}
 </div>
 
                 <div
