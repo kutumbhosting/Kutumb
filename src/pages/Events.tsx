@@ -89,51 +89,6 @@ useEffect(() => {
     });
     return;
   }
-
-    useEffect(() => {
-  const fetchUpcomingEvents = async () => {
-    try {
-      console.log("🔵 Fetching upcoming events...");
-
-      const res = await fetch("/api/upcoming-events");
-
-      console.log("🟡 Response status:", res.status);
-      console.log("🟡 Response headers:", res.headers.get("content-type"));
-
-      const text = await res.text();
-      console.log("🟡 Raw response:", text);
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.error("🔴 JSON parse failed:", e);
-        data = [];
-      }
-
-      console.log("🟢 Parsed data:", data);
-
-      setUpcomingEvents(data);
-
-      setDebugInfo({
-        status: res.status,
-        raw: text,
-        parsedLength: Array.isArray(data) ? data.length : "not-array",
-      });
-
-    } catch (err) {
-      console.error("🔴 Fetch failed:", err);
-      setUpcomingEvents([]);
-
-      setDebugInfo({
-        error: String(err),
-      });
-    }
-  };
-
-  fetchUpcomingEvents();
-}, []);
-
     
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(formData.email)) {
