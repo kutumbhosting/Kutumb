@@ -104,24 +104,48 @@ const parseEvent = (event) => {
    ✅ DEBUG
 ------------------------------*/
 app.get("/api/debug-events-path", (req, res) => {
-  const filePath = path.join(DATA_ROOT, "upcomingEvents.json");
+  const root = DATA_ROOT;
 
-  let info = {
-    cwd: process.cwd(),
-    dirname: __dirname,
-    filePath,
-    exists: fs.existsSync(filePath),
+  const paths = {
+    root,
+    eventsDir: path.join(root, "events"),
+    membersDir: path.join(root, "members"),
+    upcomingEventsFile: path.join(root, "upcomingEvents.json"),
+    eventFlyerDir: path.join(root, "eventflyer"),
   };
 
-  if (fs.existsSync(filePath)) {
-    try {
-      info.sampleData = JSON.parse(fs.readFileSync(filePath, "utf-8")).slice(0, 3);
-    } catch (err) {
-      info.error = err.message;
+  const result = {
+    cwd: process.cwd(),
+    dirname: __dirname,
+    dataRoot: root,
+    structure: {},
+  };
+
+  // check existence safely
+  for (const [key, p] of Object.entries(paths)) {
+    result.structure[key] = {
+      path: p,
+      exists: fs.existsSync(p),
+    };
+
+    // preview files if directory
+    if (fs.existsSync(p) && fs.lstatSync(p).isDirectory()) {
+      result.structure[key].files = fs.readdirSync(p).slice(0, 10);
+    }
+
+    // preview JSON if file
+    if (fs.existsSync(p) && p.endsWith(".json")) {
+      try {
+        result.structure[key].sample = JSON.parse(
+          fs.readFileSync(p, "utf-8") || "[]"
+        ).slice(0, 3);
+      } catch (err) {
+        result.structure[key].error = err.message;
+      }
     }
   }
 
-  res.json(info);
+  res.json(result);
 });
 
 /* -----------------------------
