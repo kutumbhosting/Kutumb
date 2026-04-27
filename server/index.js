@@ -3,15 +3,14 @@ import fs from "fs";
 import path from "path";
 import cors from "cors";
 import multer from "multer";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-app.use(
-  "/eventflyer",
-  express.static(path.join(process.cwd(), "server", "data", "eventflyer"))
-);
 
 const slugify = (text) =>
   text
@@ -26,6 +25,10 @@ const slugify = (text) =>
 ------------------------------*/
 const DATA_ROOT = path.join(__dirname, "data");
 const BASE_DIR = path.join(DATA_ROOT, "server", "data", "events");
+app.use(
+  "/eventflyer",
+  express.static(path.join(DATA_ROOT, "eventflyer"))
+);
 
 // ensure folder exists
 if (!fs.existsSync(BASE_DIR)) {
