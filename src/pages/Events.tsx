@@ -64,12 +64,12 @@ useEffect(() => {
       const res = await fetch("/api/upcoming-events");
       const text = await res.text();
 
-      setDebug(`STATUS: ${res.status}\nRAW: ${text}`);
+      setDebugInfo(`STATUS: ${res.status}\nRAW: ${text}`);
 
       const data = JSON.parse(text);
       setUpcomingEvents(data);
     } catch (err) {
-      setDebug(`ERROR: ${String(err)}`);
+      setDebugInfo(`ERROR: ${String(err)}`);
       console.error(err);
     }
   };
@@ -175,10 +175,10 @@ setTimeout(() => setSubmitMessage(""), 5000);
               Join us for upcoming community events or explore our past activities and impact.
             </p>
           </div>
-          {debug && (
+          {debugInfo && (
   <div className="p-4 m-4 bg-black text-green-400 text-xs rounded whitespace-pre-wrap">
     <h3 className="font-bold mb-2">DEBUG OUTPUT</h3>
-    {debug}
+    {JSON.stringify(debugInfo, null, 2)}
   </div>
 )}
         </section>
