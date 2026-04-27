@@ -62,7 +62,7 @@ useEffect(() => {
 }, []);
 
 const fetchUpcomingEvents = async () => {
-  const res = await fetch("http://localhost:5000/api/upcoming-events");
+  const res = await fetch("/api/upcoming-events");
   const data = await res.json();
   setUpcomingEvents(data);
 };
@@ -90,7 +90,7 @@ const fetchUpcomingEvents = async () => {
   }
 
   try {
-    const res = await fetch("http://localhost:5000/api/events", {
+    const res = await fetch("/api/events", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(formData),
@@ -228,7 +228,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
             {hasFlyer && (
               <div className="flex justify-center items-start">
                 <img
-                  src={`http://localhost:5000/eventflyer/${event.flyerImage}`}
+                  src={`/eventflyer/${event.flyerImage}`}
                   alt={event.title}
                   className="rounded-lg shadow-md max-h-[350px] object-contain"
                 />
