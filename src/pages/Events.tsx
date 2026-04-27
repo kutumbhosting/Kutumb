@@ -64,12 +64,12 @@ useEffect(() => {
       const res = await fetch("/api/upcoming-events");
       const text = await res.text();
 
-      setDebugInfo(`STATUS: ${res.status}\nRAW: ${text}`);
+      setDebugInfo({status: res.status,raw: text,});
 
       const data = JSON.parse(text);
       setUpcomingEvents(data);
     } catch (err) {
-      setDebugInfo(`ERROR: ${String(err)}`);
+      setDebugInfo(ERROR: String(err));
       console.error(err);
     }
   };
