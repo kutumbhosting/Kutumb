@@ -398,6 +398,10 @@ app.post("/api/members/update", (req, res) => {
 app.get("/api/upcoming-events", (req, res) => {
   const filePath = path.join(DATA_ROOT, "upcomingEvents.json");
 
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, "[]");
+  }
+
   try {
     const allEvents = fs.existsSync(filePath)
       ? JSON.parse(fs.readFileSync(filePath, "utf-8") || "[]")
