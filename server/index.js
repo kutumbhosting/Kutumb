@@ -474,8 +474,6 @@ app.post("/api/upcoming-events/delete", (req, res) => {
    📁 FLYER STORAGE
 ----------------------------- */
 
-const FLYER_DIR = path.join(process.cwd(), "server", "data", "eventflyer");
-
 if (!fs.existsSync(FLYER_DIR)) {
   fs.mkdirSync(FLYER_DIR, { recursive: true });
 }
