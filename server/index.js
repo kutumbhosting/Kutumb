@@ -31,32 +31,10 @@ app.use(
   express.static(path.join(DATA_ROOT, "eventflyer"))
 );
 
-// ensure folder exists
-//if (!fs.existsSync(BASE_DIR)) {
-//  fs.mkdirSync(BASE_DIR, { recursive: true });
-//}
-
 const MEMBERS_DIR = path.join(DATA_ROOT, "members");
-
-if (!fs.existsSync(MEMBERS_DIR)) {
-  fs.mkdirSync(MEMBERS_DIR, { recursive: true });
-}
-
 const MEMBERS_FILE = path.join(MEMBERS_DIR, "members.json");
-
-if (!fs.existsSync(MEMBERS_FILE)) {
-  fs.writeFileSync(MEMBERS_FILE, "[]");
-}
-
 const UPCOMING_EVENTS_DIR = path.join(DATA_ROOT, "upcomingevents");
 const UPCOMING_EVENTS_FILE = path.join(UPCOMING_EVENTS_DIR, "upcomingEvents.json");
-
-if (!fs.existsSync(UPCOMING_EVENTS_DIR)) {
-  fs.mkdirSync(UPCOMING_EVENTS_DIR, { recursive: true });
-}
-if (!fs.existsSync(UPCOMING_EVENTS_FILE)) {
-  fs.writeFileSync(UPCOMING_EVENTS_FILE, "[]");
-}
 
 /* -----------------------------
    🧼 HELPERS
