@@ -26,6 +26,7 @@ const Admin = () => {
   const [selectedMemberRows, setSelectedMemberRows] = useState<string[]>([]);
   const [editingMember, setEditingMember] = useState<any | null>(null);
   const [selectedFlyerEvent, setSelectedFlyerEvent] = useState<any | null>(null);
+  const [eventFiles, setEventFiles] = useState<any[]>([]);
 
   const [selectedEventKey, setSelectedEventKey] = useState<string>("");
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
@@ -114,6 +115,38 @@ const Admin = () => {
   }, []);
 
   // ================= FETCH DATA =================
+  // 🔥 Add this block here (below fetchUpcomingEvents)
+
+// Load dropdown list
+const fetchEventFiles = async () => {
+  try {
+    const res = await fetch("api/event-files");
+    const data = await res.json();
+    setEventFiles(data);
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+// Load table data based on selected file
+const fetchEventData = async (fileKey: string) => {
+  try {
+    const res = await fetch(`api/events/${fileKey}`);
+    const data = await res.json();
+
+    const grouped: any = {};
+
+    data.forEach((item: any) => {
+      const key = item.eventName + "_" + item.eventYear;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(item);
+    });
+
+    setGroupedEvents(grouped);
+  } catch (err) {
+    console.error(err);
+  }
+};
   
   const fetchData = async () => {
   try {
@@ -161,6 +194,7 @@ const Admin = () => {
 
     setGroupedEvents(grouped);
     setMemberData(members);
+    await fetchEventFiles();
   } catch (err) {
     console.error("fetchData error:", err);
   }
@@ -351,14 +385,15 @@ const deleteEventRows = async () => {
                     <select
                       className="w-full mt-2 p-2 border rounded"
                       value={selectedEventKey}
-                      onChange={(e) => setSelectedEventKey(e.target.value)}
+                      onChange={(e) => { const value = e.target.value; setSelectedEventKey(value); fetchEventData(value);}}
                     >
                       <option value="">-- Choose Event --</option>
 
-                      {Object.entries(groupedEvents).map(([key, events]: any) => {
-                        const first = events?.[0];
-                        if (!first) return null;
-
+eventFiles.map((file) => (
+  <option key={file.value} value={file.value}>
+    {file.label}
+  </option>
+))
                         return (
                           <option key={key} value={key}>
                             {first.eventName} {first.eventYear}
