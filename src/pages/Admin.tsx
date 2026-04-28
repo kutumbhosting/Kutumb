@@ -45,33 +45,31 @@ const Admin = () => {
   });
 
   const selectedEvent =
-    selectedEventKey && groupedEvents[selectedEventKey]?.length
-      ? {
-          members: groupedEvents[selectedEventKey],
-          eventName: groupedEvents[selectedEventKey][0]?.eventName,
-          eventYear: groupedEvents[selectedEventKey][0]?.eventYear,
+  selectedEventKey && groupedEvents[selectedEventKey]?.length
+    ? {
+        members: groupedEvents[selectedEventKey],
 
-          // ✅ Adults = adults + 1 (registrant)
-          adults: groupedEvents[selectedEventKey].reduce(
-            (sum: number, m: any) =>
-              sum + 1 + Number(m.adults || 0),
-            0
-          ),
+        ...getEventMetaFromKey(selectedEventKey), // ✅ FIX
 
-          children: groupedEvents[selectedEventKey].reduce(
-            (sum: number, m: any) =>
-              sum + Number(m.children || 0),
-            0
-          ),
+        adults: groupedEvents[selectedEventKey].reduce(
+          (sum: number, m: any) =>
+            sum + 1 + Number(m.adults || 0),
+          0
+        ),
 
-          // ✅ Total Registrations = TOTAL PEOPLE
-          totalPeople: groupedEvents[selectedEventKey].reduce(
-            (sum: number, m: any) =>
-              sum + 1 + Number(m.adults || 0) + Number(m.children || 0),
-            0
-          ),
-        }
-      : null;
+        children: groupedEvents[selectedEventKey].reduce(
+          (sum: number, m: any) =>
+            sum + Number(m.children || 0),
+          0
+        ),
+
+        totalPeople: groupedEvents[selectedEventKey].reduce(
+          (sum: number, m: any) =>
+            sum + 1 + Number(m.adults || 0) + Number(m.children || 0),
+          0
+        ),
+      }
+    : null;
 
   const rows = memberData.map((row) =>
     Object.values({
