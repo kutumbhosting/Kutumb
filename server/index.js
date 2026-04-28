@@ -260,8 +260,12 @@ app.post("/api/members", (req, res) => {
 
 app.get("/api/events", (req, res) => {
   try {
-    const files = fs.existsSync(BASE_DIR)
-      ? fs.readdirSync(BASE_DIR)
+    const root = DATA_ROOT;
+
+    const eventsPath = path.join(root, "events");
+
+    const files = fs.existsSync(eventsPath)
+      ? fs.readdirSync(eventsPath)
       : [];
 
     const eventList = files
@@ -270,7 +274,7 @@ app.get("/api/events", (req, res) => {
         const name = file.replace(".json", "");
 
         return {
-          label: name.replace(/_/g, " "),
+          label: name.replace(/[-_]/g, " "),
           value: name
         };
       });
