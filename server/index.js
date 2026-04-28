@@ -102,26 +102,19 @@ app.get("/api/debug-events-path", (req, res) => {
     structure: {
       events: {
         path: path.join(root, "events"),
-        exists: fs.existsSync(path.join(root, "events")),
+        
         files: fs.existsSync(path.join(root, "events"))
           ? fs.readdirSync(path.join(root, "events")).slice(0, 5)
           : [],
       },
       members: {
-        path: path.join(root, "members"),
-        exists: fs.existsSync(path.join(root, "members")),
+        path: path.join(root, "members")
       },
       upcomingEvents: {
-  path: path.join(root, "upcomingevents"),
-  exists: fs.existsSync(path.join(root, "upcomingevents")),
-  file: path.join(root, "upcomingevents", "upcomingEvents.json"),
-  fileExists: fs.existsSync(
-    path.join(root, "upcomingevents", "upcomingEvents.json")
-  ),
+  file: path.join(root, "upcomingevents", "upcomingEvents.json")
 },
       flyers: {
-        path: path.join(root, "eventflyer"),
-        exists: fs.existsSync(path.join(root, "eventflyer")),
+        path: path.join(root, "eventflyer")
       },
     },
   };
