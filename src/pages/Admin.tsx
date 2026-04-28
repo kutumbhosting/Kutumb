@@ -157,70 +157,26 @@ const fetchEventData = async (fileKey: string) => {
   }
 };
 
-  const fetchData = async () => {
+ const fetchData = async () => {
   try {
-    const membersRes = await fetch("/api/members");
+    const [membersRes, filesRes] = await Promise.all([
+      fetch("/api/members"),
+      fetch("/api/event-files"),
+    ]);
 
-    if (!membersRes.ok) throw new Error("API failed");
-
-    const members = await membersRes.json();
-
-    setMemberData(members || []);
-
-    // IMPORTANT: load file list separately (not inside grouping)
-    await fetchEventFiles();
-  } catch (err) {
-    console.error("fetchData error:", err);
-  }
-};
-  
-  const fetchData = async () => {
-  try {
-    const eventsRes = await fetch("api/events");
-    const membersRes = await fetch("api/members");
-
-    if (!eventsRes.ok || !membersRes.ok) {
+    if (!membersRes.ok || !filesRes.ok) {
       throw new Error("API failed");
     }
 
-    const eventFiles = await eventsRes.json(); // now returns {label, value}
     const members = await membersRes.json();
+    const eventFiles = await filesRes.json();
 
-    // ✅ FIX: rebuild groupedEvents from filename-based API
-    const grouped = eventFiles.reduce((acc: any, item: any) => {
-      const fileName = item.value; // e.g. Guru_Purnima_Celebration_2026
+    setMemberData(members || []);
+    setEventFiles(eventFiles || []);
 
-      if (!fileName) return acc;
-
-      // split filename into parts
-      const parts = fileName.split("_");
-
-      const eventYear = parts.pop(); // last part = year
-      const eventName = parts.join(" "); // rest = name
-
-      const key = `${eventName}_${eventYear}`;
-
-      if (!acc[key]) acc[key] = [];
-
-      // ⚠️ IMPORTANT:
-      // we are creating a placeholder event (since backend no longer returns full data)
-      acc[key].push({
-        eventName,
-        eventYear,
-        name: "",
-        email: "",
-        phone: "",
-        adults: 0,
-        children: 0,
-        comments: "",
-      });
-
-      return acc;
-    }, {});
-
-    setGroupedEvents(grouped);
-    setMemberData(members);
-    await fetchEventFiles();
+    // optional: auto-reset dropdown + events
+    setGroupedEvents({});
+    setSelectedEventKey("");
   } catch (err) {
     console.error("fetchData error:", err);
   }
