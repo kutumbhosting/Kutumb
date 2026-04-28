@@ -256,7 +256,6 @@ app.post("/api/members", (req, res) => {
 /* -----------------------------
    📊 GET ALL EVENTS (ADMIN)
 ------------------------------*/
-
 app.get("/api/event-files", (req, res) => {
   try {
     const eventsDir = path.join(DATA_ROOT, "events");
@@ -272,9 +271,16 @@ app.get("/api/event-files", (req, res) => {
       .map(file => {
         const name = file.replace(".json", "");
 
+
+       // split slug back
+       const parts = name.split("-");
+       const year = parts.pop();
+       const eventName = parts.join(" ");
+
         return {
-          label: name.replace(/[-_]/g, " "),
+          label: eventName,          // ORIGINAL readable name
           value: name, // IMPORTANT → used to fetch data
+          year,
         };
       });
 
