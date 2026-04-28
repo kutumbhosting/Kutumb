@@ -260,10 +260,8 @@ app.post("/api/members", (req, res) => {
 
 app.get("/api/events", (req, res) => {
   try {
-    const eventsDir = path.join(DATA_ROOT, "events");
-
-    const files = fs.existsSync(eventsDir)
-      ? fs.readdirSync(eventsDir)
+    const files = fs.existsSync(BASE_DIR)
+      ? fs.readdirSync(BASE_DIR)
       : [];
 
     const eventList = files
