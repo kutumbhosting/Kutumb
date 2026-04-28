@@ -138,23 +138,16 @@ const fetchEventData = async (fileKey: string) => {
     }
 
     const res = await fetch(`/api/events/${fileKey}`);
-    if (!res.ok) throw new Error("Failed to load event data");
-
     const data = await res.json();
 
-    const grouped: Record<string, any[]> = {};
+    console.log("EVENT RAW DATA:", data); // 🔥 DEBUG
 
-    (data || []).forEach((item: any) => {
-      const key = `${item.eventName}_${item.eventYear}`;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(item);
-    });
+    const grouped = {
+      [fileKey]: data || []
+    };
 
-    setGroupedEvents(() => {
-  const newState = { ...grouped };
-  return newState;
-});
-setSelectedEventKey(fileKey); // ✅ force UI sync
+    setGroupedEvents(grouped);
+
   } catch (err) {
     console.error("fetchEventData error:", err);
     setGroupedEvents({});
