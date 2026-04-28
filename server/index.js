@@ -259,18 +259,29 @@ app.post("/api/members", (req, res) => {
 ------------------------------*/
 
 app.get("/api/events", (req, res) => {
-  const files = fs.readdirSync(BASE_DIR);
-  const allData = [];
+  try {
+    const eventsDir = path.join(DATA_ROOT, "events");
 
-  files.forEach((file) => {
-    const data = readFile(filePath);
+    const files = fs.existsSync(eventsDir)
+      ? fs.readdirSync(eventsDir)
+      : [];
 
-    data.forEach((entry) => {
-      allData.push(entry);
-    });
-  });
+    const eventList = files
+      .filter(file => file.endsWith(".json"))
+      .map(file => {
+        const name = file.replace(".json", "");
 
-  res.json(allData);
+        return {
+          label: name.replace(/_/g, " "),
+          value: name
+        };
+      });
+
+    res.json(eventList);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json([]);
+  }
 });
 
 /* -----------------------------
