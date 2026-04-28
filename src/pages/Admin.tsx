@@ -114,70 +114,95 @@ const Admin = () => {
   }, []);
 
   // ================= FETCH DATA =================
-
+  
   const fetchData = async () => {
-    try {
-      const eventsRes = await fetch("api/events");
-      const membersRes = await fetch("api/members");
+  try {
+    const eventsRes = await fetch("api/events");
+    const membersRes = await fetch("api/members");
 
-      if (!eventsRes.ok || !membersRes.ok) {
-        throw new Error("API failed");
-      }
-
-      const events = await eventsRes.json();
-      const members = await membersRes.json();
-
-      const grouped = events.reduce((acc: any, item: any) => {
-        const key = item.eventName + "_" + item.eventYear;
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(item);
-        return acc;
-      }, {});
-
-      setGroupedEvents(grouped);
-      setMemberData(members);
-    } catch (err) {
-      console.error("fetchData error:", err);
+    if (!eventsRes.ok || !membersRes.ok) {
+      throw new Error("API failed");
     }
-  };
 
-  const deleteMemberRows = async () => {
-    await fetch("api/members/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ emails: selectedMemberRows }),
-    });
+    const eventFiles = await eventsRes.json(); // now returns {label, value}
+    const members = await membersRes.json();
 
-    setSelectedMemberRows([]);
-    fetchData();
-  };
+    // ✅ FIX: rebuild groupedEvents from filename-based API
+    const grouped = eventFiles.reduce((acc: any, item: any) => {
+      const fileName = item.value; // e.g. Guru_Purnima_Celebration_2026
 
-  const deleteEventRows = async () => {
-    try {
-      const res = await fetch("api/events/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventName: selectedEvent?.eventName,
-          eventYear: selectedEvent?.eventYear,
-          emails: selectedEventRows,
-        }),
+      if (!fileName) return acc;
+
+      // split filename into parts
+      const parts = fileName.split("_");
+
+      const eventYear = parts.pop(); // last part = year
+      const eventName = parts.join(" "); // rest = name
+
+      const key = `${eventName}_${eventYear}`;
+
+      if (!acc[key]) acc[key] = [];
+
+      // ⚠️ IMPORTANT:
+      // we are creating a placeholder event (since backend no longer returns full data)
+      acc[key].push({
+        eventName,
+        eventYear,
+        name: "",
+        email: "",
+        phone: "",
+        adults: 0,
+        children: 0,
+        comments: "",
       });
 
-      const data = await res.json();
+      return acc;
+    }, {});
 
-      if (!res.ok) {
-        throw new Error(data.message || "Delete failed");
-      }
+    setGroupedEvents(grouped);
+    setMemberData(members);
+  } catch (err) {
+    console.error("fetchData error:", err);
+  }
+};
 
-      setEventActionMessage(`✅ ${data.message || "Deleted successfully"}`);
+const deleteMemberRows = async () => {
+  await fetch("api/members/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emails: selectedMemberRows }),
+  });
 
-      setSelectedEventRows([]);
-      fetchData();
-    } catch (err: any) {
-      setEventActionMessage(`❌ ${err.message}`);
+  setSelectedMemberRows([]);
+  fetchData();
+};
+
+const deleteEventRows = async () => {
+  try {
+    const res = await fetch("api/events/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventName: selectedEvent?.eventName,
+        eventYear: selectedEvent?.eventYear,
+        emails: selectedEventRows,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Delete failed");
     }
-  };
+
+    setEventActionMessage(`✅ ${data.message || "Deleted successfully"}`);
+
+    setSelectedEventRows([]);
+    fetchData();
+  } catch (err: any) {
+    setEventActionMessage(`❌ ${err.message}`);
+  }
+};
 
   // ================= LOGIN =================
   const handleLogin = (e: React.FormEvent) => {
