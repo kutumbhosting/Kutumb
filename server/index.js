@@ -296,7 +296,7 @@ app.get("/api/event-files", (req, res) => {
 
 
        // split slug back
-       const parts = name.split("-");
+       const parts = name.replace(/_/g, "-").split("-");
        const year = parts.pop();
        const eventName = parts.join(" ");
 
