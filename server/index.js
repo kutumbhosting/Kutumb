@@ -294,16 +294,18 @@ app.get("/api/event-files", (req, res) => {
       .map(file => {
         const name = file.replace(".json", "");
 
+        // ✅ FIX: normalize filename
+        const parts = name.replace(/_/g, "-").split("-");
 
-       // split slug back
-       const parts = name.replace(/_/g, "-").split("-");
-       const year = parts.pop();
-       const eventName = parts.join(" ");
+        const year = parts.pop();
+
+        const eventName = parts
+          .join(" ")
+          .replace(/\b\w/g, c => c.toUpperCase());
 
         return {
-          label: eventName,          // ORIGINAL readable name
-          value: name, // IMPORTANT → used to fetch data
-          year,
+          label: `${eventName} ${year}`,
+          value: name,
         };
       });
 
