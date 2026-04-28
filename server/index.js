@@ -257,20 +257,14 @@ app.post("/api/members", (req, res) => {
 /* -----------------------------
    📊 GET ALL EVENTS (ADMIN)
 ------------------------------*/
+
 app.get("/api/events", (req, res) => {
   try {
     const files = fs.readdirSync(BASE_DIR);
 
     const eventList = files
       .filter(file => file.endsWith(".json"))
-      .map(file => {
-        const name = file.replace(".json", "");
-
-        return {
-          label: name.replace(/_/g, " "),
-          value: name
-        };
-      });
+      .map(file => file.replace(".json", ""));
 
     res.json(eventList);
   } catch (err) {
