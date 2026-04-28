@@ -150,7 +150,11 @@ const fetchEventData = async (fileKey: string) => {
       grouped[key].push(item);
     });
 
-    setGroupedEvents(grouped);
+    setGroupedEvents(() => {
+  const newState = { ...grouped };
+  return newState;
+});
+setSelectedEventKey(fileKey); // ✅ force UI sync
   } catch (err) {
     console.error("fetchEventData error:", err);
     setGroupedEvents({});
@@ -462,7 +466,7 @@ const deleteEventRows = async () => {
     </thead>
 
     <tbody>
-      {selectedEvent?.members?.map((item, i) => (
+      {groupedEvents[selectedEventKey]?.map((item, i) => (
         <tr key={i} className="border-b">
           <td className="p-2">
             <input
