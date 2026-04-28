@@ -258,28 +258,51 @@ app.post("/api/members", (req, res) => {
    📊 GET ALL EVENTS (ADMIN)
 ------------------------------*/
 
-app.get("/api/events", (req, res) => {
+app.get("/api/event-files", (req, res) => {
   try {
-    const root = DATA_ROOT;
+    const eventsDir = path.join(DATA_ROOT, "events");
 
-    const eventsPath = path.join(root, "events");
+    if (!fs.existsSync(eventsDir)) {
+      return res.json([]);
+    }
 
-    const files = fs.existsSync(eventsPath)
-      ? fs.readdirSync(eventsPath)
-      : [];
+    const files = fs.readdirSync(eventsDir);
 
-    const eventList = files
+    const list = files
       .filter(file => file.endsWith(".json"))
       .map(file => {
         const name = file.replace(".json", "");
 
         return {
           label: name.replace(/[-_]/g, " "),
-          value: name
+          value: name, // IMPORTANT → used to fetch data
         };
       });
 
-    res.json(eventList);
+    res.json(list);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json([]);
+  }
+});
+
+app.get("/api/events/:file", (req, res) => {
+  try {
+    const fileName = req.params.file;
+
+    const filePath = path.join(DATA_ROOT, "events", `${fileName}.json`);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "File not found" });
+    }
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+
+    if (!raw) return res.json([]);
+
+    const data = JSON.parse(raw);
+
+    res.json(Array.isArray(data) ? data : [data]);
   } catch (err) {
     console.error(err);
     res.status(500).json([]);
