@@ -115,36 +115,62 @@ const Admin = () => {
   }, []);
 
   // ================= FETCH DATA =================
-  // 🔥 Add this block here (below fetchUpcomingEvents)
-
-// Load dropdown list
+// ================= EVENT FILES =================
 const fetchEventFiles = async () => {
   try {
-    const res = await fetch("api/event-files");
+    const res = await fetch("/api/event-files");
+    if (!res.ok) throw new Error("Failed to load event files");
+
     const data = await res.json();
-    setEventFiles(data);
+    setEventFiles(data || []);
   } catch (err) {
-    console.error(err);
+    console.error("fetchEventFiles error:", err);
+    setEventFiles([]);
   }
 };
 
-// Load table data based on selected file
+// ================= EVENT DATA (FROM FILE) =================
 const fetchEventData = async (fileKey: string) => {
   try {
-    const res = await fetch(`api/events/${fileKey}`);
+    if (!fileKey) {
+      setGroupedEvents({});
+      return;
+    }
+
+    const res = await fetch(`/api/events/${fileKey}`);
+    if (!res.ok) throw new Error("Failed to load event data");
+
     const data = await res.json();
 
-    const grouped: any = {};
+    const grouped: Record<string, any[]> = {};
 
-    data.forEach((item: any) => {
-      const key = item.eventName + "_" + item.eventYear;
+    (data || []).forEach((item: any) => {
+      const key = `${item.eventName}_${item.eventYear}`;
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(item);
     });
 
     setGroupedEvents(grouped);
   } catch (err) {
-    console.error(err);
+    console.error("fetchEventData error:", err);
+    setGroupedEvents({});
+  }
+};
+
+  const fetchData = async () => {
+  try {
+    const membersRes = await fetch("/api/members");
+
+    if (!membersRes.ok) throw new Error("API failed");
+
+    const members = await membersRes.json();
+
+    setMemberData(members || []);
+
+    // IMPORTANT: load file list separately (not inside grouping)
+    await fetchEventFiles();
+  } catch (err) {
+    console.error("fetchData error:", err);
   }
 };
   
