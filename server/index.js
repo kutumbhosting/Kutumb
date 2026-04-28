@@ -153,6 +153,18 @@ app.get("/api/debug-upcoming-events-file", (req, res) => {
   }
 });
 
+app.get("/api/debug-volume", (req, res) => {
+  const file = path.join(process.env.DATA_ROOT, "test.txt");
+
+  fs.writeFileSync(file, "hello " + Date.now());
+
+  res.json({
+    wrote: file,
+    exists: fs.existsSync(file),
+    files: fs.readdirSync(process.env.DATA_ROOT),
+  });
+});
+
 /* -----------------------------
    ✅ REGISTER EVENT
 ------------------------------*/
