@@ -260,27 +260,22 @@ app.post("/api/members", (req, res) => {
 app.get("/api/events", (req, res) => {
   try {
     const files = fs.readdirSync(BASE_DIR);
-    const allData = [];
 
-    files.forEach((file) => {
-      const filePath = path.join(BASE_DIR, file);
-      const data = readFile(filePath);
+    const eventList = files
+      .filter(file => file.endsWith(".json"))
+      .map(file => {
+        const name = file.replace(".json", "");
 
-      if (!data) return;
-
-      data.forEach((entry) => {
-        allData.push({
-          ...entry,
-          eventName: entry.eventName,
-          eventYear: entry.eventYear,
-        });
+        return {
+          label: name.replace(/_/g, " "),
+          value: name
+        };
       });
-    });
 
-    res.json(allData);
+    res.json(eventList);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Failed to load events" });
+    res.status(500).json([]);
   }
 });
 
