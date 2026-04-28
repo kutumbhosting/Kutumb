@@ -163,6 +163,28 @@ app.get("/api/debug-volume", (req, res) => {
     files: fs.readdirSync(process.env.DATA_ROOT),
   });
 });
+app.get("/api/debug-events/:file", (req, res) => {
+  const fileName = req.params.file;
+  const filePath = path.join(BASE_DIR, `${fileName}.json`);
+
+  console.log("DEBUG FILE PATH:", filePath);
+
+  if (!fs.existsSync(filePath)) {
+    return res.json({
+      exists: false,
+      filePath,
+    });
+  }
+
+  const raw = fs.readFileSync(filePath, "utf-8");
+
+  res.json({
+    exists: true,
+    filePath,
+    raw,
+    parsed: JSON.parse(raw || "[]"),
+  });
+});
 
 /* -----------------------------
    ✅ REGISTER EVENT
