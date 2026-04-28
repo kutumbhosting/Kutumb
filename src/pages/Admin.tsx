@@ -382,25 +382,23 @@ const deleteEventRows = async () => {
 
                   <div className="mb-6 max-w-md">
                     <label className="text-sm font-medium">Select Event</label>
-                    <select
-                      className="w-full mt-2 p-2 border rounded"
-                      value={selectedEventKey}
-                      onChange={(e) => { const value = e.target.value; setSelectedEventKey(value); fetchEventData(value);}}
-                    >
-                      <option value="">-- Choose Event --</option>
+ <select
+  className="w-full mt-2 p-2 border rounded"
+  value={selectedEventKey}
+  onChange={(e) => {
+    const value = e.target.value;
+    setSelectedEventKey(value);
+    fetchEventData(value);
+  }}
+>
+  <option value="">-- Choose Event --</option>
 
-eventFiles.map((file) => (
-  <option key={file.value} value={file.value}>
-    {file.label}
-  </option>
-))
-                        return (
-                          <option key={key} value={key}>
-                            {first.eventName} {first.eventYear}
-                          </option>
-                        );
-                      })}
-                    </select>
+  {eventFiles.map((file) => (
+    <option key={file.value} value={file.value}>
+      {file.label}
+    </option>
+  ))}
+</select>
                   </div>
 
                   {selectedEvent?.members?.length > 0 && (
