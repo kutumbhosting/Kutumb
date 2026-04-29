@@ -406,7 +406,8 @@ const deleteEventRows = async () => {
   onClick={() =>
     downloadCSV(
       selectedEvent?.members || [],
-      `${selectedEventLabel}` || "event"}.csv`
+      `${selectedEventKey || "event"}.csv'
+      //`${selectedEventLabel}` || "event"}.csv`
     )
   }
 >
