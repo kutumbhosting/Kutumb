@@ -180,7 +180,7 @@ const fetchEventData = async (fileKey: string) => {
 };
 
 const deleteMemberRows = async () => {
-  await fetch("api/members/delete", {
+  await fetch("/api/members/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ emails: selectedMemberRows }),
@@ -192,7 +192,7 @@ const deleteMemberRows = async () => {
 
 const deleteEventRows = async () => {
   try {
-    const res = await fetch("api/events/delete", {
+    const res = await fetch("/api/events/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -714,7 +714,7 @@ const deleteEventRows = async () => {
 
                               <Button
                                 onClick={async () => {
-                                  await fetch("api/members/update", {
+                                  await fetch("/api/members/update", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -790,7 +790,7 @@ const deleteEventRows = async () => {
               isActive: e.target.checked,
             };
 
-            await fetch("api/upcoming-events/update", {
+            await fetch("/api/upcoming-events/update", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(updated),
@@ -901,7 +901,7 @@ const deleteEventRows = async () => {
             formData.append("title", event.title);
             formData.append("eventYear", event.date?.slice(0, 4));
 
-            const res = await fetch("api/upload-flyer", {
+            const res = await fetch("/api/upload-flyer", {
               method: "POST",
               body: formData,
             });
@@ -933,7 +933,7 @@ const deleteEventRows = async () => {
       <td className="p-2 flex gap-2">
         <Button
           onClick={async () => {
-            await fetch("api/upcoming-events/update", {
+            await fetch("/api/upcoming-events/update", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(event),
@@ -948,7 +948,7 @@ const deleteEventRows = async () => {
         <Button
           variant="destructive"
           onClick={async () => {
-            const res = await fetch("api/upcoming-events/delete", {
+            const res = await fetch("/api/upcoming-events/delete", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ title: event.title }),
@@ -1052,7 +1052,7 @@ const deleteEventRows = async () => {
     try {
       // 1. create event
       const res = await fetch(
-        "api/upcoming-events/update",
+        "/api/upcoming-events/update",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1072,7 +1072,7 @@ const deleteEventRows = async () => {
         formData.append("eventYear", newEvent.date?.slice(0, 4));
 
         const flyerRes = await fetch(
-          "api/upload-flyer",
+          "/api/upload-flyer",
           {
             method: "POST",
             body: formData,
