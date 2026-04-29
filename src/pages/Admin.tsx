@@ -292,7 +292,10 @@ const deleteEventRows = async () => {
       children,
     };
   });
-
+  const selectedEventLabel =
+  eventFiles.find((f: any) => f.value === selectedEventKey)?.label ||
+  "Select Event";
+  
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -386,7 +389,7 @@ const deleteEventRows = async () => {
                       <CardContent className="p-6">
                           <div className="flex justify-between items-start mb-4">
                           <div>
-                            const selectedEventLabel = eventFiles.find((f: any) => f.value === selectedEventKey)?.label || "Select Event";
+    
                             <h2 className="text-xl font-bold">
                               {selectedEventLabel}
                             </h2>
