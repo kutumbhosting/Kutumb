@@ -102,7 +102,7 @@ const Admin = () => {
 
   const fetchUpcomingEvents = async () => {
     try {
-      const res = await fetch("api/upcoming-events");
+      const res = await fetch("/api/upcoming-events");
       const data = await res.json();
       setUpcomingEvents(data);
     } catch (err) {
