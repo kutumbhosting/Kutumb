@@ -147,11 +147,14 @@ const fetchEventData = async (fileKey: string) => {
     const res = await fetch(`/api/events/${fileKey}`);
     const data = await res.json();
 
-    console.log("EVENT RAW DATA:", data); // 🔥 DEBUG
-
     //setGroupedEvents({[fileKey]: Array.isArray(data) ? data : []});
     const currentEventData = groupedEvents[selectedEventKey];
 
+    setGroupedEvents((prev) => ({
+      ...prev,
+      [fileKey]: Array.isArray(data) ? data : [],
+    }));
+    
     const selectedEventLabel =
       currentEventData?.[0]?.eventName
          ? `${currentEventData[0].eventName} ${currentEventData[0].eventYear}`
