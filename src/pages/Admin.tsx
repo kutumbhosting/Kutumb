@@ -104,7 +104,8 @@ const Admin = () => {
     try {
       const res = await fetch("/api/upcoming-events");
       const data = await res.json();
-      setUpcomingEvents(data);
+      setUpcomingEvents(Array.isArray(data) ? data : data?.events || []);
+      
     } catch (err) {
       console.error(err);
     }
