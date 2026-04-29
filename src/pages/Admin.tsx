@@ -381,15 +381,16 @@ const deleteEventRows = async () => {
   ))}
 </select>
                 </div>
-
-
+const selectedEventLabel =
+  eventFiles.find((f: any) => f.value === selectedEventKey)?.label || "Select Event";
+                  
                   {selectedEvent?.members?.length > 0 && (
                     <Card className="mb-6">
                       <CardContent className="p-6">
-                                                <div className="flex justify-between items-start mb-4">
+                          <div className="flex justify-between items-start mb-4">
                           <div>
                             <h2 className="text-xl font-bold">
-                              {selectedEvent.eventName} {selectedEvent.eventYear}
+                              {selectedEventLabel}
                             </h2>
 
                             <div className="flex gap-4 text-sm text-muted-foreground mt-1">
