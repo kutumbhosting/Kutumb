@@ -661,7 +661,7 @@ app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
 
     // ✅ update upcomingEvents.json
     const filePath = path.join(
-      DATA_ROOT,
+      DATA_ROOT, "upcomingevents",
       "upcomingEvents.json"
     );
 
