@@ -114,6 +114,12 @@ const Admin = () => {
     fetchUpcomingEvents();
   }, []);
 
+  useEffect(() => {
+  if (selectedEventKey) {
+    fetchEventData(selectedEventKey);
+  }
+}, [selectedEventKey]);
+
   // ================= FETCH DATA =================
 // ================= EVENT FILES =================
 const fetchEventFiles = async () => {
@@ -142,12 +148,8 @@ const fetchEventData = async (fileKey: string) => {
 
     console.log("EVENT RAW DATA:", data); // 🔥 DEBUG
 
-    const grouped = {
-      [fileKey]: data || []
-    };
-
-    setGroupedEvents(grouped);
-
+    setGroupedEvents({[fileKey]: Array.isArray(data) ? data : []});
+    
   } catch (err) {
     console.error("fetchEventData error:", err);
     setGroupedEvents({});
@@ -369,12 +371,12 @@ const deleteEventRows = async () => {
                       <option value="">-- Choose Event --</option>
 
                       {Object.entries(groupedEvents).map(([key, events]: any) => {
-                        const first = events?.[0];
+                        const first = events?.[0] || {};
                         if (!first) return null;
 
                         return (
                           <option key={key} value={key}>
-                            {first.eventName} {first.eventYear}
+                            {first.eventName || "Unknown Event"} {first.eventYear || ""}
                           </option>
                         );
                       })}
