@@ -74,9 +74,7 @@ const Admin = () => {
       : null;
 
   const selectedEventLabel =
-  groupedEvents[selectedEventKey]?.[0]?.eventName
-    ? `${groupedEvents[selectedEventKey][0].eventName} ${groupedEvents[selectedEventKey][0].eventYear}`
-    : "Select Event";
+  eventFiles.find((f) => f.value === selectedEventKey)?.label || "Select Event";
   
   const rows = memberData.map((row) =>
     Object.values({
