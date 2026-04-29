@@ -172,7 +172,11 @@ const fetchEventData = async (fileKey: string) => {
 
     setMemberData(members || []);
     setEventFiles(eventFiles || []);
-
+    
+    const grouped: Record<string, any[]> = {};
+    (eventFiles || []).forEach((f: any) => {
+     grouped[f.value] = []; // empty until selected
+     });
     // optional: auto-reset dropdown + events
     setGroupedEvents({});
     setSelectedEventKey("");
