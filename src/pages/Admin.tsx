@@ -380,15 +380,13 @@ const deleteEventRows = async () => {
     </option>
   ))}
 </select>
-                </div>
-const selectedEventLabel =
-  eventFiles.find((f: any) => f.value === selectedEventKey)?.label || "Select Event";
-                  
+</div>
                   {selectedEvent?.members?.length > 0 && (
                     <Card className="mb-6">
                       <CardContent className="p-6">
                           <div className="flex justify-between items-start mb-4">
                           <div>
+                            const selectedEventLabel = eventFiles.find((f: any) => f.value === selectedEventKey)?.label || "Select Event";
                             <h2 className="text-xl font-bold">
                               {selectedEventLabel}
                             </h2>
