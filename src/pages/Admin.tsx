@@ -73,6 +73,11 @@ const Admin = () => {
         }
       : null;
 
+  const selectedEventLabel =
+  groupedEvents[selectedEventKey]?.[0]?.eventName
+    ? `${groupedEvents[selectedEventKey][0].eventName} ${groupedEvents[selectedEventKey][0].eventYear}`
+    : "Select Event";
+  
   const rows = memberData.map((row) =>
     Object.values({
       ...row,
@@ -146,22 +151,13 @@ const fetchEventData = async (fileKey: string) => {
     const res = await fetch(`/api/events/${fileKey}`);
     const data = await res.json();
 
-    //setGroupedEvents({[fileKey]: Array.isArray(data) ? data : []});
-    const currentEventData = groupedEvents[selectedEventKey];
-
     setGroupedEvents((prev) => ({
       ...prev,
       [fileKey]: Array.isArray(data) ? data : [],
     }));
-    
-    const selectedEventLabel =
-      currentEventData?.[0]?.eventName
-         ? `${currentEventData[0].eventName} ${currentEventData[0].eventYear}`
-         : "Select Event";
-    
+
   } catch (err) {
     console.error("fetchEventData error:", err);
-    setGroupedEvents({});
   }
 };
 
