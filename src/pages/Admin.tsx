@@ -148,7 +148,13 @@ const fetchEventData = async (fileKey: string) => {
 
     console.log("EVENT RAW DATA:", data); // 🔥 DEBUG
 
-    setGroupedEvents({[fileKey]: Array.isArray(data) ? data : []});
+    //setGroupedEvents({[fileKey]: Array.isArray(data) ? data : []});
+    const currentEventData = groupedEvents[selectedEventKey];
+
+    const selectedEventLabel =
+      currentEventData?.[0]?.eventName
+         ? `${currentEventData[0].eventName} ${currentEventData[0].eventYear}`
+         : "Select Event";
     
   } catch (err) {
     console.error("fetchEventData error:", err);
@@ -292,9 +298,6 @@ const deleteEventRows = async () => {
       children,
     };
   });
-  const selectedEventLabel =
-  eventFiles.find((f: any) => f.value === selectedEventKey)?.label ||
-  "Select Event";
   
   return (
     <div className="min-h-screen flex flex-col">
