@@ -402,16 +402,16 @@ const deleteEventRows = async () => {
                           </div>
 
 
-                          <Button
-                            onClick={() =>
-                              downloadCSV(
-                                selectedEvent?.members || [],
-                                `${selectedEvent?.eventName || "event"}_${selectedEvent?.eventYear || "unknown"}.csv`
-                              )
-                            }
-                          >
-                            Download CSV
-                          </Button>
+<Button
+  onClick={() =>
+    downloadCSV(
+      selectedEvent?.members || [],
+      `${eventFiles.find(f => f.value === selectedEventKey)?.label || "event"}.csv`
+    )
+  }
+>
+  Download CSV
+</Button>
                         </div>
 
                         {/* ACTION BUTTONS */}
