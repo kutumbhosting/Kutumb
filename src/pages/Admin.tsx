@@ -370,9 +370,13 @@ const deleteEventRows = async () => {
                     >
                       <option value="">-- Choose Event --</option>
 
-                      {Object.entries(groupedEvents).map(([key, events]: any) => {
-                        const first = events?.[0] || {};
-                        if (!first) return null;
+                      {eventFiles.map((file: any) => {
+  return (
+    <option key={file.value} value={file.value}>
+      {file.label}
+    </option>
+  );
+})}
 
                         return (
                           <option key={key} value={key}>
