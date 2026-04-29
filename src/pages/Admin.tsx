@@ -121,7 +121,6 @@ const Admin = () => {
   }
 }, [selectedEventKey]);
 
-  // ================= FETCH DATA =================
 // ================= EVENT FILES =================
 const fetchEventFiles = async () => {
   try {
