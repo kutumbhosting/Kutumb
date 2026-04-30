@@ -40,7 +40,7 @@ const Admin = () => {
     date: "",
     time: "",
     location: "",
-    spots: "",
+    capacity: "",
     description: "",
     isActive: true,
   });
@@ -782,7 +782,7 @@ const deleteEventRows = async () => {
                               <th className="p-2 text-left">Date</th>
                               <th className="p-2 text-left">Time</th>
                               <th className="p-2 text-left">Location</th>
-                              <th className="p-2 text-left">Spots</th>
+                              <th className="p-2 text-left">Capacity</th>
                               <th className="p-2 text-left">Description</th>
                               <th className="p-2 text-left">Flyer</th>
                               <th className="p-2 text-left">Action</th>
@@ -875,14 +875,14 @@ const deleteEventRows = async () => {
         />
       </td>
 
-      {/* SPOTS */}
+      {/* CAPACITY */}
       <td className="p-2">
         <Input
-          value={event.spots}
+          value={event.capacity}
           onChange={(e) =>
             setUpcomingEvents((prev) =>
               prev.map((ev, i) =>
-                i === index ? { ...ev, spots: e.target.value } : ev
+                i === index ? { ...ev, capacity: e.target.value } : ev
               )
             )
           }
@@ -1097,10 +1097,10 @@ const deleteEventRows = async () => {
                     />
 
                     <Input
-                      placeholder="Spots"
-                      value={newEvent.spots}
+                      placeholder="capacity"
+                      value={newEvent.capacity}
                       onChange={(e) =>
-                        setNewEvent({ ...newEvent, spots: e.target.value })
+                        setNewEvent({ ...newEvent, capacity: e.target.value })
                       }
                     />
 
@@ -1190,7 +1190,7 @@ const deleteEventRows = async () => {
         date: "",
         time: "",
         location: "",
-        spots: "",
+        capacity: "",
         description: "",
         isActive: true,
       });
