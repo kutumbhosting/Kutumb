@@ -55,7 +55,7 @@ const Events = () => {
 
       // ✅ EXTRA FORCE (fixes jumping to card)
       window.scrollBy({
-        top: -120, // adjust based on navbar
+        top: -20, // adjust based on navbar
         behavior: "smooth",
       });
     }
