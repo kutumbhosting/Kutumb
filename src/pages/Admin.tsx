@@ -33,6 +33,7 @@ const Admin = () => {
 
   const [eventActionMessage, setEventActionMessage] = useState("");
   const [newFlyer, setNewFlyer] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const [newEvent, setNewEvent] = useState({
     title: "",
@@ -123,6 +124,19 @@ const Admin = () => {
     fetchEventData(selectedEventKey);
   }
 }, [selectedEventKey]);
+
+  useEffect(() => {
+  if (!newFlyer) {
+    setPreviewUrl(null);
+    return;
+  }
+
+  const url = URL.createObjectURL(newFlyer);
+  setPreviewUrl(url);
+
+  return () => URL.revokeObjectURL(url);
+}, [newFlyer]);
+
 
 // ================= EVENT FILES =================
 const fetchEventFiles = async () => {
@@ -889,49 +903,73 @@ const deleteEventRows = async () => {
         />
       </td>
 
-      {/* FLYER UPLOAD (FIXED LOGIC) */}
-      <td className="p-2">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={async (e) => {
-            e.stopPropagation();
+{/* FLYER */}
+<td className="p-2 space-y-2">
+  <input
+    type="file"
+    accept="image/*"
+    onChange={async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-            const file = e.target.files?.[0];
-            if (!file) return;
+      const formData = new FormData();
+      formData.append("flyer", file);
+      formData.append("title", event.title);
+      formData.append("event", JSON.stringify(event));
+      formData.append("eventYear", event.date?.split("-")[0]);
 
-            const formData = new FormData();
-            formData.append("flyer", file);
-            formData.append("title", event.title);
-            formData.append("eventYear", event.date?.slice(0, 4));
+      try {
+        const res = await fetch(
+          "http://localhost:5000/api/upload-flyer",
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
 
-            const res = await fetch("/api/upload-flyer", {
-              method: "POST",
-              body: formData,
-            });
+        const data = await res.json();
 
-            const data = await res.json();
+        if (!res.ok) {
+          toast({
+            title: "Upload Failed",
+            description: data.message || "Something went wrong",
+            variant: "destructive",
+          });
+          return;
+        }
 
-            if (!res.ok) {
-              throw new Error(data.message || "Upload failed");
-            }
+        // ONLY backend state update
+        setUpcomingEvents((prev) =>
+          prev.map((ev) =>
+            ev.title === event.title
+              ? { ...ev, flyerImage: data.fileName }
+              : ev
+          )
+        );
 
-            toast({
-              title: "Success 🎉",
-              description: data.message || "Flyer uploaded successfully",
-            });
+        toast({
+          title: "Success 🎉",
+          description: "Flyer uploaded successfully",
+        });
+      } catch (err) {
+        toast({
+          title: "Error",
+          description: "Upload failed",
+          variant: "destructive",
+        });
+      }
+    }}
+  />
 
-            fetchUpcomingEvents();
-          }}
-        />
-
-        {event.flyerImage && (
-          <img
-            src={`eventflyer/${event.flyerImage}`}
-            className="mt-2 max-h-[60px] rounded"
-          />
-        )}
-      </td>
+  {/* ONLY BACKEND IMAGE */}
+  {event.flyerImage && (
+    <img
+      src={`http://localhost:5000/eventflyer/${event.flyerImage}?t=${Date.now()}`}
+      className="mt-2 max-h-[80px] rounded"
+      alt="flyer"
+    />
+  )}
+</td>
 
       {/* ACTIONS */}
       <td className="p-2 flex gap-2">
@@ -1072,8 +1110,10 @@ const deleteEventRows = async () => {
       if (newFlyer) {
         const formData = new FormData();
         formData.append("flyer", newFlyer);
-        formData.append("title", newEvent.title);
-        formData.append("eventYear", newEvent.date?.slice(0, 4));
+        // ✅ single source of truth
+        formData.append("event", JSON.stringify({title: newEvent.title, eventYear: newEvent.date?.split("-")[0],}));
+        //formData.append("title", newEvent.title);
+        //formData.append("eventYear", newEvent.date?.slice(0, 4));
 
         const flyerRes = await fetch(
           "/api/upload-flyer",
