@@ -44,25 +44,25 @@ const Events = () => {
 
   // ✅ SCROLL FIX (THIS IS THE IMPORTANT PART)
   if (location.state.scrollTo === "registration") {
-    const timer = setTimeout(() => {
-      const el = document.getElementById("registration-form");
+  const timer = setTimeout(() => {
+    const el = document.getElementById("registration-form");
 
-      if (el) {
-        const yOffset = -100; // adjust if navbar height differs
-        const y =
-          el.getBoundingClientRect().top +
-          window.pageYOffset +
-          yOffset;
+    if (el) {
+      el.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
 
-        window.scrollTo({
-          top: y,
-          behavior: "smooth",
-        });
-      }
-    }, 300); // ⬅️ IMPORTANT delay
+      // ✅ EXTRA FORCE (fixes jumping to card)
+      window.scrollBy({
+        top: -120, // adjust based on navbar
+        behavior: "smooth",
+      });
+    }
+  }, 500); // ⬅️ increase delay
 
-    return () => clearTimeout(timer);
-  }
+  return () => clearTimeout(timer);
+}
 }, [location.state]);
   
 
