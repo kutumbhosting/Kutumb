@@ -33,28 +33,29 @@ const Events = () => {
   });
 
   useEffect(() => {
-  if (location.state?.scrollTo === "registration") {
+  if (state?.eventName || state?.eventDate) {
+    setFormData((prev) => ({
+      ...prev,
+      eventName: state.eventName || "",
+      eventDate: state.eventDate || "",
+    }));
+  }
+
+  if (state?.scrollTo === "registration") {
     setTimeout(() => {
       const el = document.getElementById("registration-form");
 
       if (el) {
-        const navbarOffset = 90;
-        const extraPadding = 80; // 👈 adjust this
-
-        const top =
-          el.getBoundingClientRect().top +
-          window.pageYOffset -
-          navbarOffset +
-          extraPadding;
+        const y = el.getBoundingClientRect().top + window.pageYOffset;
 
         window.scrollTo({
-          top,
+          top: y - 90,
           behavior: "smooth",
         });
       }
-    }, 300); // IMPORTANT: give tabs time to render
+    }, 300);
   }
-}, [location]);
+}, [state]);
 
 useEffect(() => {
   fetchUpcomingEvents();
