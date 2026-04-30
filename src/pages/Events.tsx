@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,38 +34,28 @@ const Events = () => {
   });
 
   useEffect(() => {
-  if (!location.state) return;
+    if (location.state) {
+      setFormData((prev) => ({
+        ...prev,
+        eventName: location.state.eventName || "",
+        eventDate: location.state.eventDate || "",
+      }));
 
-  // ✅ Auto-fill form
-  setFormData((prev) => ({
-    ...prev,
-    eventName: location.state.eventName || "",
-    eventDate: location.state.eventDate || "",
-  }));
+      if (location.state.scrollTo === "registration") {
+        setTimeout(() => {
+          const el = document.getElementById("registration-form");
+          if (el) {
+            const y = el.getBoundingClientRect().top + window.pageYOffset;
 
-  // ✅ SCROLL FIX (THIS IS THE IMPORTANT PART)
-  if (location.state.scrollTo === "registration") {
-  const timer = setTimeout(() => {
-    const el = document.getElementById("registration-form");
-
-    if (el) {
-      el.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-
-      // ✅ EXTRA FORCE (fixes jumping to card)
-      window.scrollBy({
-        top: -20, // adjust based on navbar
-        behavior: "smooth",
-      });
+            window.scrollTo({
+              top: y - 90,
+              behavior: "smooth",
+            });
+          }
+        }, 200);
+      }
     }
-  }, 500); // ⬅️ increase delay
-
-  return () => clearTimeout(timer);
-}
-}, [location.state]);
-  
+  }, [location]);
 
 useEffect(() => {
   fetchUpcomingEvents();
@@ -492,5 +483,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
 };
 
 export default Events;
+
+
 
 
