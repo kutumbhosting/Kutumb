@@ -6,6 +6,10 @@ import heroImage from "@/assets/hero-community.jpg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { useEffect } from "react";
+
+const location = useLocation();
 
 const fetchUpcomingEvents = async () => {
   try {
@@ -16,6 +20,16 @@ const fetchUpcomingEvents = async () => {
     console.error("Failed to load events", err);
   }
 };
+
+useEffect(() => {
+  if (location.state?.scrollTo === "registration") {
+    const el = document.getElementById("registration-form");
+
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+}, [location]);
 
 const Home = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
