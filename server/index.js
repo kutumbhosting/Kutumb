@@ -704,6 +704,61 @@ app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
   }
 });
 
+/* -----------------------------
+   ✅ DELETE FLYER + LINK
+----------------------------- */
+
+app.post("/api/delete-flyer", (req, res) => {
+  try {
+    const { title, fileName } = req.body;
+
+    if (!title || !fileName) {
+      return res.status(400).json({ message: "Missing data" });
+    }
+
+    // -----------------------------
+    // 🗑 DELETE FILE FROM FOLDER
+    // -----------------------------
+    const filePath = path.join(FLYER_DIR, fileName);
+
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // -----------------------------
+    // 🧹 REMOVE FROM JSON
+    // -----------------------------
+    let data = [];
+
+    if (fs.existsSync(UPCOMING_EVENTS_FILE)) {
+      data = JSON.parse(
+        fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]"
+      );
+    }
+
+    data = data.map((event) => {
+      if (event.title === title) {
+        return {
+          ...event,
+          flyerImage: "", // ✅ clear only
+        };
+      }
+      return event;
+    });
+
+    fs.writeFileSync(
+      UPCOMING_EVENTS_FILE,
+      JSON.stringify(data, null, 2)
+    );
+
+    return res.json({ message: "Flyer deleted successfully" });
+
+  } catch (err) {
+    console.error("DELETE FLYER ERROR:", err);
+    return res.status(500).json({ message: "Delete failed" });
+  }
+});
+
 
 
 /* ----------------------------- 
