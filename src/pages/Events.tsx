@@ -33,6 +33,8 @@ const Events = () => {
   });
 
   useEffect(() => {
+  const state = location.state as any;
+
   if (state?.eventName || state?.eventDate) {
     setFormData((prev) => ({
       ...prev,
@@ -55,7 +57,7 @@ const Events = () => {
       }
     }, 300);
   }
-}, [state]);
+}, [location.state]);
 
 useEffect(() => {
   fetchUpcomingEvents();
