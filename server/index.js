@@ -197,28 +197,54 @@ app.post("/api/events", (req, res) => {
     return res.status(400).json({ message: "Missing event or email" });
   }
 
-  // ✅ Create safe event ID
   const eventId = slugify(eventName);
-  const eventYear = year(eventDate); 
+  const eventYear = year(eventDate);
 
-  // ✅ File path
   const fileName = `${eventId}-${eventYear}.json`;
   const filePath = path.join(BASE_DIR, fileName);
 
   const data = readFile(filePath);
 
+  // prevent duplicate
   const exists = data.some(
-    (r) => r.email?.toLowerCase() === email.toLowerCase() && 
-           r.eventYear === eventYear
+    (r) => r.email?.toLowerCase() === email.toLowerCase()
   );
 
   if (exists) {
     return res.status(409).json({ message: "Already registered" });
   }
 
+  // 🔥 CAPACITY CHECK (IMPORTANT)
+  let eventMeta = null;
+
+  if (fs.existsSync(UPCOMING_EVENTS_FILE)) {
+    const events = JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]");
+
+    eventMeta = events.find(
+      (e) =>
+        e.title?.toLowerCase() === eventName.toLowerCase() &&
+        e.eventYear?.toString() === eventYear
+    );
+  }
+
+  const capacity = Number(eventMeta?.capacity || 0);
+
+  const used = data.reduce(
+    (sum, r) => sum + (r.adults || 0) + (r.children || 0),
+    0
+  );
+
+  const requested = (adults || 0) + (children || 0);
+
+  if (used + requested > capacity) {
+    return res.status(400).json({
+      message: "Not enough spots available",
+    });
+  }
+
   data.push({
     eventName,
-    eventYear, 
+    eventYear,
     name,
     email,
     phone,
@@ -523,27 +549,55 @@ app.post("/api/members/update", (req, res) => {
 
 app.get("/api/upcoming-events", (req, res) => {
   try {
-    const allEvents = fs.existsSync(UPCOMING_EVENTS_FILE)
+    const debug = req.query.debug === "true";
+
+    const events = fs.existsSync(UPCOMING_EVENTS_FILE)
       ? JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]")
       : [];
 
-    const eventsWithFlyerCheck = allEvents.map((event) => {
-      const flyerPath = path.join(
-        DATA_ROOT,
-        "eventflyer",
-        event.flyerImage || ""
-      );
+    const enriched = events.map((event) => {
+      const eventId = slugify(event.title);
+      const eventYear =
+        event.eventYear || (event.date ? String(year(event.date)) : "unknown");
+
+      const fileName = `${eventId}-${eventYear}.json`;
+
+      const registrationFile = path.join(BASE_DIR, fileName);
+
+      const exists = fs.existsSync(registrationFile);
+
+      const registrations = exists ? readFile(registrationFile) : [];
+
+      const totalRegistered = registrations.reduce((sum, r) => {
+        return sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0);
+      }, 0);
+
+      const capacity = Number(event.capacity || 0);
+
+      const availableSpots = Math.max(capacity - totalRegistered, 0);
 
       return {
         ...event,
-        hasFlyer: !!event.flyerImage && fs.existsSync(flyerPath),
+        capacity,
+        registrationsCount: totalRegistered,
+        availableSpots,
+
+        // 🐞 DEBUG INFO (ONLY WHEN DEBUG=true)
+        ...(debug && {
+          _debug: {
+            fileName,
+            filePath: registrationFile,
+            fileExists: exists,
+            registrationsCount: registrations.length,
+          },
+        }),
       };
     });
 
-    return res.json(eventsWithFlyerCheck);
+    res.json(enriched);
   } catch (err) {
     console.error("UPCOMING EVENTS ERROR:", err);
-    return res.json([]);
+    res.status(500).json([]);
   }
 });
 
