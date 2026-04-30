@@ -33,28 +33,28 @@ const Events = () => {
   });
 
   useEffect(() => {
-    if (location.state) {
-      setFormData((prev) => ({
-        ...prev,
-        eventName: location.state.eventName || "",
-        eventDate: location.state.eventDate || "",
-      }));
+  if (location.state?.scrollTo === "registration") {
+    setTimeout(() => {
+      const el = document.getElementById("registration-form");
 
-      if (location.state.scrollTo === "registration") {
-        setTimeout(() => {
-          const el = document.getElementById("registration-form");
-          if (el) {
-            const y = el.getBoundingClientRect().top + window.pageYOffset;
+      if (el) {
+        const navbarOffset = 90;
+        const extraPadding = 80; // 👈 adjust this
 
-            window.scrollTo({
-              top: y - 90+50,
-              behavior: "smooth",
-            });
-          }
-        }, 200);
+        const top =
+          el.getBoundingClientRect().top +
+          window.pageYOffset -
+          navbarOffset +
+          extraPadding;
+
+        window.scrollTo({
+          top,
+          behavior: "smooth",
+        });
       }
-    }
-  }, [location]);
+    }, 300); // IMPORTANT: give tabs time to render
+  }
+}, [location]);
 
 useEffect(() => {
   fetchUpcomingEvents();
@@ -244,16 +244,22 @@ setTimeout(() => setSubmitMessage(""), 5000);
               <Button
                 className="w-full btn-hero mt-4"
                 onClick={() => {
-                  setFormData({
-                    eventName: event.title,
-                    eventDate: event.date,
-                    name: "",
-                    email: "",
-                    phone: "",
-                    comments: "",
-                    adults: 0,
-                    children: 0,
-                  });
+  setFormData({
+    eventName: event.title,
+    eventDate: event.date,
+    name: "",
+    email: "",
+    phone: "",
+    comments: "",
+    adults: 0,
+    children: 0,
+  });
+
+  setTimeout(() => {
+    document.getElementById("registration-form")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 0);
+}}
               >
                 Register for This Event
               </Button>
