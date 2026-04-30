@@ -920,7 +920,7 @@ const deleteEventRows = async () => {
 
       try {
         const res = await fetch(
-          "http://localhost:5000/api/upload-flyer",
+          "/api/upload-flyer",
           {
             method: "POST",
             body: formData,
@@ -964,7 +964,7 @@ const deleteEventRows = async () => {
   {/* ONLY BACKEND IMAGE */}
   {event.flyerImage && (
     <img
-      src={`http://localhost:5000/eventflyer/${event.flyerImage}?t=${Date.now()}`}
+      src={`/eventflyer/${event.flyerImage}?t=${Date.now()}`}
       className="mt-2 max-h-[80px] rounded"
       alt="flyer"
     />
