@@ -9,8 +9,6 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
-const location = useLocation();
-
 const fetchUpcomingEvents = async () => {
   try {
     const res = await fetch("/api/upcoming-events"); // ✅ IMPORTANT (no localhost)
@@ -20,16 +18,6 @@ const fetchUpcomingEvents = async () => {
     console.error("Failed to load events", err);
   }
 };
-
-useEffect(() => {
-  if (location.state?.scrollTo === "registration") {
-    const el = document.getElementById("registration-form");
-
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-}, [location]);
 
 const Home = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
@@ -53,6 +41,17 @@ const Home = () => {
     { icon: Calendar, value: "100+", label: "Volunteer Hours" },
     { icon: TrendingUp, value: "Growing", label: "Social Impact" },
   ];
+
+  const location = useLocation();
+useEffect(() => {
+  if (location.state?.scrollTo === "registration") {
+    const el = document.getElementById("registration-form");
+
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }
+}, [location]);
 
   return (
     <div className="min-h-screen flex flex-col">
