@@ -7,7 +7,6 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useEffect } from "react";
 
 const fetchUpcomingEvents = async () => {
   try {
@@ -43,15 +42,15 @@ const Home = () => {
   ];
 
   const location = useLocation();
-useEffect(() => {
-  if (location.state?.scrollTo === "registration") {
-    const el = document.getElementById("registration-form");
+  useEffect(() => {
+    if (location.state?.scrollTo === "registration") {
+      const el = document.getElementById("registration-form");
 
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     }
-  }
-}, [location]);
+  }, [location]);
 
   return (
     <div className="min-h-screen flex flex-col">
