@@ -1,6 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,28 +33,38 @@ const Events = () => {
   });
 
   useEffect(() => {
-    if (location.state) {
-      setFormData((prev) => ({
-        ...prev,
-        eventName: location.state.eventName || "",
-        eventDate: location.state.eventDate || "",
-      }));
+  if (!location.state) return;
 
-      if (location.state.scrollTo === "registration") {
-        setTimeout(() => {
-          const el = document.getElementById("registration-form");
-          if (el) {
-            const y = el.getBoundingClientRect().top + window.pageYOffset;
+  // ✅ Auto-fill form
+  setFormData((prev) => ({
+    ...prev,
+    eventName: location.state.eventName || "",
+    eventDate: location.state.eventDate || "",
+  }));
 
-            window.scrollTo({
-              top: y - 90,
-              behavior: "smooth",
-            });
-          }
-        }, 200);
+  // ✅ SCROLL FIX (THIS IS THE IMPORTANT PART)
+  if (location.state.scrollTo === "registration") {
+    const timer = setTimeout(() => {
+      const el = document.getElementById("registration-form");
+
+      if (el) {
+        const yOffset = -100; // adjust if navbar height differs
+        const y =
+          el.getBoundingClientRect().top +
+          window.pageYOffset +
+          yOffset;
+
+        window.scrollTo({
+          top: y,
+          behavior: "smooth",
+        });
       }
-    }
-  }, [location]);
+    }, 300); // ⬅️ IMPORTANT delay
+
+    return () => clearTimeout(timer);
+  }
+}, [location.state]);
+  
 
 useEffect(() => {
   fetchUpcomingEvents();
