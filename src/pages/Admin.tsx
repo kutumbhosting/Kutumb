@@ -26,15 +26,13 @@ const Admin = () => {
   const [selectedMemberRows, setSelectedMemberRows] = useState<string[]>([]);
   const [editingMember, setEditingMember] = useState<any | null>(null);
   const [selectedFlyerEvent, setSelectedFlyerEvent] = useState<any | null>(null);
+  const [eventFiles, setEventFiles] = useState<any[]>([]);
 
   const [selectedEventKey, setSelectedEventKey] = useState<string>("");
+  const [editingEvent, setEditingEvent] = useState<any | null>(null);
 
   const [eventActionMessage, setEventActionMessage] = useState("");
-  const [editingEvent, setEditingEvent] = useState<any | null>(null);
-  const [eventFiles, setEventFiles] = useState<any[]>([]);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [newFlyer, setNewFlyer] = useState<File | null>(null);
-
 
   const [newEvent, setNewEvent] = useState({
     title: "",
@@ -75,6 +73,9 @@ const Admin = () => {
         }
       : null;
 
+  const selectedEventLabel =
+  eventFiles.find((f) => f.value === selectedEventKey)?.label || "Select Event";
+  
   const rows = memberData.map((row) =>
     Object.values({
       ...row,
@@ -106,7 +107,8 @@ const Admin = () => {
     try {
       const res = await fetch("/api/upcoming-events");
       const data = await res.json();
-      setUpcomingEvents(data);
+      setUpcomingEvents(Array.isArray(data) ? data : data?.events || []);
+      
     } catch (err) {
       console.error(err);
     }
@@ -116,91 +118,113 @@ const Admin = () => {
     fetchUpcomingEvents();
   }, []);
 
-
-useEffect(() => {
-  if (!newFlyer) {
-    setPreviewUrl(null);
-    return;
+  useEffect(() => {
+  if (selectedEventKey) {
+    fetchEventData(selectedEventKey);
   }
+}, [selectedEventKey]);
 
-  const url = URL.createObjectURL(newFlyer);
-  setPreviewUrl(url);
-
-  return () => URL.revokeObjectURL(url);
-}, [newFlyer]);
-
-  // ================= FETCH DATA =================
-
-const fetchData = async () => {
+// ================= EVENT FILES =================
+const fetchEventFiles = async () => {
   try {
-    const filesRes = await fetch("/api/event-files");
-    const files = await filesRes.json();
+    const res = await fetch("/api/event-files");
+    if (!res.ok) throw new Error("Failed to load event files");
 
-    const allEvents = await Promise.all(
-      files.map(async (f) => {
-        const res = await fetch(
-          `/api/events/${f.value}`
-        );
-        return await res.json();
-      })
-    );
+    const data = await res.json();
+    setEventFiles(data || []);
+  } catch (err) {
+    console.error("fetchEventFiles error:", err);
+    setEventFiles([]);
+  }
+};
 
-    const events = allEvents.flat();
+// ================= EVENT DATA (FROM FILE) =================
+const fetchEventData = async (fileKey: string) => {
+  try {
+    if (!fileKey) {
+      setGroupedEvents({});
+      return;
+    }
 
-    const membersRes = await fetch("/api/members");
+    const res = await fetch(`/api/events/${fileKey}`);
+    const data = await res.json();
+
+    setGroupedEvents((prev) => ({
+      ...prev,
+      [fileKey]: Array.isArray(data) ? data : [],
+    }));
+
+  } catch (err) {
+    console.error("fetchEventData error:", err);
+  }
+};
+
+ const fetchData = async () => {
+  try {
+    const [membersRes, filesRes] = await Promise.all([
+      fetch("/api/members"),
+      fetch("/api/event-files"),
+    ]);
+
+    if (!membersRes.ok || !filesRes.ok) {
+      throw new Error("API failed");
+    }
+
     const members = await membersRes.json();
+    const eventFiles = await filesRes.json();
 
-    const grouped = events.reduce((acc: any, item: any) => {
-      const key = item.eventName + "_" + item.eventYear;
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(item);
-      return acc;
-    }, {});
-
-    setGroupedEvents(grouped);
-    setMemberData(members);
+    setMemberData(members || []);
+    setEventFiles(eventFiles || []);
+    
+    const grouped: Record<string, any[]> = {};
+    (eventFiles || []).forEach((f: any) => {
+     grouped[f.value] = []; // empty until selected
+     });
+    // optional: auto-reset dropdown + events
+    setGroupedEvents({});
+    setSelectedEventKey("");
   } catch (err) {
     console.error("fetchData error:", err);
   }
 };
 
-  const deleteMemberRows = async () => {
-    await fetch("/api/members/delete", {
+const deleteMemberRows = async () => {
+  await fetch("/api/members/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emails: selectedMemberRows }),
+  });
+
+  setSelectedMemberRows([]);
+  fetchData();
+};
+
+const deleteEventRows = async () => {
+  try {
+    const res = await fetch("/api/events/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ emails: selectedMemberRows }),
+      body: JSON.stringify({
+        eventName: selectedEvent?.eventName,
+        eventYear: selectedEvent?.eventYear,
+        emails: selectedEventRows,
+      }),
     });
 
-    setSelectedMemberRows([]);
-    fetchData();
-  };
+    const data = await res.json();
 
-  const deleteEventRows = async () => {
-    try {
-      const res = await fetch("/api/events/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventName: selectedEvent?.eventName,
-          eventYear: selectedEvent?.eventYear,
-          emails: selectedEventRows,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "Delete failed");
-      }
-
-      setEventActionMessage(`✅ ${data.message || "Deleted successfully"}`);
-
-      setSelectedEventRows([]);
-      fetchData();
-    } catch (err: any) {
-      setEventActionMessage(`❌ ${err.message}`);
+    if (!res.ok) {
+      throw new Error(data.message || "Delete failed");
     }
-  };
+
+    setEventActionMessage(`✅ ${data.message || "Deleted successfully"}`);
+
+    setSelectedEventRows([]);
+    fetchData();
+  } catch (err: any) {
+    setEventActionMessage(`❌ ${err.message}`);
+  }
+};
 
   // ================= LOGIN =================
   const handleLogin = (e: React.FormEvent) => {
@@ -271,7 +295,7 @@ const fetchData = async () => {
       children,
     };
   });
-
+  
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -344,35 +368,30 @@ const fetchData = async () => {
                 {/* ✅ EVENTS TAB FIXED */}
                 <TabsContent value="events">
 
-                  <div className="mb-6 max-w-md">
+                <div className="mb-6 max-w-md">
                     <label className="text-sm font-medium">Select Event</label>
                     <select
-                      className="w-full mt-2 p-2 border rounded"
-                      value={selectedEventKey}
-                      onChange={(e) => setSelectedEventKey(e.target.value)}
-                    >
-                      <option value="">-- Choose Event --</option>
+  className="w-full mt-2 p-2 border rounded"
+  value={selectedEventKey}
+  onChange={(e) => setSelectedEventKey(e.target.value)}
+>
+  <option value="">-- Choose Event --</option>
 
-                      {Object.entries(groupedEvents).map(([key, events]: any) => {
-                        const first = events?.[0];
-                        if (!first) return null;
-
-                        return (
-                          <option key={key} value={key}>
-                            {first.eventName} {first.eventYear}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
+  {eventFiles.map((file: any) => (
+    <option key={file.value} value={file.value}>
+      {file.label}
+    </option>
+  ))}
+</select>
+</div>
                   {selectedEvent?.members?.length > 0 && (
                     <Card className="mb-6">
                       <CardContent className="p-6">
-                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex justify-between items-start mb-4">
                           <div>
+    
                             <h2 className="text-xl font-bold">
-                              {selectedEvent.eventName} {selectedEvent.eventYear}
+                              {selectedEventLabel}
                             </h2>
 
                             <div className="flex gap-4 text-sm text-muted-foreground mt-1">
@@ -382,19 +401,21 @@ const fetchData = async () => {
                             </div>
                           </div>
 
-                          <Button
-                            onClick={() =>
-                              downloadCSV(
-                                selectedEvent?.members || [],
-                                `${selectedEvent?.eventName || "event"}_${selectedEvent?.eventYear || "unknown"}.csv`
-                              )
-                            }
-                          >
-                            Download CSV
-                          </Button>
+
+<Button
+  onClick={() =>
+    downloadCSV(
+      selectedEvent?.members || [],
+      `${selectedEventKey || "event"}.csv`
+      //`${selectedEventLabel}` || "event"}.csv`
+    )
+  }
+>
+  Download CSV
+</Button>
                         </div>
 
-{/* ACTION BUTTONS */}
+                        {/* ACTION BUTTONS */}
 <div className="flex gap-2 mb-3">
   {selectedEventRows.length > 0 && (
     <Button
@@ -445,7 +466,7 @@ const fetchData = async () => {
     </thead>
 
     <tbody>
-      {selectedEvent?.members?.map((item, i) => (
+      {groupedEvents[selectedEventKey]?.map((item, i) => (
         <tr key={i} className="border-b">
           <td className="p-2">
             <input
@@ -572,6 +593,7 @@ const fetchData = async () => {
     </CardContent>
   </Card>
 )}
+
                       </CardContent>
                     </Card>
                   )}
@@ -737,243 +759,217 @@ const fetchData = async () => {
                         </Button>
                       </div>
 
-<div className="overflow-x-auto">
-  <table className="w-full text-sm">
-    <thead>
-      <tr className="border-b">
-        <th className="p-2 text-left">Active</th>
-        <th className="p-2 text-left">Title</th>
-        <th className="p-2 text-left">Date</th>
-        <th className="p-2 text-left">Time</th>
-        <th className="p-2 text-left">Location</th>
-        <th className="p-2 text-left">Spots</th>
-        <th className="p-2 text-left">Description</th>
-        <th className="p-2 text-left">Flyer</th>
-        <th className="p-2 text-left">Action</th>
-      </tr>
-    </thead>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="p-2 text-left">Active</th>
+                              <th className="p-2 text-left">Title</th>
+                              <th className="p-2 text-left">Date</th>
+                              <th className="p-2 text-left">Time</th>
+                              <th className="p-2 text-left">Location</th>
+                              <th className="p-2 text-left">Spots</th>
+                              <th className="p-2 text-left">Description</th>
+                              <th className="p-2 text-left">Flyer</th>
+                              <th className="p-2 text-left">Action</th>
+                            </tr>
+                          </thead>
 
-    <tbody>
-      {upcomingEvents.map((event, index) => (
-        <tr key={index} className="border-b">
+<tbody>
+  {upcomingEvents.map((event, index) => (
+    <tr
+      key={index}
+      className="border-b cursor-pointer"
+    >
+      {/* ACTIVE */}
+      <td className="p-2 text-center">
+        <input
+          type="checkbox"
+          checked={!!event.isActive}
+          onChange={async (e) => {
+            e.stopPropagation();
 
-          {/* ACTIVE */}
-          <td className="p-2 text-center">
-            <input
-              type="checkbox"
-              checked={!!event.isActive}
-              onChange={async (e) => {
-                const updated = {
-                  ...event,
-                  isActive: e.target.checked,
-                };
+            const updated = {
+              ...event,
+              isActive: e.target.checked,
+            };
 
-                await fetch("/api/upcoming-events/update", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(updated),
-                });
+            await fetch("/api/upcoming-events/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(updated),
+            });
 
-                fetchUpcomingEvents();
-              }}
-            />
-          </td>
+            fetchUpcomingEvents();
+          }}
+        />
+      </td>
 
-          {/* TITLE */}
-          <td className="p-2">
-            <Input
-              value={event.title}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                   prev.map((ev) =>
-                    ev.title === event.title
-                      ? { ...ev, flyerImage: data.filename } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* DATE */}
-          <td className="p-2">
-            <Input
-              value={event.date}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, date: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* TIME */}
-          <td className="p-2">
-            <Input
-              value={event.time}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, time: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* LOCATION */}
-          <td className="p-2">
-            <Input
-              value={event.location}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, location: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* SPOTS */}
-          <td className="p-2">
-            <Input
-              value={event.spots}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, spots: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* DESCRIPTION */}
-          <td className="p-2">
-            <Input
-              value={event.description}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, description: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-{/* FLYER */}
-<td className="p-2 space-y-2">
-  <input
-    type="file"
-    accept="image/*"
-    onChange={async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      const formData = new FormData();
-      formData.append("flyer", file);
-      formData.append("title", event.title);
-      formData.append("event", JSON.stringify(event));
-      formData.append("eventYear", event.date?.split("-")[0]);
-
-      try {
-        const res = await fetch(
-          "/api/upload-flyer",
-          {
-            method: "POST",
-            body: formData,
+      {/* TITLE */}
+      <td className="p-2">
+        <Input
+          value={event.title}
+          onChange={(e) =>
+            setUpcomingEvents((prev) =>
+              prev.map((ev, i) =>
+                i === index ? { ...ev, title: e.target.value } : ev
+              )
+            )
           }
-        );
+        />
+      </td>
 
-        const data = await res.json();
+      {/* DATE */}
+      <td className="p-2">
+        <Input
+          value={event.date}
+          onChange={(e) =>
+            setUpcomingEvents((prev) =>
+              prev.map((ev, i) =>
+                i === index ? { ...ev, date: e.target.value } : ev
+              )
+            )
+          }
+        />
+      </td>
 
-        if (!res.ok) {
-          toast({
-            title: "Upload Failed",
-            description: data.message || "Something went wrong",
-            variant: "destructive",
-          });
-          return;
-        }
+      {/* TIME */}
+      <td className="p-2">
+        <Input
+          value={event.time}
+          onChange={(e) =>
+            setUpcomingEvents((prev) =>
+              prev.map((ev, i) =>
+                i === index ? { ...ev, time: e.target.value } : ev
+              )
+            )
+          }
+        />
+      </td>
 
-        // ONLY backend state update
-        setUpcomingEvents((prev) =>
-          prev.map((ev) =>
-            ev.title === event.title
-              ? { ...ev, flyerImage: data.fileName }
-              : ev
-          )
-        );
+      {/* LOCATION */}
+      <td className="p-2">
+        <Input
+          value={event.location}
+          onChange={(e) =>
+            setUpcomingEvents((prev) =>
+              prev.map((ev, i) =>
+                i === index ? { ...ev, location: e.target.value } : ev
+              )
+            )
+          }
+        />
+      </td>
 
-        toast({
-          title: "Success 🎉",
-          description: "Flyer uploaded successfully",
-        });
-      } catch (err) {
-        toast({
-          title: "Error",
-          description: "Upload failed",
-          variant: "destructive",
-        });
-      }
-    }}
-  />
+      {/* SPOTS */}
+      <td className="p-2">
+        <Input
+          value={event.spots}
+          onChange={(e) =>
+            setUpcomingEvents((prev) =>
+              prev.map((ev, i) =>
+                i === index ? { ...ev, spots: e.target.value } : ev
+              )
+            )
+          }
+        />
+      </td>
 
-  {/* ONLY BACKEND IMAGE */}
-  {event.flyerImage && (
-    <img
-      src={`/eventflyer/${event.flyerImage}?t=${Date.now()}`}
-      className="mt-2 max-h-[80px] rounded"
-      alt="flyer"
-    />
-  )}
-</td>
-          {/* ACTIONS */}
-          <td className="p-2 flex gap-2">
-            <Button
-              onClick={async () => {
-                await fetch(
-                  "/api/upcoming-events/update",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(event),
-                  }
-                );
+      {/* DESCRIPTION */}
+      <td className="p-2">
+        <Input
+          value={event.description}
+          onChange={(e) =>
+            setUpcomingEvents((prev) =>
+              prev.map((ev, i) =>
+                i === index ? { ...ev, description: e.target.value } : ev
+              )
+            )
+          }
+        />
+      </td>
 
-                fetchUpcomingEvents();
-              }}
-            >
-              Save
-            </Button>
+      {/* FLYER UPLOAD (FIXED LOGIC) */}
+      <td className="p-2">
+        <input
+          type="file"
+          accept="image/*"
+          onChange={async (e) => {
+            e.stopPropagation();
 
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                await fetch(
-                  "/api/upcoming-events/delete",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ title: event.title }),
-                  }
-                );
+            const file = e.target.files?.[0];
+            if (!file) return;
 
-                fetchUpcomingEvents();
-              }}
-            >
-              Delete
-            </Button>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-                     
+            const formData = new FormData();
+            formData.append("flyer", file);
+            formData.append("title", event.title);
+            formData.append("eventYear", event.date?.slice(0, 4));
+
+            const res = await fetch("/api/upload-flyer", {
+              method: "POST",
+              body: formData,
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+              throw new Error(data.message || "Upload failed");
+            }
+
+            toast({
+              title: "Success 🎉",
+              description: data.message || "Flyer uploaded successfully",
+            });
+
+            fetchUpcomingEvents();
+          }}
+        />
+
+        {event.flyerImage && (
+          <img
+            src={`eventflyer/${event.flyerImage}`}
+            className="mt-2 max-h-[60px] rounded"
+          />
+        )}
+      </td>
+
+      {/* ACTIONS */}
+      <td className="p-2 flex gap-2">
+        <Button
+          onClick={async () => {
+            await fetch("/api/upcoming-events/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(event),
+            });
+
+            fetchUpcomingEvents();
+          }}
+        >
+          Save
+        </Button>
+
+        <Button
+          variant="destructive"
+          onClick={async () => {
+            const res = await fetch("/api/upcoming-events/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: event.title }),
+            });
+
+            await res.json();
+            fetchUpcomingEvents();
+          }}
+        >
+          Delete
+        </Button>
+      </td>
+    </tr>
+  ))}
+</tbody>
+                        </table>
+                      </div>
                     </CardContent>
                   </Card>
 
@@ -1073,19 +1069,11 @@ const fetchData = async () => {
       if (!res.ok) throw new Error(data.message || "Failed");
 
       // 2. upload flyer if exists
-if (newFlyer) {
-const formData = new FormData();
-
-formData.append("flyer", newFlyer);
-
-// ✅ single source of truth
-formData.append(
-  "event",
-  JSON.stringify({
-    title: newEvent.title,
-    eventYear: newEvent.date?.split("-")[0],
-  })
-);
+      if (newFlyer) {
+        const formData = new FormData();
+        formData.append("flyer", newFlyer);
+        formData.append("title", newEvent.title);
+        formData.append("eventYear", newEvent.date?.slice(0, 4));
 
         const flyerRes = await fetch(
           "/api/upload-flyer",
