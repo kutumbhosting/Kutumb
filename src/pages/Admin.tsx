@@ -905,6 +905,7 @@ const deleteEventRows = async () => {
 
 {/* FLYER */}
 <td className="p-2 space-y-2">
+  {/* UPLOAD INPUT (UNCHANGED) */}
   <input
     type="file"
     accept="image/*"
@@ -920,7 +921,7 @@ const deleteEventRows = async () => {
 
       try {
         const res = await fetch(
-          "/api/upload-flyer",
+          "http://localhost:5000/api/upload-flyer",
           {
             method: "POST",
             body: formData,
@@ -938,7 +939,6 @@ const deleteEventRows = async () => {
           return;
         }
 
-        // ONLY backend state update
         setUpcomingEvents((prev) =>
           prev.map((ev) =>
             ev.title === event.title
@@ -961,15 +961,65 @@ const deleteEventRows = async () => {
     }}
   />
 
-  {/* ONLY BACKEND IMAGE */}
+  {/* 👇 REPLACE IMAGE WITH THIS BLOCK */}
   {event.flyerImage && (
-    <img
-      src={`/eventflyer/${event.flyerImage}?t=${Date.now()}`}
-      className="mt-2 max-h-[80px] rounded"
-      alt="flyer"
-    />
+    <div className="relative group inline-block mt-2">
+      <img
+        src={`http://localhost:5000/eventflyer/${event.flyerImage}?t=${Date.now()}`}
+        className="max-h-[80px] rounded border"
+        alt="flyer"
+      />
+
+      {/* ❌ DELETE BUTTON */}
+      <button
+        className="absolute top-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+        onClick={async () => {
+          if (!confirm("Delete flyer?")) return;
+
+          try {
+            const res = await fetch(
+              "http://localhost:5000/api/delete-flyer",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  title: event.title, date: event.date,
+                  fileName: event.flyerImage,
+                }),
+              }
+            );
+
+            const data = await res.json();
+
+            if (!res.ok) throw new Error(data.message);
+
+            // ✅ instant UI update
+            setUpcomingEvents((prev) =>
+              prev.map((ev, i) =>
+                i === index ? { ...ev, flyerImage: "" } : ev
+              )
+            );
+
+            toast({
+              title: "Deleted",
+              description: "Flyer removed",
+            });
+
+          } catch (err: any) {
+            toast({
+              title: "Error",
+              description: err.message,
+              variant: "destructive",
+            });
+          }
+        }}
+      >
+        ✕
+      </button>
+    </div>
   )}
 </td>
+
 
       {/* ACTIONS */}
       <td className="p-2 flex gap-2">
