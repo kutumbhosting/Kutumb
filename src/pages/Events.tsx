@@ -130,13 +130,18 @@ setTimeout(() => setSubmitMessage(""), 5000);
 
     setFormData(initialState);
 
-    // ✅ SCROLL BACK TO TOP OF FORM
-    setTimeout(() => {
-      const el = document.getElementById("registration-form");
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 100);
+// ✅ SCROLL BACK TO TOP OF FORM (WITH OFFSET)
+setTimeout(() => {
+  const el = document.getElementById("registration-form");
+  if (el) {
+    const y = el.getBoundingClientRect().top + window.pageYOffset;
+
+    window.scrollTo({
+      top: y - 80, // adjust for navbar
+      behavior: "smooth",
+    });
+  }
+}, 100);
 
   } catch (error) {
     console.error("API Error:", error);
@@ -250,12 +255,12 @@ setTimeout(() => setSubmitMessage(""), 5000);
                     children: 0,
                   });
 
-                  setTimeout(() => {
-                    document
-                      .getElementById("registration-form")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                  }, 0);
-                }}
+                 // setTimeout(() => {
+                   // document
+                     // .getElementById("registration-form")
+                //      ?.scrollIntoView({ behavior: "smooth" });
+                 // }, 0);
+                //}}
               >
                 Register for This Event
               </Button>
