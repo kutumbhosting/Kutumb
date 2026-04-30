@@ -254,13 +254,6 @@ setTimeout(() => setSubmitMessage(""), 5000);
                     adults: 0,
                     children: 0,
                   });
-
-                 // setTimeout(() => {
-                   // document
-                     // .getElementById("registration-form")
-                //      ?.scrollIntoView({ behavior: "smooth" });
-                 // }, 0);
-                //}}
               >
                 Register for This Event
               </Button>
