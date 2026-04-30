@@ -222,7 +222,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
 
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Users size={18} className="text-primary" />
-                  <span>{event.spots} spots available</span>
+                  <span> {event.availableSpots} / {event.capacity} spots available</span>
                 </div>
               </div>
 
