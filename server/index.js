@@ -4,13 +4,18 @@ import path from "path";
 import cors from "cors";
 import multer from "multer";
 import { fileURLToPath } from "url";
+import fileManagerRoutes from "./routes/fileManager.js";
+
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+app.use("/api", fileManagerRoutes);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const app = express();
-app.use(cors());
-app.use(express.json());
 
 const slugify = (text) =>
   text
@@ -23,17 +28,28 @@ const slugify = (text) =>
 /* -----------------------------
    📂 BASE DIRECTORY
 ------------------------------*/
-const DATA_ROOT = process.env.DATA_ROOT || "/app/server/data";
+const DATA_ROOT = process.env.DATA_ROOT || path.join(process.cwd(), "server/data");
 
 const BASE_DIR = path.join(DATA_ROOT, "events");
-app.use(
-  "/eventflyer",
-  express.static(path.join(DATA_ROOT, "eventflyer"))
-);
+
+if (!fs.existsSync(BASE_DIR)) {
+  fs.mkdirSync(BASE_DIR, { recursive: true });
+}
+
+app.use("/eventflyer", express.static(path.join(DATA_ROOT, "eventflyer")));
 
 const MEMBERS_DIR = path.join(DATA_ROOT, "members");
+
+if (!fs.existsSync(MEMBERS_DIR)) {
+  fs.mkdirSync(MEMBERS_DIR, { recursive: true });
+}
+
 const MEMBERS_FILE = path.join(MEMBERS_DIR, "members.json");
 const UPCOMING_EVENTS_DIR = path.join(DATA_ROOT, "upcomingevents");
+
+if (!fs.existsSync(UPCOMING_EVENTS_DIR)) {
+  fs.mkdirSync(UPCOMING_EVENTS_DIR, { recursive: true });
+}
 const UPCOMING_EVENTS_FILE = path.join(UPCOMING_EVENTS_DIR, "upcomingEvents.json");
 
 /* -----------------------------
@@ -88,9 +104,20 @@ const parseEvent = (event) => {
     eventYear,
   };
 };
+
+const calculateSpots = (event) => {
+  const used = event.registrations.reduce(
+    (sum, r) => sum + (r.adults || 0) + (r.children || 0),
+    0
+  );
+
+  return event.capacity - used;
+};
+
 /* -----------------------------
    ✅ DEBUG
 ------------------------------*/
+
 app.get("/api/debug-events-path", (req, res) => {
   const root = DATA_ROOT;
 
@@ -164,6 +191,7 @@ app.get("/api/debug-volume", (req, res) => {
     files: fs.readdirSync(process.env.DATA_ROOT),
   });
 });
+
 app.get("/api/debug-events/:file", (req, res) => {
   const fileName = req.params.file;
   const filePath = path.join(BASE_DIR, `${fileName}.json`);
@@ -601,6 +629,7 @@ app.get("/api/upcoming-events", (req, res) => {
   }
 });
 
+
 /* -----------------------------
    ✅ UPCOMING EVENTS UPDATE
 ------------------------------*/
@@ -681,7 +710,7 @@ const storage = multer.diskStorage({
     console.log("Uploading:", file.originalname);
 
     // ✅ make filename URL-safe
-    const safeName = file.originalname.replace(/\s+/g, "-");
+    const safeName = Date.now() + "-" + file.originalname.replace(/\s+/g, "-");
 
     cb(null, safeName);
   },
@@ -724,9 +753,10 @@ app.post("/api/upload-flyer", upload.single("flyer"), (req, res) => {
     let updated = false;
 
     data = data.map((e) => {
+      const normalize = (t) => t?.trim();
       const match =
-        e.title?.trim().toLowerCase() === incomingTitle &&
-        e.eventYear?.toString() === incomingYear;
+        normalize(e.title) === normalize(parsedEvent.title) &&
+        String(e.eventYear) === String(parsedEvent.eventYear);  
 
       if (match) {
         updated = true;
@@ -812,8 +842,6 @@ app.post("/api/delete-flyer", (req, res) => {
     return res.status(500).json({ message: "Delete failed" });
   }
 });
-
-
 
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
