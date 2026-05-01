@@ -4,7 +4,7 @@ import path from "path";
 import cors from "cors";
 import multer from "multer";
 import { fileURLToPath } from "url";
-import fileManagerRoutes from "./routes/fileManager.js";
+import fileManagerRoutes from "./routes/filemanager.js";
 
 
 const app = express();
