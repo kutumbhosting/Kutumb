@@ -28,7 +28,7 @@ const slugify = (text) =>
 /* -----------------------------
    📂 BASE DIRECTORY
 ------------------------------*/
-const DATA_ROOT = process.env.DATA_ROOT || path.join(process.cwd(), "server/data");
+const DATA_ROOT = process.env.DATA_ROOT || "/app/server/data";
 
 const BASE_DIR = path.join(DATA_ROOT, "events");
 
