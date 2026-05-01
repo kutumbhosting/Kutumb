@@ -13,7 +13,7 @@ const DATA_ROOT = process.env.DATA_ROOT || "/app/server/data";
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const folder = req.body.folder || "default";
-    const dir = path.join(process.cwd(), "server/data", folder);
+    const dir = path.join(DATA_ROOT, folder);
 
     fs.mkdirSync(dir, { recursive: true });
 
