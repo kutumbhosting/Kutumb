@@ -5,7 +5,7 @@ import multer from "multer";
 
 const router = express.Router();
 
-const DATA_ROOT = process.env.DATA_ROOT || path.join(process.cwd(), "server/data");
+const DATA_ROOT = process.env.DATA_ROOT || "/app/server/data";
 
 // ======================================================
 // 📁 MULTER SETUP (FILE UPLOAD CONFIG)
