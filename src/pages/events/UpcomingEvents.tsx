@@ -54,7 +54,7 @@ const UpcomingEvents = ({ upcomingEvents, setFormData }: any) => {
                   {hasFlyer && (
                     <div>
                       <img
-                        src={`http://localhost:5000/eventflyer/${event.flyerImage}`}
+                        src={`/eventflyer/${event.flyerImage}`}
                         className="rounded-lg max-h-[350px]"
                       />
                     </div>
