@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
+import { useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,31 +34,28 @@ const Events = () => {
   });
 
   useEffect(() => {
-  const state = location.state as any;
+    if (location.state) {
+      setFormData((prev) => ({
+        ...prev,
+        eventName: location.state.eventName || "",
+        eventDate: location.state.eventDate || "",
+      }));
 
-  if (state?.eventName || state?.eventDate) {
-    setFormData((prev) => ({
-      ...prev,
-      eventName: state.eventName || "",
-      eventDate: state.eventDate || "",
-    }));
-  }
+      if (location.state.scrollTo === "registration") {
+        setTimeout(() => {
+          const el = document.getElementById("registration-form");
+          if (el) {
+            const y = el.getBoundingClientRect().top + window.pageYOffset;
 
-  if (state?.scrollTo === "registration") {
-    setTimeout(() => {
-      const el = document.getElementById("registration-form");
-
-      if (el) {
-        const y = el.getBoundingClientRect().top + window.pageYOffset;
-
-        window.scrollTo({
-          top: y - 150,
-          behavior: "smooth",
-        });
+            window.scrollTo({
+              top: y - 90,
+              behavior: "smooth",
+            });
+          }
+        }, 200);
       }
-    }, 300);
-  }
-}, [location.state]);
+    }
+  }, [location]);
 
 useEffect(() => {
   fetchUpcomingEvents();
@@ -133,18 +131,13 @@ setTimeout(() => setSubmitMessage(""), 5000);
 
     setFormData(initialState);
 
-// ✅ SCROLL BACK TO TOP OF FORM (WITH OFFSET)
-setTimeout(() => {
-  const el = document.getElementById("registration-form");
-  if (el) {
-    const y = el.getBoundingClientRect().top + window.pageYOffset;
-
-    window.scrollTo({
-      top: y - 80, // adjust for navbar
-      behavior: "smooth",
-    });
-  }
-}, 100);
+    // ✅ SCROLL BACK TO TOP OF FORM
+    setTimeout(() => {
+      const el = document.getElementById("registration-form");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
 
   } catch (error) {
     console.error("API Error:", error);
@@ -193,7 +186,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
 {upcomingEvents
   .filter((event) => event.isActive)
   .map((event, index) => {
-    const hasFlyer = !!event.hasFlyer;
+    const hasFlyer = !!event.flyerImage;
 
     return (
       <Card key={index} className="card-hover border border-border">
@@ -247,22 +240,23 @@ setTimeout(() => setSubmitMessage(""), 5000);
               <Button
                 className="w-full btn-hero mt-4"
                 onClick={() => {
-  setFormData({
-    eventName: event.title,
-    eventDate: event.date,
-    name: "",
-    email: "",
-    phone: "",
-    comments: "",
-    adults: 0,
-    children: 0,
-  });
+                  setFormData({
+                    eventName: event.title,
+                    eventDate: event.date,
+                    name: "",
+                    email: "",
+                    phone: "",
+                    comments: "",
+                    adults: 0,
+                    children: 0,
+                  });
 
-  setTimeout(() => {
-    document.getElementById("registration-form")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, 0);
-}}
+                  setTimeout(() => {
+                    document
+                      .getElementById("registration-form")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }, 0);
+                }}
               >
                 Register for This Event
               </Button>
@@ -349,7 +343,7 @@ setTimeout(() => setSubmitMessage(""), 5000);
 
                         <div className="grid md:grid-cols-2 gap-4">
                           <div>
-                            <Label htmlFor="adults">Number of Additional Adults *</Label>
+                            <Label htmlFor="adults">Number of Adults *</Label>
                             <Input
                               id="adults"
                               type="number"
