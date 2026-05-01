@@ -6,7 +6,6 @@ import multer from "multer";
 import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
 
-
 const app = express();
 
 app.use(cors());
