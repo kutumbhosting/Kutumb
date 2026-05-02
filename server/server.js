@@ -5,6 +5,7 @@ import cors from "cors";
 import multer from "multer";
 import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
+import pastEventsRouter from "./routes/pastEventsRoute.js";
 
 const app = express();
 
