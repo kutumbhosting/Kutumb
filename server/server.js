@@ -7,6 +7,9 @@ import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
 import pastEventsRouter from "./routes/pastEventsRoute.js";
 
+app.use("/api/pastevents", pastEventsRouter);
+app.use("/api/pastmedia", express.static(path.join(DATA_ROOT, "pastmedia")));
+
 const app = express();
 
 app.use(cors());
