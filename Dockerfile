@@ -21,4 +21,4 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-CMD ["node", "server/index.js"]
+CMD ["node", "server/server.js"]
