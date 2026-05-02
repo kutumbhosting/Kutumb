@@ -55,7 +55,7 @@ const PastEvents = () => {
                     >
                       {item.type === "image" ? (
                         <img
-                          src={`/api/data/pastmedia/${item.src}`}
+                          src={`/api/pastmedia/${item.src}`}
                           alt={`${event.title} media ${i + 1}`}
                           className="w-full h-full object-cover"
                         />
