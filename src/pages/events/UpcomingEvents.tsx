@@ -37,11 +37,11 @@ const UpcomingEvents = ({
       <div className="grid md:grid-cols-2 gap-8">
         {(Array.isArray(upcomingEvents) ? upcomingEvents : [])
           .filter((event) => event.isActive)
-          .map((event, index) => {
+          .map((event, server) => {
             const hasFlyer = !!event.flyerImage;
 
             return (
-              <Card key={index} className="card-hover border border-border">
+              <Card key={server} className="card-hover border border-border">
                 <CardContent className="p-6">
                   <div className={`grid gap-6 ${hasFlyer ? "md:grid-cols-2" : ""}`}>
 
