@@ -13,13 +13,13 @@ const pastEvents = fs.existsSync(pastEventsFile)
   ? JSON.parse(fs.readFileSync(pastEventsFile, "utf-8"))
   : [];
 
-// GET http://localhost:5000/pastevents
+// GET /api/pastevents
 router.get("/", (req, res) => {
   res.json(pastEvents);
 });
 
 // Serve past media files
-// GET http://localhost:5000/pastmedia/<filename>
+// GET /api/pastmedia/<filename>
 router.use("/pastmedia", express.static(path.join(__dirname, "../pastmedia")));
 
 export default router;
