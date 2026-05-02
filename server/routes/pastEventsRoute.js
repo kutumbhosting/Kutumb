@@ -18,8 +18,4 @@ router.get("/", (req, res) => {
   res.json(pastEvents);
 });
 
-// Serve past media files
-// GET /api/pastmedia/<filename>
-router.use("/pastmedia", express.static(path.join(__dirname, "../pastmedia")));
-
 export default router;
