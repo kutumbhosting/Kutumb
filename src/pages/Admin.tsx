@@ -10,15 +10,27 @@ import { useToast } from "@/hooks/use-toast";
 const ADMIN_USER = "admin";
 const ADMIN_PASSWORD = "Ku$1";
 
+// ─── safe JSON fetch ───────────────────────────────────────────────────────────
+// Returns parsed JSON or null. Never throws.
+const safeFetch = async (url: string, options?: RequestInit) => {
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      console.warn(`[safeFetch] ${url} → HTTP ${res.status}`);
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    console.error(`[safeFetch] ${url} → network error`, err);
+    return null;
+  }
+};
+
 const Admin = () => {
   const { toast } = useToast();
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  const [loginData, setLoginData] = useState({
-    user: "",
-    password: "",
-  });
+  const [loginData, setLoginData] = useState({ user: "", password: "" });
 
   const [groupedEvents, setGroupedEvents] = useState<Record<string, any[]>>({});
   const [memberData, setMemberData] = useState<any[]>([]);
@@ -26,18 +38,24 @@ const Admin = () => {
   const [selectedMemberRows, setSelectedMemberRows] = useState<string[]>([]);
   const [editingMember, setEditingMember] = useState<any | null>(null);
   const [selectedFlyerEvent, setSelectedFlyerEvent] = useState<any | null>(null);
-
   const [selectedEventKey, setSelectedEventKey] = useState<string>("");
-
   const [eventActionMessage, setEventActionMessage] = useState("");
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
   const [eventFiles, setEventFiles] = useState<any[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [newFlyer, setNewFlyer] = useState<File | null>(null);
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
 
-const [fileFolder, setFileFolder] = useState<string>("");
-const [files, setFiles] = useState<string[]>([]);
-const [selectedFile, setSelectedFile] = useState<string>("");
+  // Files tab
+  const [fileFolder, setFileFolder] = useState<string>("");
+  const [files, setFiles] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string>("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [newFolder, setNewFolder] = useState("");
+  const [folders, setFolders] = useState<string[]>([]);
+  const [fileRefreshKey, setFileRefreshKey] = useState(0);
+  const [debugMsg, setDebugMsg] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [newEvent, setNewEvent] = useState({
     title: "",
@@ -49,332 +67,123 @@ const [selectedFile, setSelectedFile] = useState<string>("");
     isActive: true,
   });
 
+  // ─── derived: selected event ────────────────────────────────────────────────
   const selectedEvent =
     selectedEventKey && groupedEvents[selectedEventKey]?.length
       ? {
           members: groupedEvents[selectedEventKey],
           eventName: groupedEvents[selectedEventKey][0]?.eventName,
           eventYear: groupedEvents[selectedEventKey][0]?.eventYear,
-
-          // ✅ Adults = adults + 1 (registrant)
           adults: groupedEvents[selectedEventKey].reduce(
-            (sum: number, m: any) =>
-              sum + 1 + Number(m.adults || 0),
-            0
+            (sum: number, m: any) => sum + 1 + Number(m.adults || 0), 0
           ),
-
           children: groupedEvents[selectedEventKey].reduce(
-            (sum: number, m: any) =>
-              sum + Number(m.children || 0),
-            0
+            (sum: number, m: any) => sum + Number(m.children || 0), 0
           ),
-
-          // ✅ Total Registrations = TOTAL PEOPLE
           totalPeople: groupedEvents[selectedEventKey].reduce(
-            (sum: number, m: any) =>
-              sum + 1 + Number(m.adults || 0) + Number(m.children || 0),
-            0
+            (sum: number, m: any) => sum + 1 + Number(m.adults || 0) + Number(m.children || 0), 0
           ),
         }
       : null;
 
-  const rows = memberData.map((row) =>
-    Object.values({
-      ...row,
-      interests: Array.isArray(row.interests)
-        ? row.interests.join(" | ")
-        : row.interests,
-    }).join(",")
-  );
-
-  const toggleEventRow = (email: string) => {
+  // ─── toggle helpers ─────────────────────────────────────────────────────────
+  const toggleEventRow = (email: string) =>
     setSelectedEventRows((prev) =>
-      prev.includes(email)
-        ? prev.filter((e) => e !== email)
-        : [...prev, email]
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
-  };
 
-  const toggleMemberRow = (email: string) => {
+  const toggleMemberRow = (email: string) =>
     setSelectedMemberRows((prev) =>
-      prev.includes(email)
-        ? prev.filter((e) => e !== email)
-        : [...prev, email]
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
-  };
 
-  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
-
-  const fetchUpcomingEvents = async () => {
-    try {
-      const res = await fetch("/api/upcoming-events");
-      const data = await res.json();
-      setUpcomingEvents(data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
+  // ─── flyer preview ──────────────────────────────────────────────────────────
   useEffect(() => {
-    fetchUpcomingEvents();
-  }, []);
+    if (!newFlyer) { setPreviewUrl(null); return; }
+    const url = URL.createObjectURL(newFlyer);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [newFlyer]);
 
+  // ─── fetchUpcomingEvents ────────────────────────────────────────────────────
+  const fetchUpcomingEvents = async () => {
+    const data = await safeFetch("/api/upcoming-events");
+    // Always set an array — never set undefined/null
+    setUpcomingEvents(Array.isArray(data) ? data : []);
+  };
 
-useEffect(() => {
-  if (!newFlyer) {
-    setPreviewUrl(null);
-    return;
-  }
+  useEffect(() => { fetchUpcomingEvents(); }, []);
 
-  const url = URL.createObjectURL(newFlyer);
-  setPreviewUrl(url);
+  // ─── MAIN fetchData ──────────────────────────────────────────────────────────
+  // KEY FIX: each event file is fetched individually with its own error handler.
+  // A single bad file will NOT crash the whole load.
+  const fetchData = async () => {
+    try {
+      // 1. Get the list of event files
+      const filesData = await safeFetch("/api/event-files");
 
-  return () => URL.revokeObjectURL(url);
-}, [newFlyer]);
-
-
-  // ================= FETCH FOLDER =================
-
-const [uploadFile, setUploadFile] = useState<File | null>(null);
-const [newFolder, setNewFolder] = useState("");
-const [folders, setFolders] = useState<string[]>([]);
-const [fileRefreshKey, setFileRefreshKey] = useState(0);
-
-useEffect(() => {
-  console.log("CURRENT FOLDERS STATE:", folders);
-}, [folders]);
-
-
-const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-useEffect(() => {
-  if (isLoggedIn) {
-    fetchFolders();
-  }
-}, [isLoggedIn]);
-
-useEffect(() => {
-  if (!isLoggedIn) return;
-
-  if (!fileFolder) {
-    setFiles([]); // ✅ clear file list
-    return;
-  }
-
-  fetchFiles(fileFolder);
-}, [isLoggedIn, fileFolder]);
-
-useEffect(() => {
-  if (fileFolder) {
-    fetchFiles(fileFolder);
-  }
-}, [fileFolder, fileRefreshKey]);
-
-const fetchFiles = async (folder) => {
-  if (!folder) return;
-
-  try {
-    const res = await fetch(
-      `/api/files/list?folder=${folder}&t=${Date.now()}`
-    );
-
-    const data = await res.json();
-
-    setFiles([...data]); // force re-render
-  } catch (err) {
-    setDebugMsg("❌ Failed to load files");
-  }
-};
-
-const fetchFolders = async () => {
-  try {
-    const res = await fetch("/api/folders");
-
-    console.log("STATUS:", res.status); // 👈 ADD THIS
-
-    const data = await res.json();
-
-    console.log("FOLDERS FROM API:", data); // 👈 ADD THIS
-
-    const folderList = Array.isArray(data) ? data : [];
-    setFolders(folderList);
-
-  } catch (err) {
-    console.error("fetchFolders error:", err);
-  }
-};
-
-
-const createFolder = async () => {
-  if (!newFolder.trim()) {
-    toast({ title: "Folder name required" });
-    return;
-  }
-
-  const folderName = newFolder.trim(); // ✅ store safely
-
-  try {
-    const res = await fetch(
-      "/api/folder/create",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder: folderName }),
+      if (!Array.isArray(filesData) || filesData.length === 0) {
+        console.warn("[fetchData] /api/event-files returned empty or invalid:", filesData);
+        setEventFiles([]);
+        setGroupedEvents({});
+        // Still load members even if no events
+        const members = await safeFetch("/api/members");
+        setMemberData(Array.isArray(members) ? members : []);
+        return;
       }
-    );
 
-    if (!res.ok) throw new Error("Folder creation failed");
+      setEventFiles(filesData);
+      console.log("[fetchData] event files:", filesData);
 
-    setNewFolder("");
-    setFileFolder(folderName);        // ✅ switch to new folder
+      // 2. Fetch each event file individually — failures are isolated
+      const allEventArrays = await Promise.all(
+        filesData.map(async (f: any) => {
+          if (!f?.value) {
+            console.warn("[fetchData] event file entry missing .value:", f);
+            return [];
+          }
+          const data = await safeFetch(`/api/events/${f.value}`);
+          if (!Array.isArray(data)) {
+            console.warn(`[fetchData] /api/events/${f.value} did not return array:`, data);
+            return [];
+          }
+          return data;
+        })
+      );
 
-    await fetchFolders();             // ✅ refresh dropdown
-    await fetchFiles(folderName);     // ✅ load its files
+      // 3. Flatten and group by eventName_eventYear
+      const events = allEventArrays.flat();
+      console.log("[fetchData] total event rows loaded:", events.length);
 
-    toast({
-      title: "Success",
-      description: "Folder created",
-    });
+      const grouped = events.reduce((acc: Record<string, any[]>, item: any) => {
+        if (!item?.eventName) return acc; // skip malformed rows
+        const key = `${item.eventName}_${item.eventYear || "unknown"}`;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
+        return acc;
+      }, {});
 
-  } catch (err: any) {
-    toast({
-      title: "Error",
-      description: err.message,
-      variant: "destructive",
-    });
-  }
-};
+      console.log("[fetchData] grouped keys:", Object.keys(grouped));
+      setGroupedEvents(grouped);
 
-const deleteFile = async (file: string) => {
-  if (!confirm(`Delete ${file}?`)) return;
+      // 4. Members (independent of events)
+      const members = await safeFetch("/api/members");
+      setMemberData(Array.isArray(members) ? members : []);
 
-  if (!fileFolder) {
-    toast({ title: "Select a folder first" });
-    return;
-  }
-
-  try {
-    const res = await fetch(
-      "/api/files/delete",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          folder: fileFolder,
-          fileNames: [file],
-        }),
-      }
-    );
-
-    if (!res.ok) throw new Error("Delete failed");
-
-    await fetchFiles(fileFolder);
-    await fetchFolders();
-
-    toast({
-      title: "Deleted",
-      description: `${file} removed`,
-    });
-  } catch (err: any) {
-    toast({
-      title: "Error",
-      description: err.message,
-      variant: "destructive",
-    });
-  }
-};
-
-const [debugMsg, setDebugMsg] = useState<string>("");
-
-const showDebug = (msg) => {
-  setDebugMsg(msg);
-  setTimeout(() => setDebugMsg(""), 3000);
-};
-
-const uploadSelectedFile = async () => {
-  showDebug("🚀 Upload clicked");
-
-  if (!uploadFile || !fileFolder) {
-    showDebug("❌ Missing file or folder");
-    return;
-  }
-
-  try {
-    const formData = new FormData();
-    formData.append("file", uploadFile);
-    formData.append("folder", fileFolder);
-
-    const res = await fetch("/api/files/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      showDebug("❌ Upload failed");
-      return;
+    } catch (err) {
+      // Should never reach here because safeFetch absorbs errors,
+      // but keep as a safety net
+      console.error("[fetchData] unexpected error:", err);
     }
+  };
 
-    showDebug("✅ Upload successful");
-
-// 🔥 ADD THIS LINE HERE
-setFiles(prev => [...prev, uploadFile.name]);
-
-
-    // 🔥 IMPORTANT: wait for backend to finish writing
-    setTimeout(() => {
-      fetchFiles(fileFolder);
-    }, 500); // 300–800ms is ideal
-
-    setUploadFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-
-  } catch (err: any) {
-    showDebug("❌ " + err.message);
-  }
-};
-
-  // ================= FETCH DATA =================
-
-const fetchData = async () => {
-  try {
-    const filesRes = await fetch("/api/event-files");
-    const files = await filesRes.json();
-
-    const allEvents = await Promise.all(
-      files.map(async (f) => {
-        const res = await fetch(
-          `/api/events/${f.value}`
-        );
-        return await res.json();
-      })
-    );
-
-    const events = allEvents.flat();
-
-    const membersRes = await fetch("/api/members");
-    const members = await membersRes.json();
-
-    const grouped = events.reduce((acc: any, item: any) => {
-      const key = item.eventName + "_" + item.eventYear;
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(item);
-      return acc;
-    }, {});
-
-    setGroupedEvents(grouped);
-    setMemberData(members);
-  } catch (err) {
-    console.error("fetchData error:", err);
-  }
-};
-
+  // ─── delete helpers ─────────────────────────────────────────────────────────
   const deleteMemberRows = async () => {
-    await fetch("/api/members/delete", {
+    await safeFetch("/api/members/delete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ emails: selectedMemberRows }),
     });
-
     setSelectedMemberRows([]);
     fetchData();
   };
@@ -390,15 +199,9 @@ const fetchData = async () => {
           emails: selectedEventRows,
         }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "Delete failed");
-      }
-
+      if (!res.ok) throw new Error(data.message || "Delete failed");
       setEventActionMessage(`✅ ${data.message || "Deleted successfully"}`);
-
       setSelectedEventRows([]);
       fetchData();
     } catch (err: any) {
@@ -406,32 +209,19 @@ const fetchData = async () => {
     }
   };
 
-  // ================= LOGIN =================
+  // ─── LOGIN ──────────────────────────────────────────────────────────────────
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (
-      loginData.user === ADMIN_USER &&
-      loginData.password === ADMIN_PASSWORD
-    ) {
+    if (loginData.user === ADMIN_USER && loginData.password === ADMIN_PASSWORD) {
       setIsLoggedIn(true);
-
-      toast({
-        title: "Login Successful",
-        description: "Welcome Admin",
-      });
-
+      toast({ title: "Login Successful", description: "Welcome Admin" });
       fetchData();
     } else {
-      toast({
-        title: "Invalid Credentials",
-        description: "Incorrect email or password",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid Credentials", description: "Incorrect email or password", variant: "destructive" });
     }
   };
 
-  // ================= CSV DOWNLOAD =================
+  // ─── CSV ────────────────────────────────────────────────────────────────────
   const normalizeInterests = (interests: any) => {
     if (Array.isArray(interests)) return interests.join(" | ");
     if (typeof interests === "object" && interests !== null)
@@ -441,46 +231,106 @@ const fetchData = async () => {
 
   const downloadCSV = (data: any[], filename: string) => {
     if (!data.length) return;
-
     const headers = Object.keys(data[0]).join(",");
-
-    const csvrows = data.map((row) => {
-      const cleanRow = {
-        ...row,
-        interests: normalizeInterests(row.interests),
-      };
-
-      return Object.values(cleanRow).join(",");
-    });
-
+    const csvrows = data.map((row) =>
+      Object.values({ ...row, interests: normalizeInterests(row.interests) }).join(",")
+    );
     const csv = [headers, ...csvrows].join("\n");
-
     const blob = new Blob([csv], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
-
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
   };
 
-  const groupedList = Object.entries(groupedEvents).map(([event, members]) => {
-    const adults = members.reduce((sum: number, m: any) => sum + Number(m.adults || 0), 0);
-    const children = members.reduce((sum: number, m: any) => sum + Number(m.children || 0), 0);
+  // ─── FILES TAB ──────────────────────────────────────────────────────────────
+  const showDebug = (msg: string) => {
+    setDebugMsg(msg);
+    setTimeout(() => setDebugMsg(""), 3000);
+  };
 
-    return {
-      event,
-      members,
-      adults,
-      children,
-    };
-  });
+  useEffect(() => { if (isLoggedIn) fetchFolders(); }, [isLoggedIn]);
 
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    if (!fileFolder) { setFiles([]); return; }
+    fetchFiles(fileFolder);
+  }, [isLoggedIn, fileFolder]);
+
+  useEffect(() => {
+    if (fileFolder) fetchFiles(fileFolder);
+  }, [fileFolder, fileRefreshKey]);
+
+  const fetchFiles = async (folder: string) => {
+    if (!folder) return;
+    const data = await safeFetch(`/api/files/list?folder=${encodeURIComponent(folder)}&t=${Date.now()}`);
+    setFiles(Array.isArray(data) ? [...data] : []);
+  };
+
+  const fetchFolders = async () => {
+    const data = await safeFetch("/api/folders");
+    setFolders(Array.isArray(data) ? data : []);
+  };
+
+  const createFolder = async () => {
+    if (!newFolder.trim()) { toast({ title: "Folder name required" }); return; }
+    const folderName = newFolder.trim();
+    const res = await safeFetch("/api/folder/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: folderName }),
+    });
+    if (!res) {
+      toast({ title: "Error", description: "Folder creation failed", variant: "destructive" });
+      return;
+    }
+    setNewFolder("");
+    setFileFolder(folderName);
+    await fetchFolders();
+    await fetchFiles(folderName);
+    toast({ title: "Success", description: "Folder created" });
+  };
+
+  const deleteFile = async (file: string) => {
+    if (!confirm(`Delete ${file}?`)) return;
+    if (!fileFolder) { toast({ title: "Select a folder first" }); return; }
+    const res = await safeFetch("/api/files/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: fileFolder, fileNames: [file] }),
+    });
+    if (!res) { toast({ title: "Error", description: "Delete failed", variant: "destructive" }); return; }
+    await fetchFiles(fileFolder);
+    await fetchFolders();
+    toast({ title: "Deleted", description: `${file} removed` });
+  };
+
+  const uploadSelectedFile = async () => {
+    showDebug("🚀 Upload clicked");
+    if (!uploadFile || !fileFolder) { showDebug("❌ Missing file or folder"); return; }
+    const formData = new FormData();
+    formData.append("file", uploadFile);
+    formData.append("folder", fileFolder);
+    try {
+      const res = await fetch("/api/files/upload", { method: "POST", body: formData });
+      if (!res.ok) { showDebug("❌ Upload failed"); return; }
+      showDebug("✅ Upload successful");
+      setFiles((prev) => [...prev, uploadFile.name]);
+      setTimeout(() => fetchFiles(fileFolder), 500);
+      setUploadFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err: any) {
+      showDebug("❌ " + err.message);
+    }
+  };
+
+  // ─── RENDER ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-
       <main className="flex-grow">
+
         {/* HERO */}
         <section className="gradient-warm text-white py-20">
           <div className="container mx-auto px-4 text-center">
@@ -498,34 +348,19 @@ const fetchData = async () => {
               <Card className="border-2">
                 <CardContent className="p-8">
                   <h2 className="mb-6 text-center">Admin Login</h2>
-
                   <form onSubmit={handleLogin} className="space-y-4">
                     <Input
                       placeholder="Username"
                       value={loginData.user}
-                      onChange={(e) =>
-                        setLoginData({
-                          ...loginData,
-                          user: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setLoginData({ ...loginData, user: e.target.value })}
                     />
-
                     <Input
                       type="password"
                       placeholder="Password"
                       value={loginData.password}
-                      onChange={(e) =>
-                        setLoginData({
-                          ...loginData,
-                          password: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                     />
-
-                    <Button className="w-full btn-hero">
-                      Login
-                    </Button>
+                    <Button className="w-full btn-hero">Login</Button>
                   </form>
                 </CardContent>
               </Card>
@@ -537,7 +372,6 @@ const fetchData = async () => {
         {isLoggedIn && (
           <section className="py-20 bg-muted/30">
             <div className="container mx-auto px-4">
-
               <Tabs defaultValue="events" className="max-w-7xl mx-auto">
                 <TabsList className="flex w-full max-w-md mx-auto gap-3 mb-12">
                   <TabsTrigger value="events">Event Registrations</TabsTrigger>
@@ -546,22 +380,27 @@ const fetchData = async () => {
                   <TabsTrigger value="files">Files Management</TabsTrigger>
                 </TabsList>
 
-                {/* ✅ EVENTS TAB FIXED */}
+                {/* ═══════════ EVENTS TAB ═══════════ */}
                 <TabsContent value="events">
-
                   <div className="mb-6 max-w-md">
                     <label className="text-sm font-medium">Select Event</label>
+
+                    {/* DEBUG: show count so you can see if data loaded */}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {Object.keys(groupedEvents).length === 0
+                        ? "⚠️ No events loaded — check console for errors"
+                        : `${Object.keys(groupedEvents).length} event(s) loaded`}
+                    </p>
+
                     <select
-                      className="w-full mt-2 p-2 border rounded"
+                      className="w-full mt-2 p-2 border rounded text-foreground bg-background"
                       value={selectedEventKey}
                       onChange={(e) => setSelectedEventKey(e.target.value)}
                     >
                       <option value="">-- Choose Event --</option>
-
                       {Object.entries(groupedEvents).map(([key, events]: any) => {
                         const first = events?.[0];
                         if (!first) return null;
-
                         return (
                           <option key={key} value={key}>
                             {first.eventName} {first.eventYear}
@@ -569,6 +408,16 @@ const fetchData = async () => {
                         );
                       })}
                     </select>
+
+                    {/* Retry button in case of load failure */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={fetchData}
+                    >
+                      🔄 Reload Events
+                    </Button>
                   </div>
 
                   {selectedEvent?.members?.length > 0 && (
@@ -579,14 +428,12 @@ const fetchData = async () => {
                             <h2 className="text-xl font-bold">
                               {selectedEvent.eventName} {selectedEvent.eventYear}
                             </h2>
-
                             <div className="flex gap-4 text-sm text-muted-foreground mt-1">
                               <span>Total People: {selectedEvent.totalPeople}</span>
                               <span>👨 Adults: {selectedEvent.adults}</span>
                               <span>🧒 Children: {selectedEvent.children}</span>
                             </div>
                           </div>
-
                           <Button
                             onClick={() =>
                               downloadCSV(
@@ -599,229 +446,170 @@ const fetchData = async () => {
                           </Button>
                         </div>
 
-{/* ACTION BUTTONS */}
-<div className="flex gap-2 mb-3">
-  {selectedEventRows.length > 0 && (
-    <Button
-      variant="destructive"
-      onClick={deleteEventRows}
-    >
-      Delete Selected
-    </Button>
-  )}
+                        <div className="flex gap-2 mb-3">
+                          {selectedEventRows.length > 0 && (
+                            <Button variant="destructive" onClick={deleteEventRows}>
+                              Delete Selected
+                            </Button>
+                          )}
+                          <Button
+                            onClick={() => {
+                              if (!selectedEventRows.length) return;
+                              const member = selectedEvent?.members.find(
+                                (m: any) => m.email === selectedEventRows[0]
+                              );
+                              if (!member) return;
+                              setEditingEvent({ ...member });
+                            }}
+                            disabled={selectedEventRows.length !== 1}
+                          >
+                            Modify Selected
+                          </Button>
+                        </div>
 
-  <Button
-    onClick={() => {
-      if (!selectedEventRows.length) return;
+                        {eventActionMessage && (
+                          <div className="mt-3 text-sm font-medium text-blue-600">
+                            {eventActionMessage}
+                          </div>
+                        )}
 
-      const member = selectedEvent?.members.find(
-        (m: any) => m.email === selectedEventRows[0]
-      );
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="p-2"></th>
+                                <th className="p-2 text-left">Name</th>
+                                <th className="p-2 text-left">Email</th>
+                                <th className="p-2 text-left">Phone</th>
+                                <th className="p-2 text-left">Adults</th>
+                                <th className="p-2 text-left">Children</th>
+                                <th className="p-2 text-left">Comments</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedEvent?.members?.map((item, i) => (
+                                <tr key={i} className="border-b">
+                                  <td className="p-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedEventRows.includes(item.email)}
+                                      onChange={() => toggleEventRow(item.email)}
+                                    />
+                                  </td>
+                                  <td className="p-2">{item.name}</td>
+                                  <td className="p-2">{item.email}</td>
+                                  <td className="p-2">{item.phone}</td>
+                                  <td className="p-2">{item.adults}</td>
+                                  <td className="p-2">{item.children}</td>
+                                  <td className="p-2">{item.comments || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
 
-      if (!member) return;
-
-      setEditingEvent({ ...member });
-    }}
-    disabled={selectedEventRows.length !== 1}
-  >
-    Modify Selected
-  </Button>
-</div>
-
-{eventActionMessage && (
-  <div className="mt-3 text-sm font-medium text-blue-600">
-    {eventActionMessage}
-  </div>
-)}
-
-{/* TABLE */}
-<div className="overflow-x-auto">
-  <table className="w-full text-sm">
-    <thead>
-      <tr className="border-b">
-        <th className="p-2"></th>
-        <th className="p-2 text-left">Name</th>
-        <th className="p-2 text-left">Email</th>
-        <th className="p-2 text-left">Phone</th>
-        <th className="p-2 text-left">Adults</th>
-        <th className="p-2 text-left">Children</th>
-        <th className="p-2 text-left">Comments</th>
-      </tr>
-    </thead>
-
-    <tbody>
-      {selectedEvent?.members?.map((item, i) => (
-        <tr key={i} className="border-b">
-          <td className="p-2">
-            <input
-              type="checkbox"
-              checked={selectedEventRows.includes(item.email)}
-              onChange={() => toggleEventRow(item.email)}
-            />
-          </td>
-          <td className="p-2">{item.name}</td>
-          <td className="p-2">{item.email}</td>
-          <td className="p-2">{item.phone}</td>
-          <td className="p-2">{item.adults}</td>
-          <td className="p-2">{item.children}</td>
-          <td className="p-2">{item.comments || "-"}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-
-{/* EDIT FORM (PLACED CORRECTLY BELOW TABLE) */}
-{editingEvent && (
-  <Card className="mt-4">
-    <CardContent className="p-4 space-y-3">
-      <h3 className="font-bold">Edit Registration</h3>
-
-      <Input
-        placeholder="Name"
-        value={editingEvent.name}
-        onChange={(e) =>
-          setEditingEvent({ ...editingEvent, name: e.target.value })
-        }
-      />
-
-      <Input
-        placeholder="Phone"
-        value={editingEvent.phone}
-        onChange={(e) =>
-          setEditingEvent({ ...editingEvent, phone: e.target.value })
-        }
-      />
-
-      <Input
-        type="number"
-        placeholder="Adults"
-        value={editingEvent.adults}
-        onChange={(e) =>
-          setEditingEvent({ ...editingEvent, adults: e.target.value })
-        }
-      />
-
-      <Input
-        type="number"
-        placeholder="Children"
-        value={editingEvent.children}
-        onChange={(e) =>
-          setEditingEvent({ ...editingEvent, children: e.target.value })
-        }
-      />
-
-      <Input
-        placeholder="Comments"
-        value={editingEvent.comments || ""}
-        onChange={(e) =>
-          setEditingEvent({ ...editingEvent, comments: e.target.value })
-        }
-      />
-
-      <div className="flex gap-2">
-        <Button
-          onClick={async () => {
-            try {
-              const res = await fetch(
-                "/api/events/update",
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    eventName: selectedEvent?.eventName,
-                    eventYear: selectedEvent?.eventYear,
-                    email: editingEvent.email,
-                    updatedData: {
-                      ...editingEvent,
-                      adults: Number(editingEvent.adults),
-                      children: Number(editingEvent.children),
-                    },
-                  }),
-                }
-              );
-
-              const data = await res.json();
-
-              if (!res.ok) {
-                throw new Error(data.message || "Update failed");
-              }
-
-              toast({
-                title: "Success 🎉",
-                description: data.message || "Updated successfully",
-              });
-
-              setEditingEvent(null);
-              setSelectedEventRows([]);
-              fetchData();
-            } catch (err: any) {
-              toast({
-                title: "Error",
-                description: err.message,
-                variant: "destructive",
-              });
-            }
-          }}
-        >
-          Save Changes
-        </Button>
-
-        <Button
-          variant="outline"
-          onClick={() => setEditingEvent(null)}
-        >
-          Cancel
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-)}
+                        {editingEvent && (
+                          <Card className="mt-4">
+                            <CardContent className="p-4 space-y-3">
+                              <h3 className="font-bold">Edit Registration</h3>
+                              <Input
+                                placeholder="Name"
+                                value={editingEvent.name}
+                                onChange={(e) => setEditingEvent({ ...editingEvent, name: e.target.value })}
+                              />
+                              <Input
+                                placeholder="Phone"
+                                value={editingEvent.phone}
+                                onChange={(e) => setEditingEvent({ ...editingEvent, phone: e.target.value })}
+                              />
+                              <Input
+                                type="number"
+                                placeholder="Adults"
+                                value={editingEvent.adults}
+                                onChange={(e) => setEditingEvent({ ...editingEvent, adults: e.target.value })}
+                              />
+                              <Input
+                                type="number"
+                                placeholder="Children"
+                                value={editingEvent.children}
+                                onChange={(e) => setEditingEvent({ ...editingEvent, children: e.target.value })}
+                              />
+                              <Input
+                                placeholder="Comments"
+                                value={editingEvent.comments || ""}
+                                onChange={(e) => setEditingEvent({ ...editingEvent, comments: e.target.value })}
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  onClick={async () => {
+                                    try {
+                                      const res = await fetch("/api/events/update", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          eventName: selectedEvent?.eventName,
+                                          eventYear: selectedEvent?.eventYear,
+                                          email: editingEvent.email,
+                                          updatedData: {
+                                            ...editingEvent,
+                                            adults: Number(editingEvent.adults),
+                                            children: Number(editingEvent.children),
+                                          },
+                                        }),
+                                      });
+                                      const data = await res.json();
+                                      if (!res.ok) throw new Error(data.message || "Update failed");
+                                      toast({ title: "Success 🎉", description: data.message || "Updated successfully" });
+                                      setEditingEvent(null);
+                                      setSelectedEventRows([]);
+                                      fetchData();
+                                    } catch (err: any) {
+                                      toast({ title: "Error", description: err.message, variant: "destructive" });
+                                    }
+                                  }}
+                                >
+                                  Save Changes
+                                </Button>
+                                <Button variant="outline" onClick={() => setEditingEvent(null)}>
+                                  Cancel
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
                       </CardContent>
                     </Card>
                   )}
                 </TabsContent>
 
-                {/* MEMBERS TAB */}
+                {/* ═══════════ MEMBERS TAB ═══════════ */}
                 <TabsContent value="members">
                   <Card>
                     <CardContent className="p-6">
                       <div className="flex justify-between mb-6">
                         <h2 className="text-xl font-bold">Kutumb Members</h2>
-                        <Button
-                          onClick={() =>
-                            downloadCSV(memberData, "members.csv")
-                          }
-                        >
+                        <Button onClick={() => downloadCSV(memberData, "members.csv")}>
                           Download CSV
                         </Button>
                       </div>
 
                       {selectedMemberRows.length > 0 && (
-                        <Button
-                          variant="destructive"
-                          className="mb-3"
-                          onClick={deleteMemberRows}
-                        >
+                        <Button variant="destructive" className="mb-3" onClick={deleteMemberRows}>
                           Delete Selected
                         </Button>
                       )}
 
                       <Button
                         onClick={() => {
-                          const member = memberData.find(m => m.email === selectedMemberRows[0]);
-
+                          const member = memberData.find((m) => m.email === selectedMemberRows[0]);
                           if (!member) return;
-
                           setEditingMember({
                             ...member,
                             interests: Array.isArray(member.interests)
                               ? member.interests.join(", ")
                               : typeof member.interests === "object" && member.interests !== null
-                                ? Object.keys(member.interests)
-                                  .filter(k => member.interests[k])
-                                  .join(", ")
-                                : member.interests || "",
+                              ? Object.keys(member.interests).filter((k) => member.interests[k]).join(", ")
+                              : member.interests || "",
                           });
                         }}
                         disabled={selectedMemberRows.length !== 1}
@@ -829,7 +617,7 @@ const fetchData = async () => {
                         Modify Selected
                       </Button>
 
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto mt-4">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b">
@@ -855,9 +643,7 @@ const fetchData = async () => {
                                 <td className="p-2">{item.email}</td>
                                 <td className="p-2">{item.phone}</td>
                                 <td className="p-2">{item.address}</td>
-                                <td className="p-2">
-                                  {normalizeInterests(item.interests)}
-                                </td>
+                                <td className="p-2">{normalizeInterests(item.interests)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -867,49 +653,29 @@ const fetchData = async () => {
                           <Card className="mt-4">
                             <CardContent className="p-4 space-y-3">
                               <h3 className="font-bold">Edit Member</h3>
-
                               <Input
                                 value={editingMember.name}
-                                onChange={(e) =>
-                                  setEditingMember({ ...editingMember, name: e.target.value })
-                                }
+                                onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
                               />
-
                               <Input
                                 value={editingMember.phone}
-                                onChange={(e) =>
-                                  setEditingMember({ ...editingMember, phone: e.target.value })
-                                }
+                                onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
                               />
-
                               <Input
                                 value={editingMember.address}
-                                onChange={(e) =>
-                                  setEditingMember({ ...editingMember, address: e.target.value })
-                                }
+                                onChange={(e) => setEditingMember({ ...editingMember, address: e.target.value })}
                               />
-
                               <Input
                                 value={editingMember.interests || ""}
-                                onChange={(e) =>
-                                  setEditingMember({
-                                    ...editingMember,
-                                    interests: e.target.value,
-                                  })
-                                }
+                                onChange={(e) => setEditingMember({ ...editingMember, interests: e.target.value })}
                               />
-
                               <Button
                                 onClick={async () => {
-                                  await fetch("/api/members/update", {
+                                  await safeFetch("/api/members/update", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      email: editingMember.email,
-                                      updatedData: editingMember,
-                                    }),
+                                    body: JSON.stringify({ email: editingMember.email, updatedData: editingMember }),
                                   });
-
                                   setEditingMember(null);
                                   setSelectedMemberRows([]);
                                   fetchData();
@@ -925,653 +691,350 @@ const fetchData = async () => {
                   </Card>
                 </TabsContent>
 
+                {/* ═══════════ UPCOMING EVENTS TAB ═══════════ */}
                 <TabsContent value="upcoming">
                   <Card className="border">
                     <CardContent className="p-6">
                       <div className="flex justify-between items-center mb-6">
-                        <h2 className="text-xl font-bold">
-                          Upcoming Events Management
-                        </h2>
-
-                        <Button
-                          onClick={() =>
-                            downloadCSV(upcomingEvents, "upcoming-events.csv")
-                          }
-                        >
+                        <h2 className="text-xl font-bold">Upcoming Events Management</h2>
+                        <Button onClick={() => downloadCSV(upcomingEvents, "upcoming-events.csv")}>
                           Download CSV
                         </Button>
                       </div>
 
-<div className="overflow-x-auto">
-  <table className="w-full text-sm">
-    <thead>
-      <tr className="border-b">
-        <th className="p-2 text-left">Active</th>
-        <th className="p-2 text-left">Title</th>
-        <th className="p-2 text-left">Date</th>
-        <th className="p-2 text-left">Time</th>
-        <th className="p-2 text-left">Location</th>
-        <th className="p-2 text-left">Capacity</th>
-        <th className="p-2 text-left">Description</th>
-        <th className="p-2 text-left">Flyer</th>
-        <th className="p-2 text-left">Action</th>
-      </tr>
-    </thead>
-
-    <tbody>
-      {upcomingEvents.map((event, index) => (
-        <tr key={index} className="border-b">
-
-          {/* ACTIVE */}
-          <td className="p-2 text-center">
-            <input
-              type="checkbox"
-              checked={!!event.isActive}
-              onChange={async (e) => {
-                const updated = {
-                  ...event,
-                  isActive: e.target.checked,
-                };
-
-                await fetch("/api/upcoming-events/update", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(updated),
-                });
-
-                fetchUpcomingEvents();
-              }}
-            />
-          </td>
-
-          {/* TITLE */}
-          <td className="p-2">
-            <Input
-              value={event.title}
-              onChange={(e) =>
-  setUpcomingEvents((prev) =>
-    prev.map((ev, i) =>
-      i === index ? { ...ev, title: e.target.value } : ev
-    )
-  )
-}
-            />
-          </td>
-
-          {/* DATE */}
-          <td className="p-2">
-            <Input
-              value={event.date}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, date: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* TIME */}
-          <td className="p-2">
-            <Input
-              value={event.time}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, time: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* LOCATION */}
-          <td className="p-2">
-            <Input
-              value={event.location}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, location: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* CAPACITY */}
-          <td className="p-2">
-            <Input
-              value={event.capacity}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, capacity: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-          {/* DESCRIPTION */}
-          <td className="p-2">
-            <Input
-              value={event.description}
-              onChange={(e) =>
-                setUpcomingEvents((prev) =>
-                  prev.map((ev, i) =>
-                    i === index ? { ...ev, description: e.target.value } : ev
-                  )
-                )
-              }
-            />
-          </td>
-
-{/* FLYER */}
-<td className="p-2 space-y-2">
-  {/* UPLOAD INPUT (UNCHANGED) */}
-  <input
-    type="file"
-    accept="image/*"
-    onChange={async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      const formData = new FormData();
-      formData.append("flyer", file);
-      formData.append("title", event.title);
-      formData.append("event", JSON.stringify(event));
-      formData.append("eventYear", event.date?.split("-")[0]);
-
-      try {
-        const res = await fetch(
-          "/api/upload-flyer",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          toast({
-            title: "Upload Failed",
-            description: data.message || "Something went wrong",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        setUpcomingEvents((prev) =>
-          prev.map((ev) =>
-            ev.title === event.title
-              ? { ...ev, flyerImage: data.fileName }
-              : ev
-          )
-        );
-
-        toast({
-          title: "Success 🎉",
-          description: "Flyer uploaded successfully",
-        });
-      } catch (err) {
-        toast({
-          title: "Error",
-          description: "Upload failed",
-          variant: "destructive",
-        });
-      }
-    }}
-  />
-
-  {/* 👇 REPLACE IMAGE WITH THIS BLOCK */}
-  {event.flyerImage && (
-    <div className="relative group inline-block mt-2">
-      <img
-        src={`/eventflyer/${event.flyerImage}?t=${Date.now()}`}
-        className="max-h-[80px] rounded border"
-        alt="flyer"
-      />
-
-      {/* ❌ DELETE BUTTON */}
-      <button
-        className="absolute top-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition"
-        onClick={async () => {
-          if (!confirm("Delete flyer?")) return;
-
-          try {
-            const res = await fetch(
-              "/api/delete-flyer",
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  title: event.title, date: event.date,
-                  fileName: event.flyerImage,
-                }),
-              }
-            );
-
-            const data = await res.json();
-
-            if (!res.ok) throw new Error(data.message);
-
-            // ✅ instant UI update
-            setUpcomingEvents((prev) =>
-              prev.map((ev, i) =>
-                i === index ? { ...ev, flyerImage: "" } : ev
-              )
-            );
-
-            toast({
-              title: "Deleted",
-              description: "Flyer removed",
-            });
-
-          } catch (err: any) {
-            toast({
-              title: "Error",
-              description: err.message,
-              variant: "destructive",
-            });
-          }
-        }}
-      >
-        ✕
-      </button>
-    </div>
-  )}
-</td>
-
-
-          {/* ACTIONS */}
-          <td className="p-2 flex gap-2">
-            <Button
-              onClick={async () => {
-                await fetch(
-                  "/api/upcoming-events/update",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(event),
-                  }
-                );
-
-                fetchUpcomingEvents();
-              }}
-            >
-              Save
-            </Button>
-
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                await fetch(
-                  "/api/upcoming-events/delete",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ title: event.title }),
-                  }
-                );
-
-                fetchUpcomingEvents();
-              }}
-            >
-              Delete
-            </Button>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-                     
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="p-2 text-left">Active</th>
+                              <th className="p-2 text-left">Title</th>
+                              <th className="p-2 text-left">Date</th>
+                              <th className="p-2 text-left">Time</th>
+                              <th className="p-2 text-left">Location</th>
+                              <th className="p-2 text-left">Capacity</th>
+                              <th className="p-2 text-left">Description</th>
+                              <th className="p-2 text-left">Flyer</th>
+                              <th className="p-2 text-left">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {upcomingEvents.map((event, index) => (
+                              <tr key={index} className="border-b">
+                                <td className="p-2 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!event.isActive}
+                                    onChange={async (e) => {
+                                      await safeFetch("/api/upcoming-events/update", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ ...event, isActive: e.target.checked }),
+                                      });
+                                      fetchUpcomingEvents();
+                                    }}
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    value={event.title}
+                                    onChange={(e) =>
+                                      setUpcomingEvents((prev) =>
+                                        prev.map((ev, i) => i === index ? { ...ev, title: e.target.value } : ev)
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    value={event.date}
+                                    onChange={(e) =>
+                                      setUpcomingEvents((prev) =>
+                                        prev.map((ev, i) => i === index ? { ...ev, date: e.target.value } : ev)
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    value={event.time}
+                                    onChange={(e) =>
+                                      setUpcomingEvents((prev) =>
+                                        prev.map((ev, i) => i === index ? { ...ev, time: e.target.value } : ev)
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    value={event.location}
+                                    onChange={(e) =>
+                                      setUpcomingEvents((prev) =>
+                                        prev.map((ev, i) => i === index ? { ...ev, location: e.target.value } : ev)
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    value={event.capacity}
+                                    onChange={(e) =>
+                                      setUpcomingEvents((prev) =>
+                                        prev.map((ev, i) => i === index ? { ...ev, capacity: e.target.value } : ev)
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-2">
+                                  <Input
+                                    value={event.description}
+                                    onChange={(e) =>
+                                      setUpcomingEvents((prev) =>
+                                        prev.map((ev, i) => i === index ? { ...ev, description: e.target.value } : ev)
+                                      )
+                                    }
+                                  />
+                                </td>
+                                <td className="p-2 space-y-2">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (!file) return;
+                                      const formData = new FormData();
+                                      formData.append("flyer", file);
+                                      formData.append("title", event.title);
+                                      formData.append("event", JSON.stringify(event));
+                                      formData.append("eventYear", event.date?.split("-")[0]);
+                                      try {
+                                        const res = await fetch("/api/upload-flyer", { method: "POST", body: formData });
+                                        const data = await res.json();
+                                        if (!res.ok) {
+                                          toast({ title: "Upload Failed", description: data.message || "Something went wrong", variant: "destructive" });
+                                          return;
+                                        }
+                                        setUpcomingEvents((prev) =>
+                                          prev.map((ev) => ev.title === event.title ? { ...ev, flyerImage: data.fileName } : ev)
+                                        );
+                                        toast({ title: "Success 🎉", description: "Flyer uploaded successfully" });
+                                      } catch {
+                                        toast({ title: "Error", description: "Upload failed", variant: "destructive" });
+                                      }
+                                    }}
+                                  />
+                                  {event.flyerImage && (
+                                    <div className="relative group inline-block mt-2">
+                                      <img
+                                        src={`/eventflyer/${event.flyerImage}?t=${Date.now()}`}
+                                        className="max-h-[80px] rounded border"
+                                        alt="flyer"
+                                      />
+                                      <button
+                                        className="absolute top-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition"
+                                        onClick={async () => {
+                                          if (!confirm("Delete flyer?")) return;
+                                          try {
+                                            const res = await fetch("/api/delete-flyer", {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ title: event.title, date: event.date, fileName: event.flyerImage }),
+                                            });
+                                            const data = await res.json();
+                                            if (!res.ok) throw new Error(data.message);
+                                            setUpcomingEvents((prev) =>
+                                              prev.map((ev, i) => i === index ? { ...ev, flyerImage: "" } : ev)
+                                            );
+                                            toast({ title: "Deleted", description: "Flyer removed" });
+                                          } catch (err: any) {
+                                            toast({ title: "Error", description: err.message, variant: "destructive" });
+                                          }
+                                        }}
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-2 flex gap-2">
+                                  <Button
+                                    onClick={async () => {
+                                      await safeFetch("/api/upcoming-events/update", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify(event),
+                                      });
+                                      fetchUpcomingEvents();
+                                    }}
+                                  >
+                                    Save
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    onClick={async () => {
+                                      await safeFetch("/api/upcoming-events/delete", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ title: event.title }),
+                                      });
+                                      fetchUpcomingEvents();
+                                    }}
+                                  >
+                                    Delete
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </CardContent>
                   </Card>
 
+                  {/* Add New Event */}
                   <div className="mb-8 p-4 border rounded space-y-3">
                     <h3 className="font-bold text-lg">Add New Upcoming Event</h3>
+                    <Input placeholder="Title" value={newEvent.title} onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })} />
+                    <Input placeholder="Date" value={newEvent.date} onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })} />
+                    <Input placeholder="Time" value={newEvent.time} onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })} />
+                    <Input placeholder="Location" value={newEvent.location} onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })} />
+                    <Input placeholder="Capacity" value={newEvent.capacity} onChange={(e) => setNewEvent({ ...newEvent, capacity: e.target.value })} />
+                    <Input placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} />
 
-                    <Input
-                      placeholder="Title"
-                      value={newEvent.title}
-                      onChange={(e) =>
-                        setNewEvent({ ...newEvent, title: e.target.value })
-                      }
-                    />
-
-                    <Input
-                      placeholder="Date"
-                      value={newEvent.date}
-                      onChange={(e) =>
-                        setNewEvent({ ...newEvent, date: e.target.value })
-                      }
-                    />
-
-                    <Input
-                      placeholder="Time"
-                      value={newEvent.time}
-                      onChange={(e) =>
-                        setNewEvent({ ...newEvent, time: e.target.value })
-                      }
-                    />
-
-                    <Input
-                      placeholder="Location"
-                      value={newEvent.location}
-                      onChange={(e) =>
-                        setNewEvent({ ...newEvent, location: e.target.value })
-                      }
-                    />
-
-                    <Input
-                      placeholder="Capacity"
-                      value={newEvent.capacity}
-                      onChange={(e) =>
-                        setNewEvent({ ...newEvent, capacity: e.target.value })
-                      }
-                    />
-
-                    <Input
-                      placeholder="Description"
-                      value={newEvent.description}
-                      onChange={(e) =>
-                        setNewEvent({ ...newEvent, description: e.target.value })
-                      }
-                    />
-
-<div className="space-y-2">
-  <label className="text-sm font-medium">Flyer Image</label>
-
-<input
-  type="file"
-  accept="image/*"
-  className="w-full"
-  onChange={(e) => {
-    const file = e.target.files?.[0];
-    if (file) setNewFlyer(file);
-  }}
-/>
-
-{newFlyer && (
-  <img
-    src={URL.createObjectURL(newFlyer)}
-    className="mt-2 max-h-[80px] rounded"
-  />
-)}
-
-  {newFlyer && (
-    <p className="text-xs text-green-600">
-      Selected: {newFlyer.name}
-    </p>
-  )}
-</div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Flyer Image</label>
+                      <input type="file" accept="image/*" className="w-full" onChange={(e) => { const file = e.target.files?.[0]; if (file) setNewFlyer(file); }} />
+                      {newFlyer && <img src={URL.createObjectURL(newFlyer)} className="mt-2 max-h-[80px] rounded" />}
+                      {newFlyer && <p className="text-xs text-green-600">Selected: {newFlyer.name}</p>}
+                    </div>
 
                     <Button
-  onClick={async () => {
-    try {
-      // 1. create event
-      const res = await fetch(
-        "/api/upcoming-events/update",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newEvent),
-        }
-      );
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/upcoming-events/update", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(newEvent),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.message || "Failed");
 
-      const data = await res.json();
+                          if (newFlyer) {
+                            const formData = new FormData();
+                            formData.append("flyer", newFlyer);
+                            formData.append("event", JSON.stringify({
+                              title: newEvent.title,
+                              eventYear: new Date(newEvent.date).getFullYear(),
+                            }));
+                            const flyerRes = await fetch("/api/upload-flyer", { method: "POST", body: formData });
+                            const flyerData = await flyerRes.json();
+                            if (!flyerRes.ok) throw new Error(flyerData.message || "Flyer upload failed");
+                          }
 
-      if (!res.ok) throw new Error(data.message || "Failed");
-
-      // 2. upload flyer if exists
-if (newFlyer) {
-const formData = new FormData();
-
-formData.append("flyer", newFlyer);
-
-// ✅ single source of truth
-
-formData.append(
-  "event",
-  JSON.stringify({
-    title: newEvent.title,
-    eventYear: new Date(newEvent.date).getFullYear(),
-  })
-);
-
-        const flyerRes = await fetch(
-          "/api/upload-flyer",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
-
-        const flyerData = await flyerRes.json();
-
-        if (!flyerRes.ok) {
-          throw new Error(flyerData.message || "Flyer upload failed");
-        }
-      }
-
-      toast({
-        title: "Success 🎉",
-        description: "Event created successfully",
-      });
-
-      setNewEvent({
-        title: "",
-        date: "",
-        time: "",
-        location: "",
-        capacity: "",
-        description: "",
-        isActive: true,
-      });
-
-      setNewFlyer(null);
-
-      fetchUpcomingEvents();
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive",
-      });
-    }
-  }}
->
-  Add Event
-</Button>
+                          toast({ title: "Success 🎉", description: "Event created successfully" });
+                          setNewEvent({ title: "", date: "", time: "", location: "", capacity: "", description: "", isActive: true });
+                          setNewFlyer(null);
+                          fetchUpcomingEvents();
+                        } catch (err: any) {
+                          toast({ title: "Error", description: err.message, variant: "destructive" });
+                        }
+                      }}
+                    >
+                      Add Event
+                    </Button>
                   </div>
-
                 </TabsContent>
 
-<TabsContent value="files">
-  <Card>
-    <CardContent className="p-6 space-y-6">
+                {/* ═══════════ FILES TAB ═══════════ */}
+                <TabsContent value="files">
+                  <Card>
+                    <CardContent className="p-6 space-y-6">
+                      <h2 className="text-xl font-bold">Folders</h2>
 
-      <h2 className="text-xl font-bold">Folders</h2>
+                      <div className="flex w-2/3 gap-3 items-center">
+                        <select
+                          className="border p-2 rounded flex-1 text-foreground bg-background"
+                          value={fileFolder}
+                          onChange={(e) => setFileFolder(e.target.value)}
+                        >
+                          <option value="">-- Select Folder --</option>
+                          {folders.map((f) => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="destructive"
+                          onClick={async () => {
+                            if (!fileFolder) return;
+                            if (!confirm(`Delete folder "${fileFolder}"?`)) return;
+                            const res = await safeFetch("/api/folder/delete", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ folderName: fileFolder }),
+                            });
+                            if (!res) { toast({ title: "Error", description: "Delete failed", variant: "destructive" }); return; }
+                            setFileFolder("");
+                            setFiles([]);
+                            fetchFolders();
+                            toast({ title: "Deleted", description: "Folder removed" });
+                          }}
+                        >
+                          Delete Folder
+                        </Button>
+                      </div>
 
-      {/* ================= FOLDER SWITCH ================= */}
-<div className="flex w-2/3 gap-3 items-center">
+                      <div className="flex w-2/3 gap-2">
+                        <Input placeholder="New folder name" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} />
+                        <Button onClick={createFolder}>Create Folder</Button>
+                      </div>
 
-<select
-  className="border p-2 rounded flex-1"
-  value={fileFolder}
-  onChange={(e) => {
-    console.log("SELECTED FOLDER:", e.target.value); // ✅ correct
-    setFileFolder(e.target.value);
-  }}
->
-  <option value="">-- Select Folder --</option>
-  {folders.map((f) => (
-    <option key={f} value={f}>
-      {f}
-    </option>
-  ))}
-</select>
+                      <div className="border rounded p-3">
+                        <h3 className="text-xl font-bold">Files List</h3>
+                        {files.length === 0 && <p className="text-sm text-muted-foreground">No files found</p>}
+                        {files.map((file) => (
+                          <div key={file} className="flex justify-between items-center border-b py-2">
+                            <span
+                              className={`cursor-pointer ${selectedFile === file ? "font-bold text-blue-600" : ""}`}
+                              onClick={() => setSelectedFile(file)}
+                            >
+                              {file}
+                            </span>
+                            <div className="flex w-1/2 gap-2">
+                              <Button variant="outline" size="sm" onClick={() => window.open(`/api/files/download?folder=${fileFolder}&file=${file}`, "_blank")}>
+                                Download
+                              </Button>
+                              <Button variant="destructive" size="sm" onClick={() => deleteFile(file)}>
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
 
-<Button
-  variant="destructive"
-  onClick={async () => {
-    if (!fileFolder) return;
-
-    if (!confirm(`Delete folder "${fileFolder}"?`)) return;
-
-    try {
-      const res = await fetch("/api/folder/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folderName: fileFolder }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.message);
-
-      setFileFolder("");      // reset dropdown
-      setFiles([]);           // clear file list
-      fetchFolders();         // refresh folders
-
-      toast({
-        title: "Deleted",
-        description: "Folder removed",
-      });
-    } catch (err: any) {
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive",
-      });
-    }
-  }}
->
-  Delete Folder
-</Button>
-
-</div>
-
-      {/* ================= CREATE NEW FOLDER ================= */}
-      <div className="flex w-2/3 gap-2">
-        <Input
-          placeholder="New folder name"
-          value={newFolder}
-          onChange={(e) => setNewFolder(e.target.value)}
-        />
-
-        <Button onClick={createFolder}>
-          Create Folder
-        </Button>
-      </div>
-
-      {/* ================= FILE LIST ================= */}
-      <div className="border rounded p-3">
-        <h3 className="text-xl font-bold">Files List</h3>
-
-        {files.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No files found
-          </p>
-        )}
-
-        {files.map((file) => (
-          <div
-            key={file}
-            className="flex justify-between items-center border-b py-2"
-          >
-            {/* FILE NAME */}
-            <span
-              className={`cursor-pointer ${
-                selectedFile === file ? "font-bold text-blue-600" : ""
-              }`}
-              onClick={() => setSelectedFile(file)}
-            >
-
-              {file}
-            </span>
-
-<div className="flex w-1/2 gap-2">
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={() =>
-      window.open(
-        `/api/files/download?folder=${fileFolder}&file=${file}`,
-        "_blank"
-      )
-    }
-  >
-    Download
-  </Button>
-
-  <Button
-    variant="destructive"
-    size="sm"
-    onClick={() => deleteFile(file)}
-  >
-    Delete
-  </Button>
-</div>
-
-          </div>
-        ))}
-      </div>
-
-      {/* ================= UPLOAD NEW FILE ================= */}
-  <div className="space-y-2">
-  <input
-    ref={fileInputRef}
-    type="file"
-    onChange={(e) => {
-      const file = e.target.files?.[0];
-      console.log("FILE PICKED:", file);
-      setUploadFile(file || null);
-    }}
-  />
-
-<div className="flex flex-col gap-2">
-  {/* Selected file text */}
-  {uploadFile && (
-    <p className="text-xs text-green-600">
-      Selected: {uploadFile.name}
-    </p>
-  )}
-
-  {/* Upload button */}
-  <Button
-    onClick={uploadSelectedFile}
-    disabled={!uploadFile}
-    className="w-fit"
-  >
-    Upload File
-  </Button>
-</div>
-
-{debugMsg && (
-  <div className="mt-2 text-sm p-2 bg-gray-100 border rounded">
-    {debugMsg}
-  </div>
-
-
-)}
-</div>
-
-
-    </CardContent>
-  </Card>
-</TabsContent>
+                      <div className="space-y-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          onChange={(e) => { const file = e.target.files?.[0]; setUploadFile(file || null); }}
+                        />
+                        <div className="flex flex-col gap-2">
+                          {uploadFile && <p className="text-xs text-green-600">Selected: {uploadFile.name}</p>}
+                          <Button onClick={uploadSelectedFile} disabled={!uploadFile} className="w-fit">
+                            Upload File
+                          </Button>
+                        </div>
+                        {debugMsg && (
+                          <div className="mt-2 text-sm p-2 bg-gray-100 border rounded">{debugMsg}</div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
 
               </Tabs>
             </div>
           </section>
         )}
       </main>
-
       <Footer />
     </div>
   );
