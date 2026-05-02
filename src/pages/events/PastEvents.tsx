@@ -19,7 +19,7 @@ const PastEvents = () => {
   const [pastEvents, setPastEvents] = useState<PastEvent[]>([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/pastevents")
+    fetch("/api/pastevents")
       .then((res) => res.json())
       .then((data) => setPastEvents(data))
       .catch((err) => console.error("Failed to load past events:", err));
@@ -55,13 +55,13 @@ const PastEvents = () => {
                     >
                       {item.type === "image" ? (
                         <img
-                          src={`http://localhost:5000/pastmedia/${item.src}`}
+                          src={`/api/data/pastmedia/${item.src}`}
                           alt={`${event.title} media ${i + 1}`}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <video
-                          src={`http://localhost:5000/pastmedia/${item.src}`}
+                          src={`/api/pastmedia/${item.src}`}
                           controls
                           preload="metadata"
                           className="w-full h-full object-cover"
