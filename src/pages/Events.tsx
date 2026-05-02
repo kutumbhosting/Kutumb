@@ -57,9 +57,14 @@ const Events = () => {
   }, []);
 
   const fetchUpcomingEvents = async () => {
-    const res = await fetch("http://localhost:5000/api/upcoming-events");
-    const data = await res.json();
-    setUpcomingEvents(data);
+    try {
+      const res = await fetch("http://localhost:5000/api/upcoming-events");
+      const data = await res.json();
+      setUpcomingEvents(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to fetch upcoming events:", error);
+      setUpcomingEvents([]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -194,6 +199,7 @@ const Events = () => {
 };
 
 export default Events;
+
 
 
 
