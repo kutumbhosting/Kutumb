@@ -6,8 +6,8 @@ const PastEvents = () => {
   return (
     <TabsContent value="past" className="space-y-8">
       {Array.isArray(pastEvents) &&
-        pastEvents.map((event, index) => (
-          <Card key={index} className="border border-border">
+        pastEvents.map((event, server) => (
+          <Card key={server} className="border border-border">
             <CardContent className="p-8">
               <div className="flex items-start justify-between mb-4">
                 <h3 className="text-2xl font-bold">{event.title}</h3>
