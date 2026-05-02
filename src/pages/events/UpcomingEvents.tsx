@@ -35,7 +35,7 @@ const UpcomingEvents = ({
   return (
     <TabsContent value="upcoming" className="space-y-12">
       <div className="grid md:grid-cols-2 gap-8">
-        {upcomingEvents
+        {(Array.isArray(upcomingEvents) ? upcomingEvents : [])
           .filter((event) => event.isActive)
           .map((event, index) => {
             const hasFlyer = !!event.flyerImage;
@@ -272,3 +272,4 @@ const UpcomingEvents = ({
 };
 
 export default UpcomingEvents;
+
