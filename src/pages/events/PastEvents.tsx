@@ -31,7 +31,6 @@ const PastEvents = () => {
         <Card key={index} className="border border-border">
           <CardContent className="p-8">
 
-            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
               <h3 className="text-2xl font-bold">{event.title}</h3>
               <span className="text-sm text-primary font-semibold bg-primary/10 px-4 py-2 rounded-full self-start whitespace-nowrap">
@@ -39,12 +38,10 @@ const PastEvents = () => {
               </span>
             </div>
 
-            {/* Description */}
             <p className="text-muted-foreground leading-relaxed mb-6">
               {event.description}
             </p>
 
-            {/* Media Gallery */}
             {event.media && event.media.length > 0 && (
               <div className="w-full overflow-x-auto mb-6">
                 <div className="flex gap-4 pb-2">
@@ -73,7 +70,6 @@ const PastEvents = () => {
               </div>
             )}
 
-            {/* Highlights */}
             <div className="bg-muted/50 rounded-lg p-4">
               <h4 className="font-semibold mb-2 text-sm">Event Highlights:</h4>
               <p className="text-sm text-muted-foreground italic">
