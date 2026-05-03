@@ -29,8 +29,9 @@ const BASE_DIR = path.join(DATA_ROOT, "events");
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 
 app.use("/eventflyer", express.static(path.join(DATA_ROOT, "eventflyer")));
-app.use("/api/pastevents", pastEventsRouter);                                        // 👈 add
-app.use("/api/pastmedia", express.static(path.join(DATA_ROOT, "pastmedia")));       // 👈 add
+app.use("/pastevents", pastEventsRouter);
+app.use("/pastmedia", express.static(path.join(DATA_ROOT, "pastmedia")));
+//app.use("/team-images", express.static(path.join(DATA_ROOT, "team")));
 
 const MEMBERS_DIR = path.join(DATA_ROOT, "members");
 if (!fs.existsSync(MEMBERS_DIR)) fs.mkdirSync(MEMBERS_DIR, { recursive: true });
@@ -122,9 +123,6 @@ app.get("/api/debug-events/:file", (req, res) => {
 
 /* -----------------------------
    ✅ REGISTER EVENT
-   FIX: eventYear now read from upcomingEvents.json so the filename
-   always matches what was written when the event was created.
-   FIX: removed the erroneous +1 per registration in capacity check.
 ------------------------------ */
 app.post("/api/events", (req, res) => {
   const { eventName, eventDate, name, email, phone, adults, children, comments } = req.body;
@@ -133,9 +131,7 @@ app.post("/api/events", (req, res) => {
     return res.status(400).json({ message: "Missing event or email" });
   }
 
-  // FIX: derive eventYear from the stored event record, not from the
-  // free-text eventDate string — this guarantees the filename matches.
-  let eventYear = year(eventDate); // fallback to parsing the date
+  let eventYear = year(eventDate);
 
   if (fs.existsSync(UPCOMING_EVENTS_FILE)) {
     const events = JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]");
@@ -155,7 +151,6 @@ app.post("/api/events", (req, res) => {
 
   const data = readFile(filePath);
 
-  // Prevent duplicate
   const exists = data.some(
     (r) => r.email?.toLowerCase() === email.toLowerCase()
   );
@@ -163,9 +158,6 @@ app.post("/api/events", (req, res) => {
     return res.status(409).json({ message: "Already registered" });
   }
 
-  // FIX: capacity check — count registrations by person, not by record+adults+children.
-  // The original code counted `1 + adults + children` per record which double-counted.
-  // Now we count adults + children only (a registration with 2 adults = 2 spots used).
   let capacity = 0;
 
   if (fs.existsSync(UPCOMING_EVENTS_FILE)) {
@@ -226,7 +218,6 @@ app.post("/api/members", (req, res) => {
 
 /* -----------------------------
    📊 GET ALL EVENT FILES (ADMIN)
-   FIX: moved ABOVE /api/events/:file so it doesn't get swallowed
 ------------------------------ */
 app.get("/api/event-files", (req, res) => {
   try {
@@ -253,7 +244,6 @@ app.get("/api/event-files", (req, res) => {
 
 /* -----------------------------
    ✅ UPDATE EVENT REGISTRATION
-   FIX: moved ABOVE /api/events/:file so "update" isn't treated as a filename
 ------------------------------ */
 app.post("/api/events/update", (req, res) => {
   try {
@@ -288,7 +278,6 @@ app.post("/api/events/update", (req, res) => {
 
 /* -----------------------------
    ✅ DELETE EVENT REGISTRATIONS
-   FIX: moved ABOVE /api/events/:file for same reason
 ------------------------------ */
 app.post("/api/events/delete", (req, res) => {
   try {
@@ -423,7 +412,6 @@ app.post("/api/members/update", (req, res) => {
 
 /* -----------------------------
    ✅ UPCOMING EVENTS
-   FIX: removed erroneous +1 per registration in totalRegistered count
 ------------------------------ */
 app.get("/api/upcoming-events", (req, res) => {
   try {
@@ -443,7 +431,6 @@ app.get("/api/upcoming-events", (req, res) => {
       const exists = fs.existsSync(registrationFile);
       const registrations = exists ? readFile(registrationFile) : [];
 
-      // FIX: count adults + children only — not +1 per registration record
       const totalRegistered = registrations.reduce((sum, r) => {
         return sum + (Number(r.adults) || 0) + (Number(r.children) || 0);
       }, 0);
@@ -609,10 +596,46 @@ app.post("/api/delete-flyer", (req, res) => {
 
 /* -----------------------------
    🔌 FILE MANAGER ROUTES
-   Mounted LAST so it never intercepts specific routes above
-   (e.g. POST /api/events was being caught here before reaching its handler)
 ------------------------------ */
 app.use("/api", fileManagerRoutes);
+
+/* -----------------------------
+   🔌 EXECUTIVE TEAM
+------------------------------ */
+
+// ✅ serve images
+app.use("/team-images", express.static(path.join(DATA_ROOT, "team")));
+
+// ✅ TEAM API
+app.get("/api/team", (req, res) => {
+  try {
+    const filePath = path.join(DATA_ROOT, "team", "profile.json");
+    if (!fs.existsSync(filePath)) return res.status(404).json([]);
+    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    res.json(data);
+  } catch (err) {
+    console.error("TEAM API ERROR:", err);
+    res.status(500).json([]);
+  }
+});
+
+/* -----------------------------
+   🔌 KUTUMB ACTIVITIES
+------------------------------ */
+
+app.use("/activity-images", express.static(path.join(DATA_ROOT, "activities")));
+
+app.get("/api/activities", (req, res) => {
+  try {
+    const filePath = path.join(DATA_ROOT, "activities", "activities.json");
+    if (!fs.existsSync(filePath)) return res.status(404).json([]);
+    const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    res.json(data);
+  } catch (err) {
+    console.error("ACTIVITIES API ERROR:", err);
+    res.status(500).json([]);
+  }
+});
 
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
