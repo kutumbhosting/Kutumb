@@ -195,7 +195,7 @@ const UpcomingEvents = ({
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="adults">Number of Adults *</Label>
+                  <Label htmlFor="adults">Number of Additional Adults *</Label>
                   <Input
                     id="adults"
                     type="number"
