@@ -32,9 +32,9 @@ const PastEvents = () => {
           <CardContent className="p-8">
 
             {/* Header */}
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
               <h3 className="text-2xl font-bold">{event.title}</h3>
-              <span className="text-sm text-primary font-semibold bg-primary/10 px-4 py-2 rounded-full">
+              <span className="text-sm text-primary font-semibold bg-primary/10 px-4 py-2 rounded-full self-start whitespace-nowrap">
                 {event.date}
               </span>
             </div>
@@ -46,8 +46,8 @@ const PastEvents = () => {
 
             {/* Media Gallery */}
             {event.media && event.media.length > 0 && (
-              <div className="flex justify-center mb-6">
-                <div className="flex gap-4 overflow-x-auto">
+              <div className="w-full overflow-x-auto mb-6">
+                <div className="flex gap-4 pb-2">
                   {event.media.map((item, i) => (
                     <div
                       key={i}
