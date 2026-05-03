@@ -80,7 +80,7 @@ const UpcomingEvents = ({
                     {hasFlyer && (
                       <div className="flex justify-center items-start">
                         <img
-                          src={`/api/eventflyer/${event.flyerImage}`}
+                          src={`/eventflyer/${event.flyerImage}`}
                           alt={event.title}
                           className="rounded-lg shadow-md max-h-[350px] object-contain"
                         />
