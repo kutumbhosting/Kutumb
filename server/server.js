@@ -31,7 +31,6 @@ if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 app.use("/eventflyer", express.static(path.join(DATA_ROOT, "eventflyer")));
 app.use("/api/pastevents", pastEventsRouter);                                        // 👈 add
 app.use("/api/pastmedia", express.static(path.join(DATA_ROOT, "pastmedia")));       // 👈 add
-app.use("/team", express.static(path.join(DATA_ROOT, "team")));
 
 const MEMBERS_DIR = path.join(DATA_ROOT, "members");
 if (!fs.existsSync(MEMBERS_DIR)) fs.mkdirSync(MEMBERS_DIR, { recursive: true });
