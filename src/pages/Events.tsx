@@ -11,15 +11,11 @@ import PastEvents from "@/pages/events/PastEvents";
 const Events = () => {
   const { toast } = useToast();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
-
   const location = useLocation();
-  const [activeEvent, setActiveEvent] = useState<string>("");
-  const eventName = location.state?.eventName || "";
-
   const [submitMessage, setSubmitMessage] = useState<string>("");
   const [formData, setFormData] = useState({
     eventName: "",
-    eventDate:"",
+    eventDate: "",
     name: "",
     email: "",
     phone: "",
@@ -29,43 +25,36 @@ const Events = () => {
   });
 
   useEffect(() => {
-    if (location.state) {
+    fetch("/api/upcoming-events")
+      .then((res) => res.json())
+      .then((data) => setUpcomingEvents(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error("Failed to fetch upcoming events:", err);
+        setUpcomingEvents([]);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (location.state?.scrollTo === "registration") {
+      // Pre-fill form from state
       setFormData((prev) => ({
         ...prev,
         eventName: location.state.eventName || "",
         eventDate: location.state.eventDate || "",
       }));
 
-      if (location.state.scrollTo === "registration") {
-        setTimeout(() => {
-          const el = document.getElementById("registration-form");
-          if (el) {
-            const y = el.getBoundingClientRect().top + window.pageYOffset;
+      // Delay scroll to allow page to fully render
+      const timer = setTimeout(() => {
+        const el = document.getElementById("registration-form");
+        if (el) {
+          const y = el.getBoundingClientRect().top + window.pageYOffset - 90;
+          window.scrollTo({ top: y, behavior: "smooth" });
+        }
+      }, 500);
 
-            window.scrollTo({
-              top: y - 90,
-              behavior: "smooth",
-            });
-          }
-        }, 200);
-      }
+      return () => clearTimeout(timer);
     }
-  }, [location]);
-
-  useEffect(() => {
-    fetchUpcomingEvents();
-  }, []);
-
-  const fetchUpcomingEvents = async () => {
-    try {
-      const res = await fetch("/api/upcoming-events");
-      const data = await res.json();
-      setUpcomingEvents(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Failed to fetch upcoming events:", error);
-      setUpcomingEvents([]);
-    }
-  };
+  }, [location.state]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,21 +93,17 @@ const Events = () => {
         return;
       }
 
-      if (!res.ok) {
-        throw new Error(data.message || "Server error");
-      }
+      if (!res.ok) throw new Error(data.message || "Server error");
 
       setSubmitMessage("Registration successful!");
       setTimeout(() => setSubmitMessage(""), 5000);
 
-      // ✅ SUCCESS MESSAGE
       toast({
         title: "Registration Successful!",
         description: "We've received your registration.",
       });
 
-      // ✅ RESET FORM TO INITIAL STATE
-      const initialState = {
+      setFormData({
         eventName: location.state?.eventName || "",
         eventDate: location.state?.eventDate || "",
         name: "",
@@ -127,16 +112,11 @@ const Events = () => {
         comments: "",
         adults: 0,
         children: 0,
-      };
+      });
 
-      setFormData(initialState);
-
-      // ✅ SCROLL BACK TO TOP OF FORM
       setTimeout(() => {
         const el = document.getElementById("registration-form");
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
 
     } catch (error) {
@@ -156,7 +136,6 @@ const Events = () => {
       <Navbar />
 
       <main className="flex-grow">
-        {/* Hero Section */}
         <section className="gradient-warm text-white py-20">
           <div className="container mx-auto px-4 text-center">
             <h1 className="mb-6">Events</h1>
@@ -166,7 +145,6 @@ const Events = () => {
           </div>
         </section>
 
-        {/* Events Tabs */}
         <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4">
             <Tabs defaultValue="upcoming" className="max-w-7xl mx-auto">
