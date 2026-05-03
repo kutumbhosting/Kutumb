@@ -5,6 +5,7 @@
     "image2": "online-yoga.jpeg",
     "description": "Regular yoga sessions promoting physical wellness, mental clarity, and strong community bonding. Suitable for all levels.",
     "schedule": "Daily on Zoom (5:30 AM - 6:45 AM) + in-person sessions at parks.",
+    "participationOptions": ["Online (Zoom)", "In-Person - The Ponds Park", "In-Person - Kellyville North Park", "In-Person - The Gables"],
     "onlineYoga": [
       "Regular Zoom yoga on all days catering for Australian and Indian yogis",
       "Over 250 members in WhatsApp Yoga Group",
@@ -29,6 +30,7 @@
     "image": "food-service.jpeg",
     "description": "Our food distribution program serves nutritious meals to those in need within our community, like international students at Western Sydney University.",
     "schedule": "Every Saturday, 12:00 PM - 3:00 PM",
+    "participationOptions": ["Volunteer - Food Preparation", "Volunteer - Distribution", "Recipient"],
     "benefits": [
       "Support community members in need",
       "Reduce food waste",
@@ -41,6 +43,7 @@
     "image": "bhajan.jpeg",
     "description": "Monthly Bhajan Sandhya and special knowledge sessions bringing the community together in a spiritual and positive environment.",
     "schedule": "First Saturday of every month, 7:00 PM - 10:00 PM",
+    "participationOptions": ["Attend as Guest", "Perform Bhajan", "Host at My Home"],
     "bhajanDetails": [
       "Organised at Kutumb members' houses on rotation",
       "Followed by shared food plates (bhojan prasad)"
@@ -58,6 +61,7 @@
     "image": "menshed.jpeg",
     "description": "Organise Men shed activities like long walk, chit-chat sessions, movie night, clean-ups and indoor-outdoor games.",
     "schedule": "Fortnightly on Saturdays, 4:00 PM - 9:00 PM",
+    "participationOptions": ["Long Walk", "Chit-Chat Session", "Movie Night", "Clean-Up", "Indoor Games", "Outdoor Games"],
     "location": "Rotating locations",
     "benefits": [
       "Promote men's mental health and well-being",
