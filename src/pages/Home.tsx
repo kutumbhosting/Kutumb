@@ -7,32 +7,16 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useEffect, useState } from "react";
 
-const fetchUpcomingEvents = async () => {
-  try {
-    const res = await fetch("/api/upcoming-events"); // ✅ IMPORTANT (no localhost)
-    const data = await res.json();
-    setUpcomingEvents(data);
-  } catch (err) {
-    console.error("Failed to load events", err);
-  }
-};
-
 const Home = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+
   useEffect(() => {
-    fetchUpcomingEvents();
+    fetch("/api/upcoming-events")
+      .then((res) => res.json())
+      .then((data) => setUpcomingEvents(Array.isArray(data) ? data : []))
+      .catch((err) => console.error("Failed to load events", err));
   }, []);
 
-  const fetchUpcomingEvents = async () => {
-    try {
-      const res = await fetch("/api/upcoming-events");
-      const data = await res.json();
-      setUpcomingEvents(data);
-    } catch (err) {
-      console.error("Failed to load events", err);
-    }
-  };
-  
   const stats = [
     { icon: Users, value: "500+", label: "Community Members" },
     { icon: Heart, value: "50+", label: "Events Organized" },
@@ -43,20 +27,15 @@ const Home = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
-      
+
       <main className="flex-grow">
         {/* Hero Section */}
         <section className="relative h-[600px] lg:h-[700px] flex items-center justify-center overflow-hidden gradient-warm">
-          
-          {/* Subtle Background Image */}
           <div
             className="absolute inset-0 bg-cover bg-center opacity-20"
             style={{ backgroundImage: `url(${heroImage})` }}
           />
-
-          {/* Soft overlay for blending */}
           <div className="absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
-
           <div className="container mx-auto px-4 relative z-10 text-center text-white">
             <h1 className="mb-6 animate-fade-in">
               Building Stronger Communities Together
@@ -73,7 +52,8 @@ const Home = () => {
               <Link to="/events">
                 <Button
                   size="lg"
-                  variant="outline" onClick={() => window.scrollTo(0, 0)}
+                  variant="outline"
+                  onClick={() => window.scrollTo(0, 0)}
                   className="text-lg px-10 py-6 bg-white/10 backdrop-blur-sm border-white text-white hover:bg-white hover:text-primary"
                 >
                   View Events
@@ -133,20 +113,26 @@ const Home = () => {
               </p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-              {upcomingEvents.filter((event) => event.isActive).slice(0, 3).map((event, index) => (
-                <Card key={index} className="card-hover border-2">
-                  <CardContent className="p-6">
-                    <div className="text-sm text-primary font-semibold mb-2">{event.date}</div>
-                    <h3 className="text-xl font-bold mb-3">{event.title}</h3>
-                    <p className="text-muted-foreground mb-4">{event.description}</p>
-                    <Link to="/events" state={{ scrollTo: "registration", eventName: event.title, eventDate: event.date }} replace={false}>
-                      <Button variant="outline" className="w-full">
-                        Register Now
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              ))}
+              {upcomingEvents
+                .filter((event) => event.isActive)
+                .slice(0, 3)
+                .map((event, index) => (
+                  <Card key={index} className="card-hover border-2">
+                    <CardContent className="p-6">
+                      <div className="text-sm text-primary font-semibold mb-2">{event.date}</div>
+                      <h3 className="text-xl font-bold mb-3">{event.title}</h3>
+                      <p className="text-muted-foreground mb-4">{event.description}</p>
+                      <Link
+                        to="/events"
+                        state={{ scrollTo: "registration", eventName: event.title, eventDate: event.date }}
+                      >
+                        <Button variant="outline" className="w-full">
+                          Register Now
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                ))}
             </div>
             <div className="text-center mt-12">
               <Link to="/events">
@@ -166,12 +152,12 @@ const Home = () => {
               Join our growing community of compassionate individuals dedicated to creating positive change
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/membership" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
+              <Link to="/membership" onClick={() => window.scrollTo(0, 0)}>
                 <Button size="lg" className="bg-white text-primary hover:bg-white/90 px-10 py-6">
                   Join Kutumb Today
                 </Button>
               </Link>
-              <Link to="/contact" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
+              <Link to="/contact" onClick={() => window.scrollTo(0, 0)}>
                 <Button size="lg" variant="outline" className="border-white text-blue-500 hover:bg-white/20 px-10 py-6">
                   Get in Touch
                 </Button>
