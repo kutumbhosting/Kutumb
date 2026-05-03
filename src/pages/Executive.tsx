@@ -101,7 +101,8 @@ const Executive = () => {
           <div className="container mx-auto px-4 text-center">
             <h1 className="mb-6">Executive Team</h1>
             <p className="text-xl max-w-3xl mx-auto opacity-95">
-              Meet the dedicated individuals who lead Kutumb with passion, integrity, and a commitment to community service.
+              Meet the dedicated individuals who lead Kutumb with passion,
+              integrity, and a commitment to community service.
             </p>
           </div>
         </section>
@@ -160,7 +161,8 @@ const Executive = () => {
             <div className="max-w-3xl mx-auto text-center">
               <h2 className="mb-6">Want to Get Involved?</h2>
               <p className="text-lg text-muted-foreground mb-8">
-                We're always looking for passionate individuals who want to make a difference in our community.
+                We're always looking for passionate individuals who want to make
+                a difference in our community.
               </p>
               <a href="/contact">
                 <button className="btn-hero">Contact Us</button>
