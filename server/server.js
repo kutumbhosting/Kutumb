@@ -29,8 +29,8 @@ const BASE_DIR = path.join(DATA_ROOT, "events");
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 
 app.use("/eventflyer", express.static(path.join(DATA_ROOT, "eventflyer")));
-app.use("/api/pastevents", pastEventsRouter);
-app.use("/api/pastmedia", express.static(path.join(DATA_ROOT, "pastmedia")));
+app.use("/pastevents", pastEventsRouter);
+app.use("/pastmedia", express.static(path.join(DATA_ROOT, "pastmedia")));
 
 const MEMBERS_DIR = path.join(DATA_ROOT, "members");
 if (!fs.existsSync(MEMBERS_DIR)) fs.mkdirSync(MEMBERS_DIR, { recursive: true });
@@ -635,6 +635,47 @@ app.get("/api/activities", (req, res) => {
     res.status(500).json([]);
   }
 });
+
+/* -----------------------------
+   🔌 KUTUMB ACTIVITIES REGISTRATION
+------------------------------ */
+
+app.post("/api/activity-register", (req, res) => {
+  try {
+    const data = req.body;
+    if (!data.activityTitle || !data.email) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const activityDir = path.join(DATA_ROOT, "activities");
+    if (!fs.existsSync(activityDir)) fs.mkdirSync(activityDir, { recursive: true });
+
+    const slugifiedTitle = data.activityTitle
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^\w-]+/g, "");
+
+    const filePath = path.join(activityDir, `${slugifiedTitle}-registration.json`);
+    const existing = fs.existsSync(filePath)
+      ? JSON.parse(fs.readFileSync(filePath, "utf-8"))
+      : [];
+
+    const duplicate = existing.some(
+      (r) => r.email?.toLowerCase() === data.email.toLowerCase()
+    );
+    if (duplicate) {
+      return res.status(409).json({ message: "You are already registered for this activity." });
+    }
+
+    existing.push({ ...data, createdAt: new Date().toISOString() });
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2));
+    res.status(201).json({ message: "Registration successful!" });
+  } catch (err) {
+    console.error("ACTIVITY REGISTER ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
