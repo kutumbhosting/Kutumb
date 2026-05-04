@@ -69,6 +69,10 @@ const writeFile = (filePath, data) => {
    ✅ DEBUG
 ------------------------------ */
 
+app.get("/ping", (req, res) => {
+  res.send("pong");
+});
+
 app.get("/api/debug-events-path", (req, res) => {
   const root = DATA_ROOT;
   const info = {
