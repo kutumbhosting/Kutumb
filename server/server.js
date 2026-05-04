@@ -431,9 +431,11 @@ app.get("/api/upcoming-events", (req, res) => {
       const exists = fs.existsSync(registrationFile);
       const registrations = exists ? readFile(registrationFile) : [];
 
+      // ✅ Correct — 1 for registrant + additional adults + children
       const totalRegistered = registrations.reduce((sum, r) => {
-        return sum + (Number(r.adults) || 0) + (Number(r.children) || 0);
+        return sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0);
       }, 0);
+
 
       const capacity = Number(event.capacity || 0);
       const availableSpots = Math.max(capacity - totalRegistered, 0);
