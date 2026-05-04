@@ -24,7 +24,8 @@ const Events = () => {
     children: 0,
   });
 
-  useEffect(() => {
+  // ── Shared fetch function used on load and after registration ────────────
+  const loadUpcomingEvents = () => {
     fetch("/api/upcoming-events")
       .then((res) => res.json())
       .then((data) => setUpcomingEvents(Array.isArray(data) ? data : []))
@@ -32,18 +33,22 @@ const Events = () => {
         console.error("Failed to fetch upcoming events:", err);
         setUpcomingEvents([]);
       });
+  };
+
+  // ── Initial load ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    loadUpcomingEvents();
   }, []);
 
+  // ── Scroll to form when navigating from Home / Activities ────────────────
   useEffect(() => {
     if (location.state?.scrollTo === "registration") {
-      // Pre-fill form from state
       setFormData((prev) => ({
         ...prev,
         eventName: location.state.eventName || "",
         eventDate: location.state.eventDate || "",
       }));
 
-      // Delay scroll to allow page to fully render
       const timer = setTimeout(() => {
         const el = document.getElementById("registration-form");
         if (el) {
@@ -56,6 +61,7 @@ const Events = () => {
     }
   }, [location.state]);
 
+  // ── Submit handler ────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -103,6 +109,10 @@ const Events = () => {
         description: "We've received your registration.",
       });
 
+      // ✅ Refetch so available spots update immediately in the UI
+      loadUpcomingEvents();
+
+      // ✅ Reset form
       setFormData({
         eventName: location.state?.eventName || "",
         eventDate: location.state?.eventDate || "",
