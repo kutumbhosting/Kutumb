@@ -167,10 +167,11 @@ app.post("/api/events", (req, res) => {
     capacity = Number(eventMeta?.capacity || 0);
   }
 
-  const used = data.reduce(
-    (sum, r) => sum + (Number(r.adults) || 0) + (Number(r.children) || 0),
-    0
-  );
+// ✅ Correct
+const used = data.reduce(
+  (sum, r) => sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0),
+  0
+);
 
   const requested = (Number(adults) || 0) + (Number(children) || 0);
 
