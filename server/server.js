@@ -18,6 +18,7 @@ const __dirname = path.dirname(__filename);
 const slugify = (text) =>
   text
     ?.toString()
+    .toLowerCase() 
     .trim()
     .replace(/\s+/g, "-")
     .replace(/_/g, "-")
