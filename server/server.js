@@ -597,11 +597,6 @@ app.post("/api/delete-flyer", (req, res) => {
 });
 
 /* -----------------------------
-   🔌 FILE MANAGER ROUTES
------------------------------- */
-app.use("/api", fileManagerRoutes);
-
-/* -----------------------------
    🔌 EXECUTIVE TEAM
 ------------------------------ */
 
@@ -679,6 +674,10 @@ app.post("/api/activity-register", (req, res) => {
   }
 });
 
+/* -----------------------------
+   🔌 FILE MANAGER ROUTES
+------------------------------ */
+app.use("/api", fileManagerRoutes);
 
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
