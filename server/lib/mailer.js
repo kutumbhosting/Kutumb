@@ -114,7 +114,7 @@ export async function sendMembershipConfirmationEmail({
       <p>Your membership card is attached to this email as a PDF, and your QR code is shown below.</p>
       <img src="cid:membershipQr" alt="Membership QR Code" style="width:180px;height:180px;" />
       <p style="margin-top:24px;color:#555;font-size:13px;">
-        Kutumb Community Inc. &middot; pramod@kutumb.org.au
+        With Best Regards, &middot; Kutumb Executive Team
       </p>
     </div>
   `;
@@ -160,7 +160,7 @@ export async function sendEventConfirmationEmail({
       <p style="font-size:16px;"><strong>${eventName}</strong>${eventDate ? ` &mdash; ${eventDate}` : ""}</p>
       ${membershipBlock}
       <p style="margin-top:24px;color:#555;font-size:13px;">
-        Kutumb Community Inc. &middot; pramod@kutumb.org.au
+        With Best Regards, &middot; Kutumb Executive Team
       </p>
     </div>
   `;
