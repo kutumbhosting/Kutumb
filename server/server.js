@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import fs from "fs";
 import path from "path";
@@ -6,6 +7,16 @@ import multer from "multer";
 import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
 import pastEventsRouter from "./routes/pastEventsRoute.js";
+import { getNextMembershipNumber } from "./lib/counters.js";
+import { generateQrDataUrl, generateQrPngBuffer, buildCardPdf } from "./lib/membershipCard.js";
+import {
+  sendMembershipConfirmationEmail,
+  sendEventConfirmationEmail,
+  checkEmailConfig,
+  sendTestEmail,
+} from "./lib/mailer.js";
+import { sendWhatsAppDocument } from "./lib/whatsapp.js";
+import { parseEventEndDate, sortPastEventsDescending } from "./lib/eventDates.js";
 
 const app = express();
 
@@ -37,6 +48,7 @@ const MEMBERS_DIR = path.join(DATA_ROOT, "members");
 if (!fs.existsSync(MEMBERS_DIR)) fs.mkdirSync(MEMBERS_DIR, { recursive: true });
 
 const MEMBERS_FILE = path.join(MEMBERS_DIR, "members.json");
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 8080}`;
 const UPCOMING_EVENTS_DIR = path.join(DATA_ROOT, "upcomingevents");
 if (!fs.existsSync(UPCOMING_EVENTS_DIR)) fs.mkdirSync(UPCOMING_EVENTS_DIR, { recursive: true });
 
@@ -67,8 +79,134 @@ const writeFile = (filePath, data) => {
 };
 
 /* -----------------------------
-   ✅ DEBUG
+   🗄️  AUTO-ARCHIVE EXPIRED EVENTS
+   Moves any upcoming event whose date has passed into Past Events.
 ------------------------------ */
+function archiveExpiredUpcomingEvents() {
+  try {
+    if (!fs.existsSync(UPCOMING_EVENTS_FILE)) return;
+
+    const events = readFile(UPCOMING_EVENTS_FILE);
+    if (!Array.isArray(events) || events.length === 0) return;
+
+    const now = new Date();
+    const stillUpcoming = [];
+    const expired = [];
+
+    for (const event of events) {
+      const endDate = parseEventEndDate(event.date);
+      if (endDate && endDate.getTime() < now.getTime()) {
+        expired.push(event);
+      } else {
+        stillUpcoming.push(event);
+      }
+    }
+
+    if (expired.length === 0) return;
+
+    const pastDir = path.join(DATA_ROOT, "pastevents");
+    if (!fs.existsSync(pastDir)) fs.mkdirSync(pastDir, { recursive: true });
+    const pastFile = path.join(pastDir, "pastEventsData.json");
+    const pastEvents = readFile(pastFile);
+
+    const pastMediaDir = path.join(DATA_ROOT, "pastmedia");
+
+    for (const event of expired) {
+      const eventId = slugify(event.title);
+      const eventYear = event.eventYear || year(event.date);
+      const regFile = path.join(BASE_DIR, `${eventId}-${eventYear}.json`);
+      const registrations = readFile(regFile);
+      const attendeesCount = registrations.reduce(
+        (sum, r) => sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0),
+        0
+      );
+
+      const existingIndex = pastEvents.findIndex(
+        (p) => p.title === event.title && p.date === event.date
+      );
+      let media = existingIndex !== -1 ? pastEvents[existingIndex].media || [] : [];
+
+      // Carry the flyer image across into the past-media library so it
+      // still renders on the Past Events page. This also picks up a flyer
+      // that was added *after* the event was first archived (e.g. the
+      // event was re-added to Upcoming with a photo and has now expired
+      // again) - it updates the existing past record rather than
+      // silently discarding the new photo.
+      if (event.flyerImage) {
+        const srcPath = path.join(FLYER_DIR, event.flyerImage);
+        const destName = `archived-${eventId}-${event.flyerImage}`;
+        const alreadyHasThisImage = media.some((m) => m.src === destName);
+
+        if (!alreadyHasThisImage && fs.existsSync(srcPath)) {
+          if (!fs.existsSync(pastMediaDir)) fs.mkdirSync(pastMediaDir, { recursive: true });
+          try {
+            fs.copyFileSync(srcPath, path.join(pastMediaDir, destName));
+            media = [...media, { type: "image", src: destName }];
+          } catch (copyErr) {
+            console.error("Archive media copy failed:", copyErr);
+          }
+        }
+      }
+
+      if (existingIndex !== -1) {
+        pastEvents[existingIndex] = {
+          ...pastEvents[existingIndex],
+          media,
+          description: pastEvents[existingIndex].description || event.description || "",
+          attendeesCount: Math.max(pastEvents[existingIndex].attendeesCount || 0, attendeesCount),
+        };
+        console.log(`📦 Updated already-archived event "${event.title}" (${event.date}) with new photo`);
+        continue;
+      }
+
+      pastEvents.push({
+        title: event.title,
+        date: event.date,
+        description: event.description || "",
+        highlights: "",
+        media,
+        attendeesCount,
+        archivedAt: new Date().toISOString(),
+      });
+
+      console.log(`📦 Auto-archived expired event "${event.title}" (${event.date}) to Past Events`);
+    }
+
+    writeFile(UPCOMING_EVENTS_FILE, stillUpcoming);
+    writeFile(pastFile, pastEvents);
+  } catch (err) {
+    console.error("ARCHIVE EVENTS ERROR:", err);
+  }
+}
+
+/* -----------------------------
+   🪪 BACKFILL MEMBERSHIP NUMBERS + QR CODES
+   Assigns a membership number/QR to any member record created before
+   this feature existed (e.g. manually seeded members.json entries).
+------------------------------ */
+async function backfillMembershipNumbers() {
+  try {
+    const data = readFile(MEMBERS_FILE);
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    const missing = data.filter((m) => !m.membershipNumber);
+    if (missing.length === 0) return;
+
+    // Assign numbers in the order members actually joined
+    missing.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+    for (const member of missing) {
+      const registeredAt = member.createdAt ? new Date(member.createdAt) : new Date();
+      member.membershipNumber = getNextMembershipNumber(data, registeredAt);
+      member.qrCode = await generateQrDataUrl(member.membershipNumber);
+      console.log(`🪪 Backfilled membership number ${member.membershipNumber} for ${member.name}`);
+    }
+
+    writeFile(MEMBERS_FILE, data);
+  } catch (err) {
+    console.error("BACKFILL MEMBERSHIP ERROR:", err);
+  }
+}
 
 app.get("/ping", (req, res) => {
   res.send("pong");
@@ -128,11 +266,11 @@ app.get("/api/debug-events/:file", (req, res) => {
 /* -----------------------------
    ✅ REGISTER EVENT
 ------------------------------ */
-app.post("/api/events", (req, res) => {
+app.post("/api/events", async (req, res) => {
   const { eventName, eventDate, name, email, phone, adults, children, comments } = req.body;
 
-  if (!eventName || !email) {
-    return res.status(400).json({ message: "Missing event or email" });
+  if (!eventName || !name || !email || !phone) {
+    return res.status(400).json({ message: "Name, email and phone are required" });
   }
 
   let eventYear = year(eventDate);
@@ -184,7 +322,7 @@ const used = data.reduce(
     return res.status(400).json({ message: "Not enough spots available" });
   }
 
-  data.push({
+  const newRegistration = {
     eventName,
     eventYear,
     name,
@@ -194,29 +332,202 @@ const used = data.reduce(
     children,
     comments,
     createdAt: new Date().toISOString(),
-  });
+  };
+  data.push(newRegistration);
+
+  // ── Check if the registrant is already a Kutumb member ──────────────────
+  const members = readFile(MEMBERS_FILE);
+  const matchedMember = members.find(
+    (m) => m.email?.trim().toLowerCase() === email.trim().toLowerCase()
+  );
+
+  let qrDataUrl = null;
+  let qrPngBuffer = null;
+  let cardPdfBuffer = null;
+  if (matchedMember?.membershipNumber) {
+    qrDataUrl = matchedMember.qrCode || (await generateQrDataUrl(matchedMember.membershipNumber));
+    qrPngBuffer = await generateQrPngBuffer(matchedMember.membershipNumber);
+    cardPdfBuffer = await buildCardPdf({
+      title: "Kutumb Membership Card",
+      membershipNumber: matchedMember.membershipNumber,
+      name: matchedMember.name,
+      email: matchedMember.email,
+      phone: matchedMember.phone,
+      qrPngBuffer,
+    });
+
+    // Record the membership match against this event registration too,
+    // so admin exports/CSVs show it without cross-referencing members.json
+    newRegistration.isMember = true;
+    newRegistration.membershipNumber = matchedMember.membershipNumber;
+  }
 
   writeFile(filePath, data);
-  res.status(201).json({ message: "Registration successful" });
+
+  // ── Send confirmation email (includes membership number if applicable) ──
+  sendEventConfirmationEmail({
+    to: email,
+    name,
+    eventName,
+    eventDate,
+    membershipNumber: matchedMember?.membershipNumber,
+    qrPngBuffer,
+    cardPdfBuffer,
+  }).catch((err) => console.error("Event email error:", err));
+
+  res.status(201).json({
+    message: "Registration successful",
+    isMember: !!matchedMember,
+    membershipNumber: matchedMember?.membershipNumber || null,
+    qrCode: qrDataUrl,
+    name,
+    email,
+    phone,
+    eventName,
+    eventDate,
+  });
 });
 
 /* -----------------------------
    ✅ REGISTER MEMBER
 ------------------------------ */
-app.post("/api/members", (req, res) => {
+app.post("/api/members", async (req, res) => {
   try {
     const { name, email, phone, address, interests } = req.body;
-    if (!name || !email) return res.status(400).json({ message: "Missing required fields" });
+
+    // Name, email and phone are compulsory
+    if (!name?.trim() || !email?.trim() || !phone?.trim()) {
+      return res.status(400).json({ message: "Name, email and phone are required" });
+    }
 
     const data = readFile(MEMBERS_FILE);
-    const exists = data.some((m) => m.email?.toLowerCase() === email.toLowerCase());
-    if (exists) return res.status(409).json({ message: "Member already exists" });
 
-    data.push({ name, email, phone, address, interests, createdAt: new Date().toISOString() });
+    // Unique on the (name + email) combination - no duplicate membership allowed
+    const normalizedName = name.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
+    const duplicate = data.some(
+      (m) =>
+        m.name?.trim().toLowerCase() === normalizedName &&
+        m.email?.trim().toLowerCase() === normalizedEmail
+    );
+    if (duplicate) {
+      return res.status(409).json({ message: "This name and email combination is already a registered member" });
+    }
+
+    const membershipNumber = getNextMembershipNumber(data);
+    const qrDataUrl = await generateQrDataUrl(membershipNumber);
+    const qrPngBuffer = await generateQrPngBuffer(membershipNumber);
+
+    const newMember = {
+      name,
+      email,
+      phone,
+      address,
+      interests,
+      membershipNumber,
+      qrCode: qrDataUrl,
+      createdAt: new Date().toISOString(),
+    };
+
+    data.push(newMember);
     writeFile(MEMBERS_FILE, data);
-    res.status(201).json({ message: "Member registered" });
+
+    // Build the same PDF card shown in the popup / download button, so the
+    // email carries the actual membership card, not just the QR code.
+    const cardPdfBuffer = await buildCardPdf({
+      title: "Kutumb Membership Card",
+      membershipNumber,
+      name,
+      email,
+      phone,
+      qrPngBuffer,
+    });
+
+    // Send confirmation email - failures are logged but never block registration
+    sendMembershipConfirmationEmail({
+      to: email,
+      name,
+      membershipNumber,
+      qrPngBuffer,
+      cardPdfBuffer,
+    }).catch((err) => console.error("Membership email error:", err));
+
+    res.status(201).json({
+      message: "Member registered",
+      membershipNumber,
+      qrCode: qrDataUrl,
+      name,
+      email,
+      phone,
+    });
   } catch (err) {
     console.error("POST /members error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* -----------------------------
+   🪪 MEMBERSHIP CARD PDF (download / WhatsApp source)
+------------------------------ */
+app.get("/api/members/:membershipNumber/card.pdf", async (req, res) => {
+  try {
+    const { membershipNumber } = req.params;
+    const data = readFile(MEMBERS_FILE);
+    const member = data.find((m) => m.membershipNumber === membershipNumber);
+    if (!member) return res.status(404).json({ message: "Member not found" });
+
+    const qrPngBuffer = await generateQrPngBuffer(member.membershipNumber);
+    const pdfBuffer = await buildCardPdf({
+      title: "Kutumb Membership Card",
+      membershipNumber: member.membershipNumber,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      qrPngBuffer,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="kutumb-membership-${member.membershipNumber}.pdf"`
+    );
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error("CARD PDF ERROR:", err);
+    res.status(500).json({ message: "Failed to generate card" });
+  }
+});
+
+/* -----------------------------
+   📲 SEND MEMBERSHIP CARD VIA WHATSAPP
+------------------------------ */
+app.post("/api/members/send-whatsapp", async (req, res) => {
+  try {
+    const { membershipNumber, whatsappNumber } = req.body;
+    if (!membershipNumber || !whatsappNumber) {
+      return res.status(400).json({ message: "Membership number and WhatsApp number are required" });
+    }
+
+    const data = readFile(MEMBERS_FILE);
+    const member = data.find((m) => m.membershipNumber === membershipNumber);
+    if (!member) return res.status(404).json({ message: "Member not found" });
+
+    const pdfUrl = `${PUBLIC_BASE_URL}/api/members/${membershipNumber}/card.pdf`;
+
+    const result = await sendWhatsAppDocument({
+      to: whatsappNumber,
+      pdfUrl,
+      filename: `kutumb-membership-${membershipNumber}.pdf`,
+      caption: `Kutumb Membership Card - ${member.name} (${membershipNumber})`,
+    });
+
+    if (!result.sent) {
+      return res.status(502).json({ message: result.error || "WhatsApp send failed" });
+    }
+
+    res.json({ message: "Card sent via WhatsApp" });
+  } catch (err) {
+    console.error("SEND WHATSAPP ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -420,6 +731,8 @@ app.post("/api/members/update", (req, res) => {
 ------------------------------ */
 app.get("/api/upcoming-events", (req, res) => {
   try {
+    archiveExpiredUpcomingEvents();
+
     const debug = req.query.debug === "true";
 
     const events = fs.existsSync(UPCOMING_EVENTS_FILE)
@@ -684,6 +997,48 @@ app.post("/api/activity-register", (req, res) => {
 ------------------------------ */
 app.use("/api", fileManagerRoutes);
 
+app.get("/api/email/status", async (req, res) => {
+  const status = await checkEmailConfig();
+  res.json(status);
+});
+
+app.post("/api/email/test-send", async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ message: "'to' email address is required" });
+
+  const result = await sendTestEmail(to);
+  if (!result.sent) {
+    return res.status(502).json({ message: result.error || "Failed to send test email" });
+  }
+  res.json({ message: `Test email sent to ${to}` });
+});
+
+app.get("/api/whatsapp/status", (req, res) => {
+  const configured = !!(process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN);
+  const publicUrlOk = !!process.env.PUBLIC_BASE_URL && !process.env.PUBLIC_BASE_URL.includes("localhost");
+
+  res.json({
+    configured,
+    senderNumber: process.env.WHATSAPP_SENDER_NUMBER || null,
+    publicBaseUrl: PUBLIC_BASE_URL,
+    publicBaseUrlIsPublic: publicUrlOk,
+    readyToSend: configured && publicUrlOk,
+    notes: [
+      !configured && "WHATSAPP_PHONE_NUMBER_ID and/or WHATSAPP_ACCESS_TOKEN missing from .env",
+      !publicUrlOk &&
+        "PUBLIC_BASE_URL must be a real public https URL (not localhost) so Meta can fetch the card PDF",
+    ].filter(Boolean),
+  });
+});
+
+/* -----------------------------
+   ✅ MANUAL ARCHIVE TRIGGER (admin)
+------------------------------ */
+app.post("/api/upcoming-events/archive-now", (req, res) => {
+  archiveExpiredUpcomingEvents();
+  res.json({ message: "Archive check complete" });
+});
+
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
 ------------------------------*/
@@ -715,4 +1070,39 @@ const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on", PORT);
+
+  checkEmailConfig().then((status) => {
+    if (!status.configured) {
+      console.warn("⚠️  Email is NOT configured - set SMTP_HOST (and SMTP_USER/SMTP_PASS) in .env");
+    } else if (status.verified) {
+      console.log(`✅ Email configured and verified (sending from ${status.from})`);
+    } else {
+      console.warn(`⚠️  Email is configured but the connection failed: ${status.error}`);
+      console.warn("    Double-check SMTP_HOST/PORT/USER/PASS in .env - see EMAIL-SETUP.md");
+    }
+  });
+
+  if (process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN) {
+    console.log(`✅ WhatsApp configured (sender ${process.env.WHATSAPP_SENDER_NUMBER || "unknown"})`);
+    if (!process.env.PUBLIC_BASE_URL || process.env.PUBLIC_BASE_URL.includes("localhost")) {
+      console.warn(
+        "⚠️  PUBLIC_BASE_URL is not set to a public address - WhatsApp document sends will fail " +
+        "because Meta's servers cannot download the card PDF from localhost."
+      );
+    }
+  } else {
+    console.warn("⚠️  WhatsApp is NOT configured - set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN in .env");
+  }
+
+  // Assign membership numbers/QR codes to any pre-existing member records
+  // that don't have one yet (e.g. manually seeded members.json entries).
+  backfillMembershipNumbers().catch((err) =>
+    console.error("Startup membership backfill failed:", err)
+  );
+
+  // Move any already-expired events into Past Events on startup,
+  // then re-check once an hour as a background safety net (the
+  // /api/upcoming-events endpoint also triggers this on every read).
+  archiveExpiredUpcomingEvents();
+  setInterval(archiveExpiredUpcomingEvents, 60 * 60 * 1000);
 });
