@@ -5,10 +5,22 @@
     "description": "Joined Hands with Hanumant Seva Trust to organise a 5 day Sundarkand and Ramcharitmanas program with Shri Dhaval Kumar ji. Completely free event for members and their family and friends. Attended by over 100 Kutumbians.",
     "highlights": "A very spiritual and devotional atmosphere, great sessions on ram bhakts like Hanuman ji, Kewat Ji, nice prasadam on each day",
     "media": [
-      { "type": "image", "src": "26satsang1.jpeg" },
-      { "type": "image", "src": "26satsang2.jpeg" },
-      { "type": "image", "src": "26satsang3.jpeg" },
-      { "type": "video", "src": "26satsangvideo.mp4" }
+      {
+        "type": "image",
+        "src": "26satsang1.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "26satsang2.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "26satsang3.jpeg"
+      },
+      {
+        "type": "video",
+        "src": "26satsangvideo.mp4"
+      }
     ]
   },
   {
@@ -17,10 +29,22 @@
     "description": "Bring your health questions and discover insights on well-being through yoga and home remedies. Over 100 participants joined us for a special yoga picnic and get together session in the park.",
     "highlights": "A meaningful yoga and home remedies session, favourite home cooked dish to share, peaceful atmosphere",
     "media": [
-      { "type": "image", "src": "25yogapicnic1.jpeg" },
-      { "type": "image", "src": "25yogapicnic2.jpeg" },
-      { "type": "image", "src": "25yogapicnic3.jpeg" },
-      { "type": "video", "src": "25yogapicnicvideo.mp4" }
+      {
+        "type": "image",
+        "src": "25yogapicnic1.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25yogapicnic2.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25yogapicnic3.jpeg"
+      },
+      {
+        "type": "video",
+        "src": "25yogapicnicvideo.mp4"
+      }
     ]
   },
   {
@@ -29,10 +53,22 @@
     "description": "Our biggest event of the year brought together over 300 community members for a day of celebration, cultural performances, food, and fun. The festival showcased the diversity and unity of our community.",
     "highlights": "Event featured cultural dances, food stalls, kids activities, and community performances",
     "media": [
-      { "type": "image", "src": "25diwali2.jpeg" },
-      { "type": "image", "src": "25diwali3.jpeg" },
-      { "type": "image", "src": "25diwali4.jpeg" },
-      { "type": "video", "src": "25diwalivideo.mp4" }
+      {
+        "type": "image",
+        "src": "25diwali2.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25diwali3.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25diwali4.jpeg"
+      },
+      {
+        "type": "video",
+        "src": "25diwalivideo.mp4"
+      }
     ]
   },
   {
@@ -41,10 +77,22 @@
     "description": "Over 100 participants joined us for a special yoga session in the park to celebrate International Yoga Day. The session focused on unity, wellness, and community bonding.",
     "highlights": "Large group yoga session in community hall, diverse participants, peaceful atmosphere",
     "media": [
-      { "type": "image", "src": "25intyoga1.jpeg" },
-      { "type": "image", "src": "25intyoga2.jpeg" },
-      { "type": "image", "src": "25intyoga3.jpeg" },
-      { "type": "video", "src": "25intyogavideo.mp4" }
+      {
+        "type": "image",
+        "src": "25intyoga1.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25intyoga2.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25intyoga3.jpeg"
+      },
+      {
+        "type": "video",
+        "src": "25intyogavideo.mp4"
+      }
     ]
   },
   {
@@ -53,10 +101,22 @@
     "description": "Joined Hands with Darpan Radio to organise a Community Holi Celebration. Completely free event for members and their family and friends. Attended by over 100 Kutumbians including kids. Lots of Masti with singing and dancing; and traditional Holi sweets and savouries.",
     "highlights": "Volunteers preparing meals, distribution to community members, smiling faces",
     "media": [
-      { "type": "image", "src": "25holi1.jpeg" },
-      { "type": "image", "src": "25holi2.jpeg" },
-      { "type": "image", "src": "25holi3.jpeg" },
-      { "type": "video", "src": "25holivideo.mp4" }
+      {
+        "type": "image",
+        "src": "25holi1.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25holi2.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25holi3.jpeg"
+      },
+      {
+        "type": "video",
+        "src": "25holivideo.mp4"
+      }
     ]
   },
   {
@@ -65,10 +125,45 @@
     "description": "Event for members and their family and friends. For a perfect and devotional start of the year. Joined hands with our own Nand and Rajni Upadhyay by sponsoring the hall rental.",
     "highlights": "Large group session in Kutumb house, devotional atmosphere, vegetarian bhojan prasad",
     "media": [
-      { "type": "image", "src": "25sunderkand1.jpeg" },
-      { "type": "image", "src": "25sunderkand2.jpeg" },
-      { "type": "video", "src": "25sunderkandvideo1.mp4" },
-      { "type": "video", "src": "25sunderkandvideo2.mp4" }
+      {
+        "type": "image",
+        "src": "25sunderkand1.jpeg"
+      },
+      {
+        "type": "image",
+        "src": "25sunderkand2.jpeg"
+      },
+      {
+        "type": "video",
+        "src": "25sunderkandvideo1.mp4"
+      },
+      {
+        "type": "video",
+        "src": "25sunderkandvideo2.mp4"
+      }
     ]
+  },
+  {
+    "title": "Kutumb Musical Evening",
+    "date": "May 9, 2026",
+    "description": "Please bring a Thali for the potluck of your favourite dish, snacks, and songs/poems/dance/anecdots to share",
+    "highlights": "",
+    "media": [
+      {
+        "type": "image",
+        "src": "archived-kutumb-musical-evening-musical.jpeg"
+      }
+    ],
+    "attendeesCount": 15,
+    "archivedAt": "2026-07-23T08:50:06.550Z"
+  },
+  {
+    "title": "International Yoga Day",
+    "date": "June 21, 2026",
+    "description": "Join us on this special day of yoga to know benefits and impact of it in our mental and physical well being",
+    "highlights": "",
+    "media": [],
+    "attendeesCount": 0,
+    "archivedAt": "2026-07-23T08:50:06.551Z"
   }
 ]
