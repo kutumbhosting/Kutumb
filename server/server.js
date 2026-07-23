@@ -1039,6 +1039,112 @@ app.post("/api/upcoming-events/archive-now", (req, res) => {
   res.json({ message: "Archive check complete" });
 });
 
+/* -----------------------------
+   📸 PAST EVENTS - ADMIN MANAGEMENT
+   (update text fields, upload/delete media for a past event)
+------------------------------ */
+const PAST_EVENTS_DIR = path.join(DATA_ROOT, "pastevents");
+if (!fs.existsSync(PAST_EVENTS_DIR)) fs.mkdirSync(PAST_EVENTS_DIR, { recursive: true });
+const PAST_EVENTS_FILE = path.join(PAST_EVENTS_DIR, "pastEventsData.json");
+
+const PAST_MEDIA_DIR = path.join(DATA_ROOT, "pastmedia");
+if (!fs.existsSync(PAST_MEDIA_DIR)) fs.mkdirSync(PAST_MEDIA_DIR, { recursive: true });
+
+const pastMediaStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, PAST_MEDIA_DIR),
+  filename: (req, file, cb) => {
+    const safeName = Date.now() + "-" + file.originalname.replace(/\s+/g, "-");
+    cb(null, safeName);
+  },
+});
+const uploadPastMedia = multer({ storage: pastMediaStorage });
+
+function readPastEvents() {
+  return fs.existsSync(PAST_EVENTS_FILE)
+    ? JSON.parse(fs.readFileSync(PAST_EVENTS_FILE, "utf-8") || "[]")
+    : [];
+}
+function writePastEvents(data) {
+  fs.writeFileSync(PAST_EVENTS_FILE, JSON.stringify(data, null, 2));
+}
+
+// Update a past event's description/highlights (matched by title + date)
+app.post("/api/pastevents/update", (req, res) => {
+  try {
+    const { title, date, description, highlights } = req.body;
+    if (!title || !date) return res.status(400).json({ message: "title and date are required" });
+
+    const data = readPastEvents();
+    const idx = data.findIndex((e) => e.title === title && e.date === date);
+    if (idx === -1) return res.status(404).json({ message: "Past event not found" });
+
+    if (description !== undefined) data[idx].description = description;
+    if (highlights !== undefined) data[idx].highlights = highlights;
+
+    writePastEvents(data);
+    res.json({ message: "Past event updated", event: data[idx] });
+  } catch (err) {
+    console.error("PAST EVENT UPDATE ERROR:", err);
+    res.status(500).json({ message: "Update failed" });
+  }
+});
+
+// Upload a new photo/video and attach it to a past event (matched by title + date)
+app.post("/api/pastevents/upload-media", uploadPastMedia.single("file"), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const { title, date } = req.body;
+    if (!title || !date) return res.status(400).json({ message: "title and date are required" });
+
+    const data = readPastEvents();
+    const idx = data.findIndex((e) => e.title === title && e.date === date);
+    if (idx === -1) return res.status(404).json({ message: "Past event not found" });
+
+    const mediaItem = {
+      type: req.file.mimetype.startsWith("video") ? "video" : "image",
+      src: req.file.filename,
+    };
+    data[idx].media = [...(data[idx].media || []), mediaItem];
+
+    writePastEvents(data);
+    res.json({ message: "Media uploaded", media: mediaItem, event: data[idx] });
+  } catch (err) {
+    console.error("PAST EVENT MEDIA UPLOAD ERROR:", err);
+    res.status(500).json({ message: "Upload failed" });
+  }
+});
+
+// Remove a specific media item from a past event (matched by title + date + src)
+app.post("/api/pastevents/delete-media", (req, res) => {
+  try {
+    const { title, date, src } = req.body;
+    if (!title || !date || !src) {
+      return res.status(400).json({ message: "title, date and src are required" });
+    }
+
+    const data = readPastEvents();
+    const idx = data.findIndex((e) => e.title === title && e.date === date);
+    if (idx === -1) return res.status(404).json({ message: "Past event not found" });
+
+    data[idx].media = (data[idx].media || []).filter((m) => m.src !== src);
+    writePastEvents(data);
+
+    const filePath = path.join(PAST_MEDIA_DIR, src);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch (unlinkErr) {
+        console.error("Could not delete media file:", unlinkErr);
+      }
+    }
+
+    res.json({ message: "Media removed", event: data[idx] });
+  } catch (err) {
+    console.error("PAST EVENT MEDIA DELETE ERROR:", err);
+    res.status(500).json({ message: "Delete failed" });
+  }
+});
+
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
 ------------------------------*/
