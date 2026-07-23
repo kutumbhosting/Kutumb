@@ -38,11 +38,13 @@ const PastEvents = () => {
               </span>
             </div>
 
-            <p className="text-muted-foreground leading-relaxed mb-6">
-              {event.description}
-            </p>
+            {event.description && event.description.trim() !== "" && (
+              <p className="text-muted-foreground leading-relaxed mb-6">
+                {event.description}
+              </p>
+            )}
 
-            {event.media && event.media.length > 0 && (
+            {event.media && event.media.length > 0 ? (
               <div className="w-full overflow-x-auto mb-6">
                 <div className="flex gap-4 pb-2">
                   {event.media.map((item, i) => (
@@ -68,14 +70,26 @@ const PastEvents = () => {
                   ))}
                 </div>
               </div>
+            ) : (
+              // No photos were uploaded for this event - show a Kutumb-branded
+              // placeholder rather than leaving a visual gap.
+              <div className="w-full h-40 rounded-lg mb-6 bg-muted/40 flex items-center justify-center">
+                <img
+                  src="/kutumb-logo.png"
+                  alt="Kutumb"
+                  className="h-14 w-auto object-contain opacity-70"
+                />
+              </div>
             )}
 
-            <div className="bg-muted/50 rounded-lg p-4">
-              <h4 className="font-semibold mb-2 text-sm">Event Highlights:</h4>
-              <p className="text-sm text-muted-foreground italic">
-                {event.highlights}
-              </p>
-            </div>
+            {event.highlights && event.highlights.trim() !== "" && (
+              <div className="bg-muted/50 rounded-lg p-4">
+                <h4 className="font-semibold mb-2 text-sm">Event Highlights:</h4>
+                <p className="text-sm text-muted-foreground italic">
+                  {event.highlights}
+                </p>
+              </div>
+            )}
 
           </CardContent>
         </Card>

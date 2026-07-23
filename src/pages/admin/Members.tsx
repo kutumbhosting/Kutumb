@@ -68,6 +68,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
             <thead>
               <tr className="border-b">
                 <th className="p-2"></th>
+                <th className="p-2 text-left">Membership No</th>
                 <th className="p-2 text-left">Name</th>
                 <th className="p-2 text-left">Email</th>
                 <th className="p-2 text-left">Phone</th>
@@ -85,6 +86,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
                       onChange={() => toggleMemberRow(item.email)}
                     />
                   </td>
+                  <td className="p-2 font-mono">{item.membershipNumber || "-"}</td>
                   <td className="p-2">{item.name}</td>
                   <td className="p-2">{item.email}</td>
                   <td className="p-2">{item.phone}</td>

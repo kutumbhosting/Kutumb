@@ -10,6 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Heart, Calendar, Shield } from "lucide-react";
+import MembershipCardDialog, {
+  MembershipCardData,
+} from "@/components/MembershipCardDialog";
 
 const Membership = () => {
   const { toast } = useToast();
@@ -21,6 +24,9 @@ const Membership = () => {
     address: "",
     interests: [] as string[],
   });
+
+  const [cardOpen, setCardOpen] = useState(false);
+  const [cardData, setCardData] = useState<MembershipCardData | null>(null);
 
   const location = useLocation();
 
@@ -157,6 +163,15 @@ const Membership = () => {
         description:
           "Your membership application has been submitted successfully.",
       });
+
+      setCardData({
+        membershipNumber: data.membershipNumber,
+        qrCode: data.qrCode,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+      });
+      setCardOpen(true);
 
       setFormData({
         name: "",
@@ -413,6 +428,12 @@ const Membership = () => {
       </main>
 
       <Footer />
+
+      <MembershipCardDialog
+        open={cardOpen}
+        onOpenChange={setCardOpen}
+        card={cardData}
+      />
     </div>
   );
 };
