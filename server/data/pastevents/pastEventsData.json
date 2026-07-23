@@ -162,7 +162,12 @@
     "date": "June 21, 2026",
     "description": "Join us on this special day of yoga to know benefits and impact of it in our mental and physical well being",
     "highlights": "",
-    "media": [],
+    "media": [      
+      {
+        "type": "image",
+        "src": "archived-International_yoga_day_2026.jpeg"
+      }
+    ],
     "attendeesCount": 0,
     "archivedAt": "2026-07-23T08:50:06.551Z"
   }
