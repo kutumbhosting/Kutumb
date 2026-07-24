@@ -336,26 +336,15 @@ const used = data.reduce(
   data.push(newRegistration);
 
   // ── Check if the registrant is already a Kutumb member ──────────────────
+  // (used for the on-screen confirmation popup / admin records only -
+  // event registration is open to anyone, member or not, and the
+  // confirmation EMAIL never includes the membership card)
   const members = readFile(MEMBERS_FILE);
   const matchedMember = members.find(
     (m) => m.email?.trim().toLowerCase() === email.trim().toLowerCase()
   );
 
-  let qrDataUrl = null;
-  let qrPngBuffer = null;
-  let cardPdfBuffer = null;
   if (matchedMember?.membershipNumber) {
-    qrDataUrl = matchedMember.qrCode || (await generateQrDataUrl(matchedMember.membershipNumber));
-    qrPngBuffer = await generateQrPngBuffer(matchedMember.membershipNumber);
-    cardPdfBuffer = await buildCardPdf({
-      title: "Kutumb Membership Card",
-      membershipNumber: matchedMember.membershipNumber,
-      name: matchedMember.name,
-      email: matchedMember.email,
-      phone: matchedMember.phone,
-      qrPngBuffer,
-    });
-
     // Record the membership match against this event registration too,
     // so admin exports/CSVs show it without cross-referencing members.json
     newRegistration.isMember = true;
@@ -364,22 +353,36 @@ const used = data.reduce(
 
   writeFile(filePath, data);
 
-  // ── Send confirmation email (includes membership number if applicable) ──
+  // ── Attach the event's flyer image to the confirmation email, if any ────
+  let flyerBuffer = null;
+  let flyerFilename = null;
+  if (fs.existsSync(UPCOMING_EVENTS_FILE)) {
+    const events = JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]");
+    const eventMeta = events.find((e) => e.title?.toLowerCase() === eventName.toLowerCase());
+    if (eventMeta?.flyerImage) {
+      const flyerPath = path.join(FLYER_DIR, eventMeta.flyerImage);
+      if (fs.existsSync(flyerPath)) {
+        flyerBuffer = fs.readFileSync(flyerPath);
+        flyerFilename = eventMeta.flyerImage;
+      }
+    }
+  }
+
+  // ── Send a simple success confirmation email (no membership card) ───────
   sendEventConfirmationEmail({
     to: email,
     name,
     eventName,
     eventDate,
-    membershipNumber: matchedMember?.membershipNumber,
-    qrPngBuffer,
-    cardPdfBuffer,
+    flyerBuffer,
+    flyerFilename,
   }).catch((err) => console.error("Event email error:", err));
 
   res.status(201).json({
     message: "Registration successful",
     isMember: !!matchedMember,
     membershipNumber: matchedMember?.membershipNumber || null,
-    qrCode: qrDataUrl,
+    qrCode: matchedMember?.qrCode || null,
     name,
     email,
     phone,
