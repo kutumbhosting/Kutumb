@@ -7,17 +7,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import UpcomingEvents from "@/pages/events/UpcomingEvents";
 import PastEvents from "@/pages/events/PastEvents";
-import MembershipCardDialog, {
-  MembershipCardData,
-} from "@/components/MembershipCardDialog";
 
 const Events = () => {
   const { toast } = useToast();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const location = useLocation();
   const [submitMessage, setSubmitMessage] = useState<string>("");
-  const [cardOpen, setCardOpen] = useState(false);
-  const [cardData, setCardData] = useState<MembershipCardData | null>(null);
   const [formData, setFormData] = useState({
     eventName: "",
     eventDate: "",
@@ -114,21 +109,6 @@ const Events = () => {
         description: "We've received your registration.",
       });
 
-      // If the registrant is an existing Kutumb member, show their card
-      // (with membership number + QR) and offer to send it via WhatsApp.
-      if (data.isMember && data.membershipNumber) {
-        setCardData({
-          membershipNumber: data.membershipNumber,
-          qrCode: data.qrCode,
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          eventName: data.eventName,
-          eventDate: data.eventDate,
-        });
-        setCardOpen(true);
-      }
-
       // ✅ Refetch so available spots update immediately in the UI
       loadUpcomingEvents();
 
@@ -202,20 +182,8 @@ const Events = () => {
       </main>
 
       <Footer />
-
-      <MembershipCardDialog
-        open={cardOpen}
-        onOpenChange={setCardOpen}
-        card={cardData}
-      />
     </div>
   );
 };
 
 export default Events;
-
-
-
-
-
-
