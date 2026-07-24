@@ -114,7 +114,7 @@ export async function sendMembershipConfirmationEmail({
       <p>Your membership card is attached to this email as a PDF, and your QR code is shown below.</p>
       <img src="cid:membershipQr" alt="Membership QR Code" style="width:180px;height:180px;" />
       <p style="margin-top:24px;color:#555;font-size:13px;">
-        With Best Regards, &middot; Kutumb Executive Team
+        Kutumb Community Inc. &middot; pramod@kutumb.org.au
       </p>
     </div>
   `;
@@ -140,27 +140,18 @@ export async function sendEventConfirmationEmail({
   name,
   eventName,
   eventDate,
-  membershipNumber, // optional - only present if registrant is an existing member
-  qrPngBuffer, // optional
-  cardPdfBuffer, // optional - same styled PDF card, attached when registrant is a member
+  flyerBuffer, // optional - the event's flyer image, attached as a keepsake
+  flyerFilename, // optional - original filename, used to infer extension/content type
 }) {
-  const membershipBlock = membershipNumber
-    ? `
-      <p style="font-size:16px;"><strong>Your Kutumb Membership Number: ${membershipNumber}</strong></p>
-      <p>Your membership card is attached to this email as a PDF.</p>
-      <img src="cid:membershipQr" alt="Membership QR Code" style="width:150px;height:150px;" />
-    `
-    : "";
-
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
       ${LOGO_HTML}
       <h2 style="color:#7c3f00;">Registration Confirmed</h2>
       <p>Hi ${name}, you're registered for:</p>
       <p style="font-size:16px;"><strong>${eventName}</strong>${eventDate ? ` &mdash; ${eventDate}` : ""}</p>
-      ${membershipBlock}
+      <p>We look forward to seeing you there!</p>
       <p style="margin-top:24px;color:#555;font-size:13px;">
-        With Best Regards, &middot; Kutumb Executive Team
+        Kutumb Community Inc. &middot; pramod@kutumb.org.au
       </p>
     </div>
   `;
@@ -171,12 +162,7 @@ export async function sendEventConfirmationEmail({
     html,
     attachments: [
       ...logoAttachment(),
-      ...(membershipNumber && qrPngBuffer
-        ? [{ filename: "membership-qr.png", content: qrPngBuffer, cid: "membershipQr" }]
-        : []),
-      ...(membershipNumber && cardPdfBuffer
-        ? [{ filename: `kutumb-membership-card-${membershipNumber}.pdf`, content: cardPdfBuffer }]
-        : []),
+      ...(flyerBuffer ? [{ filename: flyerFilename || "event-flyer.jpg", content: flyerBuffer }] : []),
     ],
   });
 }
