@@ -67,9 +67,11 @@ const UpcomingEvents = ({
     (e) => e.title === formData.eventName
   );
   const isMember = !!membershipNumber;
-  const applicableFee = selectedEvent
+  const perPersonFee = selectedEvent
     ? Number(isMember ? selectedEvent.memberFee : selectedEvent.nonMemberFee) || 0
     : null;
+  const totalAttendees = 1 + (Number(formData.adults) || 0) + (Number(formData.children) || 0);
+  const totalFee = perPersonFee !== null ? perPersonFee * totalAttendees : null;
 
   return (
     <TabsContent value="upcoming" className="space-y-12">
@@ -247,17 +249,6 @@ const UpcomingEvents = ({
                 )}
               </div>
 
-              {/* Fee for this event, based on membership status */}
-              {selectedEvent && (selectedEvent.memberFee > 0 || selectedEvent.nonMemberFee > 0) && (
-                <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 text-sm">
-                  <p className="font-semibold text-orange-800 mb-1">Registration Fee</p>
-                  <p>
-                    {isMember ? "Member fee" : "Non-member fee"}:{" "}
-                    <strong>{applicableFee && applicableFee > 0 ? `$${applicableFee}` : "Free"}</strong>
-                  </p>
-                </div>
-              )}
-
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="adults">Number of Additional Adults *</Label>
@@ -293,6 +284,20 @@ const UpcomingEvents = ({
                   />
                 </div>
               </div>
+
+              {/* Total registration fee, based on membership status and attendee count */}
+              {selectedEvent && (selectedEvent.memberFee > 0 || selectedEvent.nonMemberFee > 0) && (
+                <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 text-sm space-y-1">
+                  <p className="font-semibold text-orange-800">Registration Fee</p>
+                  <p>
+                    {isMember ? "Member fee" : "Non-member fee"}: <strong>${perPersonFee}</strong> per person
+                    &times; {totalAttendees} {totalAttendees === 1 ? "attendee" : "attendees"}
+                  </p>
+                  <p className="text-base">
+                    Total: <strong>{totalFee && totalFee > 0 ? `$${totalFee}` : "Free"}</strong>
+                  </p>
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="comments">Additional Comments</Label>

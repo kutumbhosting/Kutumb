@@ -173,6 +173,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                     <th className="p-2 text-left">Adults</th>
                     <th className="p-2 text-left">Children</th>
                     <th className="p-2 text-left">Fee</th>
+                    <th className="p-2 text-left">Payment Status</th>
                     <th className="p-2 text-left">Membership No</th>
                     <th className="p-2 text-left">Comments</th>
                   </tr>
@@ -194,6 +195,15 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                       <td className="p-2">{item.adults}</td>
                       <td className="p-2">{item.children}</td>
                       <td className="p-2">{typeof item.fee === "number" ? `$${item.fee}` : "-"}</td>
+                      <td className="p-2">
+                        {item.paymentStatus === "Paid" ? (
+                          <span className="text-green-700 font-medium">Paid</span>
+                        ) : item.paymentStatus === "Pending" ? (
+                          <span className="text-orange-600 font-medium">Pending</span>
+                        ) : (
+                          <span className="text-muted-foreground">{item.paymentStatus || "N/A"}</span>
+                        )}
+                      </td>
                       <td className="p-2">{item.membershipNumber || "-"}</td>
                       <td className="p-2">{item.comments || "-"}</td>
                     </tr>
@@ -235,6 +245,18 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                     value={editingEvent.fee ?? 0}
                     onChange={(e) => setEditingEvent({ ...editingEvent, fee: e.target.value })}
                   />
+                  <div>
+                    <label className="text-sm font-medium block mb-1">Payment Status</label>
+                    <select
+                      className="w-full p-2 border rounded text-foreground bg-background"
+                      value={editingEvent.paymentStatus || "N/A"}
+                      onChange={(e) => setEditingEvent({ ...editingEvent, paymentStatus: e.target.value })}
+                    >
+                      <option value="N/A">N/A (no fee)</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Paid">Paid</option>
+                    </select>
+                  </div>
                   <Input
                     placeholder="Comments"
                     value={editingEvent.comments || ""}

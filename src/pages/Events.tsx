@@ -121,12 +121,14 @@ const Events = () => {
       setSuccessData({
         eventName: data.eventName || formData.eventName,
         eventDate: data.eventDate || formData.eventDate,
+        eventYear: data.eventYear,
         registrationNumber: data.registrationNumber,
         isMember: !!data.isMember,
         membershipNumber: data.membershipNumber,
         adults: data.adults ?? formData.adults,
         children: data.children ?? formData.children,
         fee: data.fee,
+        perPersonFee: data.perPersonFee,
         email: data.email || formData.email,
       });
       setSuccessOpen(true);

@@ -25,7 +25,12 @@ const Admin = () => {
   const { toast } = useToast();
 
   // ─── Auth state ────────────────────────────────────────────────────────────
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // Persisted in localStorage so navigating to another page and back keeps
+  // the admin logged in - only an explicit Logout clears it.
+  const ADMIN_SESSION_KEY = "kutumb_admin_logged_in";
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    () => localStorage.getItem(ADMIN_SESSION_KEY) === "true"
+  );
   const [loginData, setLoginData] = useState({ user: "", password: "" });
 
   // ─── Shared data passed down to tab components ────────────────────────────
@@ -93,13 +98,19 @@ const Admin = () => {
     }
   };
 
+  // Refresh dashboard data whenever we become logged in - covers both a
+  // fresh login and a restored session (page navigated to/from, or reloaded).
+  useEffect(() => {
+    if (isLoggedIn) fetchData();
+  }, [isLoggedIn]);
+
   // ─── Login handler ─────────────────────────────────────────────────────────
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (loginData.user === ADMIN_USER && loginData.password === ADMIN_PASSWORD) {
       setIsLoggedIn(true);
+      localStorage.setItem(ADMIN_SESSION_KEY, "true");
       toast({ title: "Login Successful", description: "Welcome Admin" });
-      fetchData();
     } else {
       toast({
         title: "Invalid Credentials",
@@ -107,6 +118,14 @@ const Admin = () => {
         variant: "destructive",
       });
     }
+  };
+
+  // ─── Logout handler ─────────────────────────────────────────────────────────
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.removeItem(ADMIN_SESSION_KEY);
+    setLoginData({ user: "", password: "" });
+    toast({ title: "Logged Out", description: "You have been logged out." });
   };
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
@@ -157,6 +176,14 @@ const Admin = () => {
         {isLoggedIn && (
           <section className="py-20 bg-muted/30">
             <div className="container mx-auto px-4">
+              <div className="max-w-7xl mx-auto flex justify-end mb-4">
+                <Button
+                  onClick={handleLogout}
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground"
+                >
+                  Logout
+                </Button>
+              </div>
               <Tabs defaultValue="events" className="max-w-7xl mx-auto">
 
                 <TabsList className="flex w-full max-w-2xl mx-auto gap-3 mb-12">
@@ -212,4 +239,3 @@ const Admin = () => {
 };
 
 export default Admin;
-
