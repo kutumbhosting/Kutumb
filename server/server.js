@@ -36,6 +36,36 @@ const slugify = (text) =>
     .replace(/[^\w-]+/g, "");
 
 const DATA_ROOT = process.env.DATA_ROOT || path.join(process.cwd(), "server/data");
+
+// ── Seed a fresh/empty DATA_ROOT (e.g. a brand-new persistent volume) ──────
+// SEED_DATA_DIR is the server/data folder as baked into this build/image -
+// always the same regardless of what DATA_ROOT is pointed at. If DATA_ROOT
+// has been redirected somewhere else (a mounted persistent volume) and it
+// hasn't been seeded yet, copy the bundled starting content into it once.
+//
+// Seeding is decided by an explicit marker file (.kutumb-seeded), NOT by
+// "is the directory empty" - freshly formatted cloud block volumes often
+// auto-create a `lost+found` directory, which made a naive emptiness check
+// think the volume already had data and skip seeding entirely, leaving the
+// app with nothing. The marker file sidesteps that completely.
+const SEED_DATA_DIR = path.join(__dirname, "data");
+const SEED_MARKER_FILE = path.join(DATA_ROOT, ".kutumb-seeded");
+(function seedDataIfNeeded() {
+  try {
+    if (path.resolve(DATA_ROOT) === path.resolve(SEED_DATA_DIR)) return; // not redirected - nothing to seed
+    if (!fs.existsSync(SEED_DATA_DIR)) return; // no bundled seed available
+    if (fs.existsSync(SEED_MARKER_FILE)) return; // already seeded previously - never overwrite
+
+    console.log(`🌱 DATA_ROOT (${DATA_ROOT}) has not been seeded yet - copying bundled starting data...`);
+    fs.mkdirSync(DATA_ROOT, { recursive: true });
+    fs.cpSync(SEED_DATA_DIR, DATA_ROOT, { recursive: true });
+    fs.writeFileSync(SEED_MARKER_FILE, new Date().toISOString());
+    console.log("✅ Seed data copied to persistent storage.");
+  } catch (err) {
+    console.error("SEED DATA ERROR:", err);
+  }
+})();
+
 const BASE_DIR = path.join(DATA_ROOT, "events");
 
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
