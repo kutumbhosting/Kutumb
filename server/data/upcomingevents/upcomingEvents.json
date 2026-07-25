@@ -1,50 +1,42 @@
 [
   {
-    "title": "Kutumb Musical Evening",
-    "date": "May 9, 2026",
-    "time": "5:30 PM - 9:00 PM",
-    "location": "Ermington Community Hall",
-    "capacity": "100",
-    "registrations":[],
-    "description": "Please bring a Thali for the potluck of your favourite dish, snacks, and songs/poems/dance/anecdots to share",
-    "isActive": true,
-    "flyerImage": "musical.jpeg",
-    "updatedAt": "2026-04-27T00:19:53.638Z"
-  },
-  {
-    "title": "International Yoga Day",
-    "date": "June 21, 2026",
-    "time": "8:00 AM - 12:00 PM",
-    "location": "TBA",
-    "capacity": "150",
-    "registrations":[],
-    "description": "Join us on this special day of yoga to know benefits and impact of it in our mental and physical well being",
-    "isActive": true,
-    "flyerImage": "",
-    "updatedAt": "2026-04-25T09:38:38.060Z"
-  },
-  {
     "title": "Guru Purnima Celebration",
     "date": "September, 2026",
     "time": "TBA",
     "location": "TBA",
-    "capacity": "100",
-    "registrations":[],
+    "capacity": 100,
+    "registrations": [],
     "description": "Join us in celebrating Guru Purnima Purv as we honor and express our gratitude to the teachers and gurus who have deeply influenced our lives.",
-    "isActive": true,
+    "isActive": false,
     "flyerImage": "",
-    "updatedAt": "2026-04-25T09:38:39.075Z"
+    "updatedAt": "2026-07-25T02:28:28.347Z",
+    "registrationsCount": 0,
+    "availableSpots": 100
   },
   {
     "title": "Diwali and Multi Cultural Event",
     "date": "October, 2026",
     "time": "6:00 PM - 10:00 PM",
     "location": "TBA",
-    "capacity": "300",
-    "registrations":[],
+    "capacity": 300,
+    "registrations": [],
     "description": "Celebrate Diwali with family and friends, great cultural programs and foods.",
-    "isActive": true,
+    "isActive": false,
     "flyerImage": "",
-    "updatedAt": "2026-04-25T08:35:27.967Z"
+    "updatedAt": "2026-07-25T02:28:29.518Z",
+    "registrationsCount": 0,
+    "availableSpots": 300
+  },
+  {
+    "title": "Utsav Multicultural Festival 2026",
+    "date": "September 20, 2026",
+    "time": "6-8PM",
+    "location": "Harvey Lowe Pavilion, castle Hill Showground",
+    "capacity": "300",
+    "description": "Celebrating unity in diversity by showcasing the rich cultures of Australia through Indian Cultural Performances, Music, Dances, Family Entertainment and many more.",
+    "isActive": true,
+    "published": true,
+    "createdAt": "2026-07-25T02:28:18.173Z",
+    "flyerImage": "1784946503672-Utsav2026.jpg"
   }
 ]
