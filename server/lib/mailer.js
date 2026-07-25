@@ -140,6 +140,8 @@ export async function sendEventConfirmationEmail({
   name,
   eventName,
   eventDate,
+  registrationNumber, // optional
+  fee, // optional - total fee owed (0 or undefined = no fee)
   membershipNumber, // optional - mentioned as plain text only, no card/QR/PDF
   flyerBuffer, // optional - the event's flyer image, attached as a keepsake
   flyerFilename, // optional - original filename, used to infer extension/content type
@@ -148,13 +150,25 @@ export async function sendEventConfirmationEmail({
     ? `<p style="font-size:14px;">Your Kutumb Membership Number: <strong>${membershipNumber}</strong></p>`
     : "";
 
+  const registrationLine = registrationNumber
+    ? `<p style="font-size:14px;">Registration Number: <strong>${registrationNumber}</strong></p>`
+    : "";
+
+  const feeOwed = typeof fee === "number" && fee > 0;
+  const paymentLine = feeOwed
+    ? `<p style="font-size:14px;">Registration Fee: <strong>$${fee}</strong> &middot; Payment Status: <strong style="color:#b45309;">Pending</strong></p>
+       <p style="font-size:13px;color:#555;">You'll receive a separate confirmation email once your payment has been recorded.</p>`
+    : `<p style="font-size:14px;">Registration Fee: <strong>Free</strong></p>`;
+
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
       ${LOGO_HTML}
       <h2 style="color:#7c3f00;">Registration Confirmed</h2>
       <p>Hi ${name}, you're registered for:</p>
       <p style="font-size:16px;"><strong>${eventName}</strong>${eventDate ? ` &mdash; ${eventDate}` : ""}</p>
+      ${registrationLine}
       ${membershipLine}
+      ${paymentLine}
       <p>We look forward to seeing you there!</p>
       <p style="margin-top:24px;color:#555;font-size:13px;">
         With Best Regards, &middot; Kutumb Executive Team
@@ -173,6 +187,39 @@ export async function sendEventConfirmationEmail({
   });
 }
 
+export async function sendEventPaymentConfirmationEmail({
+  to,
+  name,
+  eventName,
+  eventDate,
+  registrationNumber,
+  fee,
+  transactionNumber,
+}) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#15803d;">Payment Confirmed ✅</h2>
+      <p>Hi ${name}, thank you - your payment has been recorded for:</p>
+      <p style="font-size:16px;"><strong>${eventName}</strong>${eventDate ? ` &mdash; ${eventDate}` : ""}</p>
+      ${registrationNumber ? `<p style="font-size:14px;">Registration Number: <strong>${registrationNumber}</strong></p>` : ""}
+      <p style="font-size:14px;">Amount: <strong>$${fee}</strong> &middot; Payment Status: <strong style="color:#15803d;">Paid</strong></p>
+      ${transactionNumber ? `<p style="font-size:14px;">Transaction Reference: <strong>${transactionNumber}</strong></p>` : ""}
+      <p>You have paid in full - we look forward to seeing you there!</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">
+        With Best Regards, &middot; Kutumb Executive Team
+      </p>
+    </div>
+  `;
+
+  return send({
+    to,
+    subject: `Payment Confirmed - ${eventName}`,
+    html,
+    attachments: logoAttachment(),
+  });
+}
+
 export async function sendDonationThankYouEmail({
   to,
   name,
@@ -186,8 +233,14 @@ export async function sendDonationThankYouEmail({
     : "";
 
   const transferLine = bankTransferred
-    ? `<p style="font-size:14px;">Bank transfer reference: <strong>${transactionNumber || "(not provided)"}</strong></p>`
-    : `<p style="font-size:14px;">Payment method: To be arranged / not yet transferred.</p>`;
+    ? `<p style="font-size:14px;">Payment Status: <strong style="color:#15803d;">Paid</strong> &middot; Transaction Reference: <strong>${transactionNumber || "(not provided)"}</strong></p>`
+    : `<p style="font-size:14px;">Payment Status: <strong style="color:#b45309;">Pending</strong> - please complete your bank transfer using the details below when ready.</p>
+       <div style="border:2px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 16px;margin:12px 0;font-size:14px;">
+         <p style="font-weight:600;color:#9a3412;margin:0 0 4px;">Kutumb Bank Details</p>
+         <p style="margin:2px 0;">Account Name: Kutumb Australia Inc</p>
+         <p style="margin:2px 0;">BSB: 082-356</p>
+         <p style="margin:2px 0;">Account: 778280517</p>
+       </div>`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">

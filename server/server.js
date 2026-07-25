@@ -13,6 +13,7 @@ import { generateQrDataUrl, generateQrPngBuffer, buildCardPdf } from "./lib/memb
 import {
   sendMembershipConfirmationEmail,
   sendEventConfirmationEmail,
+  sendEventPaymentConfirmationEmail,
   sendDonationThankYouEmail,
   checkEmailConfig,
   sendTestEmail,
@@ -389,8 +390,14 @@ const used = data.reduce(
     newRegistration.membershipNumber = matchedMember.membershipNumber;
   }
 
-  const applicableFee = matchedMember?.membershipNumber ? memberFee : nonMemberFee;
+  const perPersonFee = matchedMember?.membershipNumber ? memberFee : nonMemberFee;
+  const totalAttendees = 1 + (Number(adults) || 0) + (Number(children) || 0);
+  const applicableFee = perPersonFee * totalAttendees;
   newRegistration.fee = applicableFee;
+  newRegistration.perPersonFee = perPersonFee;
+  newRegistration.bankTransferred = false;
+  newRegistration.transactionNumber = null;
+  newRegistration.paymentStatus = applicableFee > 0 ? "Pending" : "N/A";
 
   writeFile(filePath, data);
 
@@ -416,6 +423,8 @@ const used = data.reduce(
     name,
     eventName,
     eventDate,
+    registrationNumber: newRegistration.registrationNumber,
+    fee: applicableFee,
     membershipNumber: matchedMember?.membershipNumber || null,
     flyerBuffer,
     flyerFilename,
@@ -428,6 +437,7 @@ const used = data.reduce(
     membershipNumber: matchedMember?.membershipNumber || null,
     qrCode: matchedMember?.qrCode || null,
     fee: applicableFee,
+    perPersonFee,
     adults: Number(adults) || 0,
     children: Number(children) || 0,
     name,
@@ -435,6 +445,7 @@ const used = data.reduce(
     phone,
     eventName,
     eventDate,
+    eventYear,
   });
 });
 
@@ -611,6 +622,70 @@ app.get("/api/event-files", (req, res) => {
 /* -----------------------------
    ✅ UPDATE EVENT REGISTRATION
 ------------------------------ */
+/* -----------------------------
+   💳 RECORD PAYMENT FOR AN EVENT REGISTRATION
+------------------------------ */
+app.post("/api/events/record-payment", (req, res) => {
+  try {
+    const { eventName, eventYear, email, bankTransferred, transactionNumber } = req.body;
+    if (!eventName || !eventYear || !email) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+    if (bankTransferred && !transactionNumber?.trim()) {
+      return res.status(400).json({ message: "Transaction number is required when bank transfer is marked as done" });
+    }
+
+    const eventId = slugify(eventName);
+    const fileName = `${eventId}-${eventYear}.json`;
+    const filePath = path.join(BASE_DIR, fileName);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "Event registration file not found" });
+    }
+
+    const data = readFile(filePath);
+    let found = false;
+    let updatedEntry = null;
+    const updated = data.map((entry) => {
+      if (entry.email?.toLowerCase() === email.toLowerCase()) {
+        found = true;
+        updatedEntry = {
+          ...entry,
+          bankTransferred: !!bankTransferred,
+          transactionNumber: bankTransferred ? transactionNumber : entry.transactionNumber || null,
+          paymentStatus: bankTransferred ? "Paid" : "Pending",
+          paymentRecordedAt: new Date().toISOString(),
+        };
+        return updatedEntry;
+      }
+      return entry;
+    });
+
+    if (!found) return res.status(404).json({ message: "Registration not found" });
+
+    writeFile(filePath, updated);
+
+    // Only send a "payment confirmed" email once they've actually marked
+    // the bank transfer as done - marking "no, not yet" has nothing to confirm.
+    if (updatedEntry.bankTransferred) {
+      sendEventPaymentConfirmationEmail({
+        to: updatedEntry.email,
+        name: updatedEntry.name,
+        eventName: updatedEntry.eventName,
+        eventDate: req.body.eventDate || null,
+        registrationNumber: updatedEntry.registrationNumber,
+        fee: updatedEntry.fee,
+        transactionNumber: updatedEntry.transactionNumber,
+      }).catch((err) => console.error("Payment confirmation email error:", err));
+    }
+
+    res.json({ message: "Payment details recorded" });
+  } catch (err) {
+    console.error("RECORD PAYMENT ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 app.post("/api/events/update", (req, res) => {
   try {
     const { eventName, eventYear, email, updatedData } = req.body;
@@ -1143,6 +1218,7 @@ app.post("/api/donations", async (req, res) => {
       amount: Number(amount),
       bankTransferred: !!bankTransferred,
       transactionNumber: bankTransferred ? transactionNumber : null,
+      paymentStatus: bankTransferred ? "Paid" : "Pending",
       createdAt: new Date().toISOString(),
     };
     donations.push(donation);
