@@ -8,10 +8,12 @@ import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
 import pastEventsRouter from "./routes/pastEventsRoute.js";
 import { getNextMembershipNumber } from "./lib/counters.js";
+import { getNextRegistrationNumber } from "./lib/registrationNumber.js";
 import { generateQrDataUrl, generateQrPngBuffer, buildCardPdf } from "./lib/membershipCard.js";
 import {
   sendMembershipConfirmationEmail,
   sendEventConfirmationEmail,
+  sendDonationThankYouEmail,
   checkEmailConfig,
   sendTestEmail,
 } from "./lib/mailer.js";
@@ -331,6 +333,8 @@ app.post("/api/events", async (req, res) => {
   }
 
   let capacity = 0;
+  let memberFee = 0;
+  let nonMemberFee = 0;
 
   if (fs.existsSync(UPCOMING_EVENTS_FILE)) {
     const events = JSON.parse(fs.readFileSync(UPCOMING_EVENTS_FILE, "utf-8") || "[]");
@@ -338,6 +342,8 @@ app.post("/api/events", async (req, res) => {
       (e) => e.title?.toLowerCase() === eventName.toLowerCase()
     );
     capacity = Number(eventMeta?.capacity || 0);
+    memberFee = Number(eventMeta?.memberFee || 0);
+    nonMemberFee = Number(eventMeta?.nonMemberFee || 0);
   }
 
 // ✅ Correct
@@ -361,14 +367,16 @@ const used = data.reduce(
     adults,
     children,
     comments,
+    registrationNumber: getNextRegistrationNumber(data),
     createdAt: new Date().toISOString(),
   };
   data.push(newRegistration);
 
   // ── Check if the registrant is already a Kutumb member ──────────────────
-  // (used for the on-screen confirmation popup / admin records only -
-  // event registration is open to anyone, member or not, and the
-  // confirmation EMAIL never includes the membership card)
+  // (used for the on-screen confirmation popup / admin records, and to
+  // work out which fee applies - event registration is open to anyone,
+  // member or not, and the confirmation EMAIL never includes the
+  // membership card, only a text mention of the number if applicable)
   const members = readFile(MEMBERS_FILE);
   const matchedMember = members.find(
     (m) => m.email?.trim().toLowerCase() === email.trim().toLowerCase()
@@ -380,6 +388,9 @@ const used = data.reduce(
     newRegistration.isMember = true;
     newRegistration.membershipNumber = matchedMember.membershipNumber;
   }
+
+  const applicableFee = matchedMember?.membershipNumber ? memberFee : nonMemberFee;
+  newRegistration.fee = applicableFee;
 
   writeFile(filePath, data);
 
@@ -398,21 +409,27 @@ const used = data.reduce(
     }
   }
 
-  // ── Send a simple success confirmation email (no membership card) ───────
+  // ── Send a simple success confirmation email (text mention of membership
+  // number if applicable - no card, no QR, no PDF) ────────────────────────
   sendEventConfirmationEmail({
     to: email,
     name,
     eventName,
     eventDate,
+    membershipNumber: matchedMember?.membershipNumber || null,
     flyerBuffer,
     flyerFilename,
   }).catch((err) => console.error("Event email error:", err));
 
   res.status(201).json({
     message: "Registration successful",
+    registrationNumber: newRegistration.registrationNumber,
     isMember: !!matchedMember,
     membershipNumber: matchedMember?.membershipNumber || null,
     qrCode: matchedMember?.qrCode || null,
+    fee: applicableFee,
+    adults: Number(adults) || 0,
+    children: Number(children) || 0,
     name,
     email,
     phone,
@@ -693,6 +710,34 @@ app.get("/api/events/:eventName/:eventYear", (req, res) => {
 });
 
 /* -----------------------------
+   🔎 LOOK UP A MEMBER BY NAME + EMAIL
+   Used to live-populate the membership number field on the event
+   registration and donation forms as the person types.
+------------------------------ */
+app.get("/api/members/lookup", (req, res) => {
+  try {
+    const name = (req.query.name || "").toString().trim().toLowerCase();
+    const email = (req.query.email || "").toString().trim().toLowerCase();
+
+    if (!email) return res.json({ found: false });
+
+    const members = readFile(MEMBERS_FILE);
+    const match = members.find((m) => m.email?.trim().toLowerCase() === email);
+
+    if (!match?.membershipNumber) return res.json({ found: false });
+
+    res.json({
+      found: true,
+      membershipNumber: match.membershipNumber,
+      name: match.name,
+    });
+  } catch (err) {
+    console.error("MEMBER LOOKUP ERROR:", err);
+    res.status(500).json({ found: false });
+  }
+});
+
+/* -----------------------------
    👥 GET ALL MEMBERS
 ------------------------------ */
 app.get("/api/members", (req, res) => {
@@ -794,6 +839,8 @@ app.get("/api/upcoming-events", (req, res) => {
       return {
         ...event,
         capacity,
+        memberFee: Number(event.memberFee) || 0,
+        nonMemberFee: Number(event.nonMemberFee) || 0,
         registrationsCount: totalRegistered,
         availableSpots,
         ...(debug && {
@@ -1062,6 +1109,68 @@ app.get("/api/whatsapp/status", (req, res) => {
         "PUBLIC_BASE_URL must be a real public https URL (not localhost) so Meta can fetch the card PDF",
     ].filter(Boolean),
   });
+});
+
+/* -----------------------------
+   💛 DONATIONS
+------------------------------ */
+const DONATIONS_DIR = path.join(DATA_ROOT, "donations");
+if (!fs.existsSync(DONATIONS_DIR)) fs.mkdirSync(DONATIONS_DIR, { recursive: true });
+const DONATIONS_FILE = path.join(DONATIONS_DIR, "donations.json");
+
+app.post("/api/donations", async (req, res) => {
+  try {
+    const { name, email, amount, bankTransferred, transactionNumber } = req.body;
+
+    if (!name?.trim() || !email?.trim() || !amount) {
+      return res.status(400).json({ message: "Name, email and amount are required" });
+    }
+    if (bankTransferred && !transactionNumber?.trim()) {
+      return res.status(400).json({ message: "Transaction number is required when bank transfer is marked as done" });
+    }
+
+    // Look up membership number, same as the event registration form
+    const members = readFile(MEMBERS_FILE);
+    const matchedMember = members.find(
+      (m) => m.email?.trim().toLowerCase() === email.trim().toLowerCase()
+    );
+
+    const donations = readFile(DONATIONS_FILE);
+    const donation = {
+      name,
+      email,
+      membershipNumber: matchedMember?.membershipNumber || null,
+      amount: Number(amount),
+      bankTransferred: !!bankTransferred,
+      transactionNumber: bankTransferred ? transactionNumber : null,
+      createdAt: new Date().toISOString(),
+    };
+    donations.push(donation);
+    writeFile(DONATIONS_FILE, donations);
+
+    sendDonationThankYouEmail({
+      to: email,
+      name,
+      amount: donation.amount,
+      membershipNumber: donation.membershipNumber,
+      bankTransferred: donation.bankTransferred,
+      transactionNumber: donation.transactionNumber,
+    }).catch((err) => console.error("Donation email error:", err));
+
+    res.status(201).json({ message: "Thank you for your donation", donation });
+  } catch (err) {
+    console.error("DONATION ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+app.get("/api/donations", (req, res) => {
+  try {
+    res.json(readFile(DONATIONS_FILE));
+  } catch (err) {
+    console.error("GET DONATIONS ERROR:", err);
+    res.status(500).json([]);
+  }
 });
 
 /* -----------------------------

@@ -140,15 +140,21 @@ export async function sendEventConfirmationEmail({
   name,
   eventName,
   eventDate,
+  membershipNumber, // optional - mentioned as plain text only, no card/QR/PDF
   flyerBuffer, // optional - the event's flyer image, attached as a keepsake
   flyerFilename, // optional - original filename, used to infer extension/content type
 }) {
+  const membershipLine = membershipNumber
+    ? `<p style="font-size:14px;">Your Kutumb Membership Number: <strong>${membershipNumber}</strong></p>`
+    : "";
+
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
       ${LOGO_HTML}
       <h2 style="color:#7c3f00;">Registration Confirmed</h2>
       <p>Hi ${name}, you're registered for:</p>
       <p style="font-size:16px;"><strong>${eventName}</strong>${eventDate ? ` &mdash; ${eventDate}` : ""}</p>
+      ${membershipLine}
       <p>We look forward to seeing you there!</p>
       <p style="margin-top:24px;color:#555;font-size:13px;">
         With Best Regards, &middot; Kutumb Executive Team
@@ -164,5 +170,43 @@ export async function sendEventConfirmationEmail({
       ...logoAttachment(),
       ...(flyerBuffer ? [{ filename: flyerFilename || "event-flyer.jpg", content: flyerBuffer }] : []),
     ],
+  });
+}
+
+export async function sendDonationThankYouEmail({
+  to,
+  name,
+  amount,
+  membershipNumber, // optional
+  bankTransferred,
+  transactionNumber,
+}) {
+  const membershipLine = membershipNumber
+    ? `<p style="font-size:14px;">Kutumb Membership Number: <strong>${membershipNumber}</strong></p>`
+    : "";
+
+  const transferLine = bankTransferred
+    ? `<p style="font-size:14px;">Bank transfer reference: <strong>${transactionNumber || "(not provided)"}</strong></p>`
+    : `<p style="font-size:14px;">Payment method: To be arranged / not yet transferred.</p>`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">Thank You for Your Donation, ${name}!</h2>
+      <p>We've recorded your pledged donation of <strong>$${amount}</strong> to Kutumb.</p>
+      ${membershipLine}
+      ${transferLine}
+      <p>Your generosity helps us continue serving the community. Thank you for your support!</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">
+        With Best Regards, &middot; Kutumb Executive Team
+      </p>
+    </div>
+  `;
+
+  return send({
+    to,
+    subject: "Thank You for Your Donation to Kutumb",
+    html,
+    attachments: logoAttachment(),
   });
 }
