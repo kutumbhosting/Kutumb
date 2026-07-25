@@ -20,6 +20,8 @@ const UpcomingEvents = () => {
     capacity: "",
     description: "",
     isActive: true,
+    memberFee: "0",
+    nonMemberFee: "0",
   });
 
   // ─── flyer preview ──────────────────────────────────────────────────────
@@ -60,6 +62,8 @@ const UpcomingEvents = () => {
                   <th className="p-2 text-left">Time</th>
                   <th className="p-2 text-left">Location</th>
                   <th className="p-2 text-left">Capacity</th>
+                  <th className="p-2 text-left">Member Fee</th>
+                  <th className="p-2 text-left">Non-Member Fee</th>
                   <th className="p-2 text-left">Description</th>
                   <th className="p-2 text-left">Flyer</th>
                   <th className="p-2 text-left">Action</th>
@@ -140,6 +144,34 @@ const UpcomingEvents = () => {
                         onChange={(e) =>
                           setUpcomingEvents((prev) =>
                             prev.map((ev, i) => i === index ? { ...ev, capacity: e.target.value } : ev)
+                          )
+                        }
+                      />
+                    </td>
+
+                    {/* MEMBER FEE */}
+                    <td className="p-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={event.memberFee ?? 0}
+                        onChange={(e) =>
+                          setUpcomingEvents((prev) =>
+                            prev.map((ev, i) => i === index ? { ...ev, memberFee: e.target.value } : ev)
+                          )
+                        }
+                      />
+                    </td>
+
+                    {/* NON-MEMBER FEE */}
+                    <td className="p-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={event.nonMemberFee ?? 0}
+                        onChange={(e) =>
+                          setUpcomingEvents((prev) =>
+                            prev.map((ev, i) => i === index ? { ...ev, nonMemberFee: e.target.value } : ev)
                           )
                         }
                       />
@@ -299,6 +331,29 @@ const UpcomingEvents = () => {
           onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
         />
 
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm font-medium block mb-1">Member Fee ($)</label>
+            <Input
+              type="number"
+              min="0"
+              placeholder="0"
+              value={newEvent.memberFee}
+              onChange={(e) => setNewEvent({ ...newEvent, memberFee: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium block mb-1">Non-Member Fee ($)</label>
+            <Input
+              type="number"
+              min="0"
+              placeholder="0"
+              value={newEvent.nonMemberFee}
+              onChange={(e) => setNewEvent({ ...newEvent, nonMemberFee: e.target.value })}
+            />
+          </div>
+        </div>
+
         <div className="space-y-2">
           <label className="text-sm font-medium">Flyer Image</label>
           <input
@@ -345,6 +400,7 @@ const UpcomingEvents = () => {
               setNewEvent({
                 title: "", date: "", time: "", location: "",
                 capacity: "", description: "", isActive: true,
+                memberFee: "0", nonMemberFee: "0",
               });
               setNewFlyer(null);
               fetchUpcomingEvents();

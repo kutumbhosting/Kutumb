@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,44 @@ const UpcomingEvents = ({
   submitMessage,
   handleSubmit,
 }: UpcomingEventsProps) => {
+  // ── Live membership lookup as the registrant fills in name + email ───────
+  const [membershipNumber, setMembershipNumber] = useState<string | null>(null);
+  const [checkingMembership, setCheckingMembership] = useState(false);
+
+  useEffect(() => {
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email);
+    if (!formData.name.trim() || !emailValid) {
+      setMembershipNumber(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setCheckingMembership(true);
+      try {
+        const res = await fetch(
+          `/api/members/lookup?name=${encodeURIComponent(formData.name)}&email=${encodeURIComponent(formData.email)}`
+        );
+        const data = await res.json();
+        setMembershipNumber(data.found ? data.membershipNumber : null);
+      } catch {
+        setMembershipNumber(null);
+      } finally {
+        setCheckingMembership(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [formData.name, formData.email]);
+
+  // ── Applicable fee for the currently selected event ───────────────────────
+  const selectedEvent = (Array.isArray(upcomingEvents) ? upcomingEvents : []).find(
+    (e) => e.title === formData.eventName
+  );
+  const isMember = !!membershipNumber;
+  const applicableFee = selectedEvent
+    ? Number(isMember ? selectedEvent.memberFee : selectedEvent.nonMemberFee) || 0
+    : null;
+
   return (
     <TabsContent value="upcoming" className="space-y-12">
       <div className="grid md:grid-cols-2 gap-8">
@@ -192,6 +231,32 @@ const UpcomingEvents = ({
                   className="mt-2"
                 />
               </div>
+
+              {/* Live membership lookup */}
+              <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm">
+                {checkingMembership ? (
+                  <span className="text-muted-foreground">Checking membership…</span>
+                ) : membershipNumber ? (
+                  <span>
+                    Kutumb Membership Number: <strong>{membershipNumber}</strong>
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    Enter your name and email above to check your Kutumb membership status.
+                  </span>
+                )}
+              </div>
+
+              {/* Fee for this event, based on membership status */}
+              {selectedEvent && (selectedEvent.memberFee > 0 || selectedEvent.nonMemberFee > 0) && (
+                <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 text-sm">
+                  <p className="font-semibold text-orange-800 mb-1">Registration Fee</p>
+                  <p>
+                    {isMember ? "Member fee" : "Non-member fee"}:{" "}
+                    <strong>{applicableFee && applicableFee > 0 ? `$${applicableFee}` : "Free"}</strong>
+                  </p>
+                </div>
+              )}
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>

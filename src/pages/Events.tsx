@@ -7,12 +7,21 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import UpcomingEvents from "@/pages/events/UpcomingEvents";
 import PastEvents from "@/pages/events/PastEvents";
+import DonateDialog from "@/components/DonateDialog";
+import EventRegistrationSuccessDialog, {
+  EventRegistrationSuccessData,
+} from "@/components/EventRegistrationSuccessDialog";
+import { Button } from "@/components/ui/button";
+import { HeartHandshake } from "lucide-react";
 
 const Events = () => {
   const { toast } = useToast();
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const location = useLocation();
   const [submitMessage, setSubmitMessage] = useState<string>("");
+  const [donateOpen, setDonateOpen] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successData, setSuccessData] = useState<EventRegistrationSuccessData | null>(null);
   const [formData, setFormData] = useState({
     eventName: "",
     eventDate: "",
@@ -109,6 +118,19 @@ const Events = () => {
         description: "We've received your registration.",
       });
 
+      setSuccessData({
+        eventName: data.eventName || formData.eventName,
+        eventDate: data.eventDate || formData.eventDate,
+        registrationNumber: data.registrationNumber,
+        isMember: !!data.isMember,
+        membershipNumber: data.membershipNumber,
+        adults: data.adults ?? formData.adults,
+        children: data.children ?? formData.children,
+        fee: data.fee,
+        email: data.email || formData.email,
+      });
+      setSuccessOpen(true);
+
       // ✅ Refetch so available spots update immediately in the UI
       loadUpcomingEvents();
 
@@ -157,6 +179,15 @@ const Events = () => {
 
         <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4">
+            <div className="max-w-7xl mx-auto flex justify-end mb-6">
+              <Button
+                onClick={() => setDonateOpen(true)}
+                className="bg-accent hover:bg-accent/90 text-accent-foreground text-lg"
+              >
+                <HeartHandshake className="w-4 h-4 mr-2" />
+                Donate
+              </Button>
+            </div>
             <Tabs defaultValue="upcoming" className="max-w-7xl mx-auto">
               <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-12">
                 <TabsTrigger value="upcoming" className="text-lg">
@@ -182,6 +213,13 @@ const Events = () => {
       </main>
 
       <Footer />
+
+      <DonateDialog open={donateOpen} onOpenChange={setDonateOpen} />
+      <EventRegistrationSuccessDialog
+        open={successOpen}
+        onOpenChange={setSuccessOpen}
+        data={successData}
+      />
     </div>
   );
 };

@@ -13,6 +13,8 @@ import { Users, Heart, Calendar, Shield } from "lucide-react";
 import MembershipCardDialog, {
   MembershipCardData,
 } from "@/components/MembershipCardDialog";
+import DonateDialog from "@/components/DonateDialog";
+import { HeartHandshake } from "lucide-react";
 
 const Membership = () => {
   const { toast } = useToast();
@@ -27,6 +29,7 @@ const Membership = () => {
 
   const [cardOpen, setCardOpen] = useState(false);
   const [cardData, setCardData] = useState<MembershipCardData | null>(null);
+  const [donateOpen, setDonateOpen] = useState(false);
 
   const location = useLocation();
 
@@ -210,6 +213,15 @@ const Membership = () => {
         {/* Benefits Section */}
         <section className="py-20">
           <div className="container mx-auto px-4">
+            <div className="flex justify-end mb-6">
+              <Button
+                onClick={() => setDonateOpen(true)}
+                className="bg-accent hover:bg-accent/90 text-accent-foreground text-lg"
+              >
+                <HeartHandshake className="w-4 h-4 mr-2" />
+                Donate
+              </Button>
+            </div>
             <div className="text-center mb-12">
               <h2 className="mb-4">Membership Benefits</h2>
               <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
@@ -434,6 +446,8 @@ const Membership = () => {
         onOpenChange={setCardOpen}
         card={cardData}
       />
+
+      <DonateDialog open={donateOpen} onOpenChange={setDonateOpen} />
     </div>
   );
 };

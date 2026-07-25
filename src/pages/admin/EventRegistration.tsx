@@ -34,6 +34,9 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
           totalPeople: groupedEvents[selectedEventKey].reduce(
             (sum: number, m: any) => sum + 1 + Number(m.adults || 0) + Number(m.children || 0), 0
           ),
+          totalFees: groupedEvents[selectedEventKey].reduce(
+            (sum: number, m: any) => sum + Number(m.fee || 0), 0
+          ),
         }
       : null;
 
@@ -110,10 +113,11 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                 <h2 className="text-xl font-bold">
                   {selectedEvent.eventName} {selectedEvent.eventYear}
                 </h2>
-                <div className="flex gap-4 text-sm text-muted-foreground mt-1">
+                <div className="flex gap-4 text-sm text-muted-foreground mt-1 flex-wrap">
                   <span>Total People: {selectedEvent.totalPeople}</span>
                   <span>👨 Adults: {selectedEvent.adults}</span>
                   <span>🧒 Children: {selectedEvent.children}</span>
+                  <span>💰 Fees Collected: ${selectedEvent.totalFees}</span>
                 </div>
               </div>
               <Button
@@ -162,11 +166,14 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                 <thead>
                   <tr className="border-b">
                     <th className="p-2"></th>
+                    <th className="p-2 text-left">Reg. No</th>
                     <th className="p-2 text-left">Name</th>
                     <th className="p-2 text-left">Email</th>
                     <th className="p-2 text-left">Phone</th>
                     <th className="p-2 text-left">Adults</th>
                     <th className="p-2 text-left">Children</th>
+                    <th className="p-2 text-left">Fee</th>
+                    <th className="p-2 text-left">Membership No</th>
                     <th className="p-2 text-left">Comments</th>
                   </tr>
                 </thead>
@@ -180,11 +187,14 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                           onChange={() => toggleEventRow(item.email)}
                         />
                       </td>
+                      <td className="p-2">{item.registrationNumber || "-"}</td>
                       <td className="p-2">{item.name}</td>
                       <td className="p-2">{item.email}</td>
                       <td className="p-2">{item.phone}</td>
                       <td className="p-2">{item.adults}</td>
                       <td className="p-2">{item.children}</td>
+                      <td className="p-2">{typeof item.fee === "number" ? `$${item.fee}` : "-"}</td>
+                      <td className="p-2">{item.membershipNumber || "-"}</td>
                       <td className="p-2">{item.comments || "-"}</td>
                     </tr>
                   ))}
@@ -220,6 +230,12 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                     onChange={(e) => setEditingEvent({ ...editingEvent, children: e.target.value })}
                   />
                   <Input
+                    type="number"
+                    placeholder="Fee"
+                    value={editingEvent.fee ?? 0}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, fee: e.target.value })}
+                  />
+                  <Input
                     placeholder="Comments"
                     value={editingEvent.comments || ""}
                     onChange={(e) => setEditingEvent({ ...editingEvent, comments: e.target.value })}
@@ -239,6 +255,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                                 ...editingEvent,
                                 adults: Number(editingEvent.adults),
                                 children: Number(editingEvent.children),
+                                fee: Number(editingEvent.fee) || 0,
                               },
                             }),
                           });
