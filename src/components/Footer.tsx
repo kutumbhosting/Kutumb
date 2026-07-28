@@ -8,7 +8,7 @@ const Footer = () => {
   return (
     <footer className="bg-gradient-to-b from-muted to-background border-t border-border">
       <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
           {/* About Section */}
           <div>
           <div className="flex items-center gap-2 mb-4">
@@ -88,6 +88,30 @@ const Footer = () => {
             </ul>
           </div>
 
+          {/* Legal Centre */}
+          <div>
+            <h3 className="font-semibold mb-4">Legal Centre</h3>
+            <ul className="space-y-2">
+              <li>
+                <Link
+                  to="/privacy-policy"
+                  onClick={() => window.scrollTo(0, 0)}
+                  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                >
+                  Privacy &amp; Data Security Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/event-terms"
+                  onClick={() => window.scrollTo(0, 0)}
+                  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                >
+                  Event Terms &amp; Liability
+                </Link>
+              </li>
+            </ul>
+          </div>
 
           {/* Contact Info */}
           <div>
@@ -113,6 +137,23 @@ const Footer = () => {
         <div className="border-t border-border pt-8 mt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
             <p>© Kutumb Australia, {currentYear}. All rights reserved.</p>
+            <div className="flex items-center gap-4">
+              <Link
+                to="/privacy-policy"
+                onClick={() => window.scrollTo(0, 0)}
+                className="hover:text-primary transition-colors"
+              >
+                Privacy Policy
+              </Link>
+              <span className="text-border">|</span>
+              <Link
+                to="/event-terms"
+                onClick={() => window.scrollTo(0, 0)}
+                className="hover:text-primary transition-colors"
+              >
+                Event Terms
+              </Link>
+            </div>
 <p>
   Website developed by{" "}
   <a
