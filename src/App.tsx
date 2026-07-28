@@ -13,6 +13,8 @@ import Membership from "./pages/Membership";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin"; // 👈 ADD THIS
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import EventTerms from "./pages/EventTerms";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +36,10 @@ const App = () => (
 
         {/* ✅ ADMIN ROUTE */}
         <Route path="/Admin" element={<Admin />} />
+
+        {/* ✅ LEGAL CENTRE ROUTES */}
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/event-terms" element={<EventTerms />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>
