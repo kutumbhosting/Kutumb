@@ -38,6 +38,10 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           </Button>
         </div>
 
+        <p className="text-sm text-muted-foreground mb-4">
+          Total Registered Members: <span className="font-semibold text-foreground">{memberData.length}</span>
+        </p>
+
         {selectedMemberRows.length > 0 && (
           <Button variant="destructive" className="mb-3" onClick={deleteMemberRows}>
             Delete Selected
