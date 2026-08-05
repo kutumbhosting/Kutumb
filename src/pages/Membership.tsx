@@ -80,6 +80,7 @@ const Membership = () => {
 
   const interestOptions = [
     "Yoga & Wellness",
+    "Meditation",
     "Food Service & Distribution",
     "Community Service",
     "Event Planning",
