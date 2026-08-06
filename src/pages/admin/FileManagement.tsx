@@ -248,6 +248,11 @@ const FileManagement = () => {
       <Card>
         <CardContent className="p-6 space-y-6">
           <h2 className="text-xl font-bold">Folders</h2>
+          <p className="text-xs text-muted-foreground -mt-4">
+            Note: <code>eventflyer</code> and <code>pastmedia</code> here are one-time seed data only — the live
+            site serves flyers and past-event photos/videos from the database (via the Ticketing, Upcoming
+            Events, and Past Events tabs), not from these files. Editing them here won't change what visitors see.
+          </p>
 
           {/* Folder selector + delete */}
           <div className="flex w-2/3 gap-3 items-center">

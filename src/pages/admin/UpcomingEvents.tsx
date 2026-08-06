@@ -224,7 +224,7 @@ const UpcomingEvents = () => {
                       {event.flyerImage && (
                         <div className="relative group inline-block mt-2">
                           <img
-                            src={`/eventflyer/${event.flyerImage}?t=${Date.now()}`}
+                            src={`/api/media/${event.flyerImage}?t=${Date.now()}`}
                             className="max-h-[80px] rounded border"
                             alt="flyer"
                           />

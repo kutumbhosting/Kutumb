@@ -130,6 +130,7 @@ const Events = () => {
         fee: data.fee,
         perPersonFee: data.perPersonFee,
         email: data.email || formData.email,
+        name: data.name || formData.name,
       });
       setSuccessOpen(true);
 

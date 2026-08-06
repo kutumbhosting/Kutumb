@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin"; // 👈 ADD THIS
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import EventTerms from "./pages/EventTerms";
+import CheckoutReturn from "./pages/CheckoutReturn";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
         {/* ✅ LEGAL CENTRE ROUTES */}
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/event-terms" element={<EventTerms />} />
+        <Route path="/checkout/return" element={<CheckoutReturn />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

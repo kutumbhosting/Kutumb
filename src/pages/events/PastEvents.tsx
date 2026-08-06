@@ -54,13 +54,13 @@ const PastEvents = () => {
                     >
                       {item.type === "image" ? (
                         <img
-                          src={`/api/pastmedia/${item.src}`}
+                          src={`/api/media/${item.src}`}
                           alt={`${event.title} media ${i + 1}`}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <video
-                          src={`/api/pastmedia/${item.src}`}
+                          src={`/api/media/${item.src}`}
                           controls
                           preload="metadata"
                           className="w-full h-full object-cover"

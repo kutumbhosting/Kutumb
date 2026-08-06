@@ -11,27 +11,44 @@ import { useToast } from "@/hooks/use-toast";
 import EventRegistration from "./admin/EventRegistration";
 import Members from "./admin/Members";
 import UpcomingEvents from "./admin/UpcomingEvents";
+import DatabaseTables from "./admin/DatabaseTables";
 import FileManagement from "./admin/FileManagement";
 import PastEvents from "./admin/PastEvents";
+import TicketingManager from "./admin/TicketingManager";
+import CheckIn from "./admin/CheckIn";
+import PlatformConsole from "./admin/PlatformConsole";
 
 // ─── Shared utilities ────────────────────────────────────────────────────────
 import { safeFetch } from "./admin/safeFetch";
-
-// ─── Credentials (keep server-side in production) ────────────────────────────
-const ADMIN_USER = "admin";
-const ADMIN_PASSWORD = "Ku$1";
 
 const Admin = () => {
   const { toast } = useToast();
 
   // ─── Auth state ────────────────────────────────────────────────────────────
-  // Persisted in localStorage so navigating to another page and back keeps
-  // the admin logged in - only an explicit Logout clears it.
-  const ADMIN_SESSION_KEY = "kutumb_admin_logged_in";
-  const [isLoggedIn, setIsLoggedIn] = useState(
-    () => localStorage.getItem(ADMIN_SESSION_KEY) === "true"
-  );
-  const [loginData, setLoginData] = useState({ user: "", password: "" });
+  // Real login against /api/admin-auth/login, which sets an httpOnly session
+  // cookie the browser sends automatically on every same-origin request from
+  // here on — that's what actually protects every admin API route now (see
+  // requireAdmin in server/lib/auth.js), not this React state, which just
+  // controls what's rendered. `checkingSession` avoids a flash of the login
+  // form while we confirm an existing cookie session on page load.
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [adminName, setAdminName] = useState("");
+  const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin-auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((admin) => {
+        if (admin) {
+          setIsLoggedIn(true);
+          setAdminName(admin.name);
+        }
+      })
+      .finally(() => setCheckingSession(false));
+  }, []);
 
   // ─── Shared data passed down to tab components ────────────────────────────
   // groupedEvents and memberData are fetched here (in Admin) so both
@@ -44,37 +61,16 @@ const Admin = () => {
   // then groups registrations by eventName_eventYear for the dropdown.
   const fetchData = async () => {
     try {
-      // 1. Get the list of event files
-      const filesData = await safeFetch("/api/event-files");
+      const events = await safeFetch("/api/all-registrations");
 
-      if (!Array.isArray(filesData) || filesData.length === 0) {
-        console.warn("[fetchData] /api/event-files returned empty or invalid:", filesData);
+      if (!Array.isArray(events)) {
+        console.warn("[fetchData] /api/all-registrations did not return an array:", events);
         setGroupedEvents({});
         const members = await safeFetch("/api/members");
         setMemberData(Array.isArray(members) ? members : []);
         return;
       }
 
-      console.log("[fetchData] event files:", filesData);
-
-      // 2. Fetch each event file individually — a single failure is isolated
-      const allEventArrays = await Promise.all(
-        filesData.map(async (f: any) => {
-          if (!f?.value) {
-            console.warn("[fetchData] event file entry missing .value:", f);
-            return [];
-          }
-          const data = await safeFetch(`/api/events/${f.value}`);
-          if (!Array.isArray(data)) {
-            console.warn(`[fetchData] /api/events/${f.value} did not return array:`, data);
-            return [];
-          }
-          return data;
-        })
-      );
-
-      // 3. Flatten and group by eventName_eventYear key
-      const events = allEventArrays.flat();
       console.log("[fetchData] total event rows loaded:", events.length);
 
       const grouped = events.reduce((acc: Record<string, any[]>, item: any) => {
@@ -105,26 +101,34 @@ const Admin = () => {
   }, [isLoggedIn]);
 
   // ─── Login handler ─────────────────────────────────────────────────────────
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginData.user === ADMIN_USER && loginData.password === ADMIN_PASSWORD) {
-      setIsLoggedIn(true);
-      localStorage.setItem(ADMIN_SESSION_KEY, "true");
-      toast({ title: "Login Successful", description: "Welcome Admin" });
-    } else {
-      toast({
-        title: "Invalid Credentials",
-        description: "Incorrect email or password",
-        variant: "destructive",
+    setLoginError("");
+    setLoggingIn(true);
+    try {
+      const res = await fetch("/api/admin-auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginData.email, password: loginData.password }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Login failed");
+      setIsLoggedIn(true);
+      setAdminName(data.admin.name);
+      toast({ title: "Login Successful", description: `Welcome, ${data.admin.name}` });
+    } catch (err: any) {
+      setLoginError(err.message || "Invalid email or password");
+      toast({ title: "Invalid Credentials", description: err.message, variant: "destructive" });
+    } finally {
+      setLoggingIn(false);
     }
   };
 
   // ─── Logout handler ─────────────────────────────────────────────────────────
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await fetch("/api/admin-auth/logout", { method: "POST" }).catch(() => {});
     setIsLoggedIn(false);
-    localStorage.removeItem(ADMIN_SESSION_KEY);
-    setLoginData({ user: "", password: "" });
+    setLoginData({ email: "", password: "" });
     toast({ title: "Logged Out", description: "You have been logged out." });
   };
 
@@ -146,7 +150,7 @@ const Admin = () => {
         </section>
 
         {/* LOGIN */}
-        {!isLoggedIn && (
+        {!checkingSession && !isLoggedIn && (
           <section className="py-20">
             <div className="container mx-auto px-4 max-w-md">
               <Card className="border-2">
@@ -154,9 +158,10 @@ const Admin = () => {
                   <h2 className="mb-6 text-center">Admin Login</h2>
                   <form onSubmit={handleLogin} className="space-y-4">
                     <Input
-                      placeholder="Username"
-                      value={loginData.user}
-                      onChange={(e) => setLoginData({ ...loginData, user: e.target.value })}
+                      type="email"
+                      placeholder="Email"
+                      value={loginData.email}
+                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                     />
                     <Input
                       type="password"
@@ -164,7 +169,10 @@ const Admin = () => {
                       value={loginData.password}
                       onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                     />
-                    <Button className="w-full btn-hero">Login</Button>
+                    {loginError && <p className="text-sm text-destructive">{loginError}</p>}
+                    <Button type="submit" disabled={loggingIn} className="w-full btn-hero">
+                      {loggingIn ? "Logging in..." : "Login"}
+                    </Button>
                   </form>
                 </CardContent>
               </Card>
@@ -176,7 +184,8 @@ const Admin = () => {
         {isLoggedIn && (
           <section className="py-20 bg-muted/30">
             <div className="container mx-auto px-4">
-              <div className="max-w-7xl mx-auto flex justify-end mb-4">
+              <div className="max-w-7xl mx-auto flex items-center justify-between mb-4">
+                <p className="text-muted-foreground">Logged in as <strong>{adminName}</strong></p>
                 <Button
                   onClick={handleLogout}
                   className="bg-accent hover:bg-accent/90 text-accent-foreground"
@@ -186,12 +195,16 @@ const Admin = () => {
               </div>
               <Tabs defaultValue="events" className="max-w-7xl mx-auto">
 
-                <TabsList className="flex w-full max-w-2xl mx-auto gap-3 mb-12">
+                <TabsList className="flex flex-wrap w-full max-w-4xl mx-auto gap-3 mb-12">
                   <TabsTrigger value="events">Event Registrations</TabsTrigger>
                   <TabsTrigger value="members">Members</TabsTrigger>
                   <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
                   <TabsTrigger value="past">Past Events</TabsTrigger>
+                  <TabsTrigger value="database-tables">Database Tables</TabsTrigger>
                   <TabsTrigger value="files">Files Management</TabsTrigger>
+                  <TabsTrigger value="ticketing">Ticketing & Payments</TabsTrigger>
+                  <TabsTrigger value="checkin">QR Check-in</TabsTrigger>
+                  <TabsTrigger value="console">Settings & Access</TabsTrigger>
                 </TabsList>
 
                 {/* ── Event Registrations ── */}
@@ -221,10 +234,30 @@ const Admin = () => {
                   <PastEvents />
                 </TabsContent>
 
+                {/* ── Database Tables ── */}
+                <TabsContent value="database-tables">
+                  <DatabaseTables />
+                </TabsContent>
+
                 {/* ── File Management ── */}
                 {/* FileManagement manages its own fetch internally */}
                 <TabsContent value="files">
                   <FileManagement />
+                </TabsContent>
+
+                {/* ── Ticketing & Payments (new) ── */}
+                <TabsContent value="ticketing">
+                  <TicketingManager groupedEvents={groupedEvents} />
+                </TabsContent>
+
+                {/* ── QR Check-in (new) ── */}
+                <TabsContent value="checkin">
+                  <CheckIn groupedEvents={groupedEvents} />
+                </TabsContent>
+
+                {/* ── Settings, admin users, audit log (new) ── */}
+                <TabsContent value="console">
+                  <PlatformConsole currentAdminEmail={adminName} />
                 </TabsContent>
 
               </Tabs>

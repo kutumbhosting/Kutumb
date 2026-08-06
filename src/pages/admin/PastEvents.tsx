@@ -174,13 +174,13 @@ const PastEvents = () => {
                   <div key={m.src} className="relative group">
                     {m.type === "image" ? (
                       <img
-                        src={`/api/pastmedia/${m.src}`}
+                        src={`/api/media/${m.src}`}
                         alt={event.title}
                         className="w-28 h-28 object-cover rounded border"
                       />
                     ) : (
                       <video
-                        src={`/api/pastmedia/${m.src}`}
+                        src={`/api/media/${m.src}`}
                         className="w-28 h-28 object-cover rounded border"
                         muted
                       />

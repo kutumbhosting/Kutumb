@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { safeFetch, normalizeInterests, downloadCSV } from "./safeFetch";
+import { useToast } from "@/hooks/use-toast";
 
 interface MembersProps {
   memberData: any[];
@@ -10,8 +11,10 @@ interface MembersProps {
 }
 
 const Members = ({ memberData, onReload }: MembersProps) => {
+  const { toast } = useToast();
   const [selectedMemberRows, setSelectedMemberRows] = useState<string[]>([]);
   const [editingMember, setEditingMember] = useState<any | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const toggleMemberRow = (email: string) =>
     setSelectedMemberRows((prev) =>
@@ -28,14 +31,44 @@ const Members = ({ memberData, onReload }: MembersProps) => {
     onReload();
   };
 
+  // Picks up server/data/members/members.json if one's been dropped there —
+  // adds any members not already present (matched by email), then removes
+  // the file/folder so it can't be imported twice by accident.
+  const importFromDropIn = async () => {
+    setImporting(true);
+    try {
+      const result = await safeFetch("/api/admin-console/import-members", { method: "POST" });
+      if (!result?.found) {
+        toast({ title: "No file found", description: "Place a members.json file in server/data/members/ first." });
+      } else if (result.error) {
+        toast({ title: "Import failed", description: result.error, variant: "destructive" });
+      } else {
+        toast({
+          title: "Import complete",
+          description: `${result.imported} member(s) added, ${result.skipped} skipped (already existed).`,
+        });
+        onReload();
+      }
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <Card>
       <CardContent className="p-6">
-        <div className="flex justify-between mb-6">
+        <div className="flex justify-between mb-6 flex-wrap gap-2">
           <h2 className="text-xl font-bold">Kutumb Members</h2>
-          <Button onClick={() => downloadCSV(memberData, "members.csv")}>
-            Download CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={importFromDropIn} disabled={importing}>
+              {importing ? "Importing..." : "📥 Import from members.json"}
+            </Button>
+            <Button onClick={() => downloadCSV(memberData, "members.csv")}>
+              Download CSV
+            </Button>
+          </div>
         </div>
 
         <p className="text-sm text-muted-foreground mb-4">
