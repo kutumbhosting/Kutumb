@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Mail } from "lucide-react";
+import RegistrationCheckoutModal from "@/components/RegistrationCheckoutModal";
 
 export interface EventRegistrationSuccessData {
   eventName: string;
@@ -25,6 +26,7 @@ export interface EventRegistrationSuccessData {
   fee?: number;
   perPersonFee?: number;
   email: string;
+  name: string;
 }
 
 interface EventRegistrationSuccessDialogProps {
@@ -50,10 +52,20 @@ const EventRegistrationSuccessDialog = ({
   const [transactionNumber, setTransactionNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentRecorded, setPaymentRecorded] = useState(false);
+  const [showCardPayment, setShowCardPayment] = useState(false);
+
+  const feeOwed = !!data && typeof data.fee === "number" && data.fee > 0;
+
+  // Pops up automatically the moment a fee applies, rather than waiting
+  // for an extra click — the person can still close it and use the bank
+  // transfer option below instead if they prefer.
+  useEffect(() => {
+    if (open && feeOwed && !paymentRecorded) {
+      setShowCardPayment(true);
+    }
+  }, [open, feeOwed, paymentRecorded]);
 
   if (!data) return null;
-
-  const feeOwed = typeof data.fee === "number" && data.fee > 0;
 
   const handleRecordPayment = async () => {
     if (bankTransferred === "yes" && !transactionNumber.trim()) {
@@ -146,6 +158,12 @@ const EventRegistrationSuccessDialog = ({
           <div className="space-y-4 border-t pt-4">
             <p className="font-semibold text-orange-800">Complete Your Payment</p>
 
+            <Button onClick={() => setShowCardPayment(true)} className="w-full btn-hero">
+              💳 Pay ${data.fee} by Card
+            </Button>
+
+            <p className="text-center text-xs text-muted-foreground">— or pay by bank transfer instead —</p>
+
             <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 space-y-1 text-sm">
               <p className="font-semibold text-orange-800 mb-1">Kutumb Bank Details</p>
               <p><span className="font-medium">Account Name:</span> {BANK_DETAILS.accountName}</p>
@@ -202,6 +220,17 @@ const EventRegistrationSuccessDialog = ({
           Close
         </Button>
       </DialogContent>
+
+      {showCardPayment && feeOwed && (
+        <RegistrationCheckoutModal
+          eventTitle={data.eventName}
+          buyerName={data.name}
+          buyerEmail={data.email}
+          defaultQuantity={1 + data.adults + data.children}
+          totalFee={data.fee as number}
+          onClose={() => setShowCardPayment(false)}
+        />
+      )}
     </Dialog>
   );
 };
