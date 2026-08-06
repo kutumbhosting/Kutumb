@@ -85,6 +85,28 @@ echo Run "app.cmd install" to force a fresh install.
 echo.
 
 rem ---------------------------------------------------------
+rem 3b. Apply database schema + import seed data (Neon Postgres)
+rem     Safe to run every time - idempotent after the first run.
+rem ---------------------------------------------------------
+echo [SETUP] Applying database schema to your Neon database...
+echo         (all app data now lives in Postgres, not JSON files)
+echo.
+call node server\db\migrate.js
+if errorlevel 1 goto MIGRATE_FAILED
+goto AFTER_MIGRATE
+
+:MIGRATE_FAILED
+echo.
+echo [ERROR] Database migration failed. This almost always means
+echo         DATABASE_URL in your .env file is missing or wrong.
+echo         Open .env and check it against your Neon dashboard,
+echo         then run app.cmd again.
+goto FAIL
+
+:AFTER_MIGRATE
+echo.
+
+rem ---------------------------------------------------------
 rem 4. Build the frontend (first run, or "app.cmd rebuild")
 rem ---------------------------------------------------------
 set DO_BUILD=0

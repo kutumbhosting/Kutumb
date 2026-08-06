@@ -1,5 +1,10 @@
 # Running Kutumb locally on Windows
 
+> **All app data now lives in a Neon Postgres database, not JSON files.**
+> See [DATABASE-MIGRATION.md](./DATABASE-MIGRATION.md) for what changed.
+> You'll need a Neon connection string in `.env` (`DATABASE_URL`) before
+> `app.cmd` can get past the setup step — see `.env.example`.
+
 ## Quick start
 
 1. Make sure **Node.js 18+** is installed: https://nodejs.org
