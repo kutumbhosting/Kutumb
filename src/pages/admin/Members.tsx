@@ -15,20 +15,64 @@ const Members = ({ memberData, onReload }: MembersProps) => {
   const [selectedMemberRows, setSelectedMemberRows] = useState<string[]>([]);
   const [editingMember, setEditingMember] = useState<any | null>(null);
   const [importing, setImporting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const toggleMemberRow = (email: string) =>
     setSelectedMemberRows((prev) =>
       prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
 
+  // Shows a clear message instead of failing silently — in particular, if
+  // the admin session cookie has expired, every request below 401s and the
+  // page would otherwise look like nothing happened at all.
+  const handleAuthOrServerError = async (res: Response, fallbackMessage: string) => {
+    let message = fallbackMessage;
+    try {
+      const data = await res.json();
+      if (data?.message) message = data.message;
+    } catch {
+      // response wasn't JSON — stick with fallbackMessage
+    }
+    if (res.status === 401) {
+      toast({
+        title: "Session expired",
+        description: "Your admin session has expired. Please log out and log back in, then try again.",
+        variant: "destructive",
+      });
+    } else {
+      toast({ title: "Something went wrong", description: message, variant: "destructive" });
+    }
+  };
+
   const deleteMemberRows = async () => {
-    await safeFetch("/api/members/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ emails: selectedMemberRows }),
-    });
-    setSelectedMemberRows([]);
-    onReload();
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/members/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: selectedMemberRows }),
+      });
+
+      if (!res.ok) {
+        await handleAuthOrServerError(res, "Couldn't delete the selected member(s).");
+        return;
+      }
+
+      toast({ title: "Deleted", description: "Selected member(s) removed." });
+      setSelectedMemberRows([]);
+      setEditingMember(null);
+      onReload();
+    } catch (err) {
+      console.error("[deleteMemberRows] network error", err);
+      toast({
+        title: "Network error",
+        description: "Couldn't reach the server. Check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Picks up server/data/members/members.json if one's been dropped there —
@@ -56,6 +100,61 @@ const Members = ({ memberData, onReload }: MembersProps) => {
     }
   };
 
+  const openEditor = () => {
+    const member = memberData.find((m) => m.email === selectedMemberRows[0]);
+    if (!member) {
+      toast({
+        title: "Couldn't find that member",
+        description: "The member list may be out of date — try refreshing the page and selecting again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setEditingMember({
+      ...member,
+      interests: Array.isArray(member.interests)
+        ? member.interests.join(", ")
+        : typeof member.interests === "object" && member.interests !== null
+        ? Object.keys(member.interests).filter((k) => member.interests[k]).join(", ")
+        : member.interests || "",
+    });
+  };
+
+  const saveEditingMember = async () => {
+    if (!editingMember) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/members/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: editingMember.email,
+          updatedData: editingMember,
+        }),
+      });
+
+      if (!res.ok) {
+        // Keep the panel open with their edits intact so nothing is lost.
+        await handleAuthOrServerError(res, "Couldn't save changes to this member.");
+        return;
+      }
+
+      toast({ title: "Saved", description: `${editingMember.name || "Member"} was updated.` });
+      setEditingMember(null);
+      setSelectedMemberRows([]);
+      onReload();
+    } catch (err) {
+      console.error("[saveEditingMember] network error", err);
+      toast({
+        title: "Network error",
+        description: "Couldn't reach the server. Check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Card>
       <CardContent className="p-6">
@@ -76,25 +175,14 @@ const Members = ({ memberData, onReload }: MembersProps) => {
         </p>
 
         {selectedMemberRows.length > 0 && (
-          <Button variant="destructive" className="mb-3" onClick={deleteMemberRows}>
-            Delete Selected
+          <Button variant="destructive" className="mb-3" onClick={deleteMemberRows} disabled={deleting}>
+            {deleting ? "Deleting..." : "Delete Selected"}
           </Button>
         )}
 
         <Button
-          className="mb-4"
-          onClick={() => {
-            const member = memberData.find((m) => m.email === selectedMemberRows[0]);
-            if (!member) return;
-            setEditingMember({
-              ...member,
-              interests: Array.isArray(member.interests)
-                ? member.interests.join(", ")
-                : typeof member.interests === "object" && member.interests !== null
-                ? Object.keys(member.interests).filter((k) => member.interests[k]).join(", ")
-                : member.interests || "",
-            });
-          }}
+          className="mb-4 ml-2"
+          onClick={openEditor}
           disabled={selectedMemberRows.length !== 1}
         >
           Modify Selected
@@ -137,40 +225,54 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           {editingMember && (
             <Card className="mt-4">
               <CardContent className="p-4 space-y-3">
-                <h3 className="font-bold">Edit Member</h3>
-                <Input
-                  value={editingMember.name}
-                  onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
-                />
-                <Input
-                  value={editingMember.phone}
-                  onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
-                />
-                <Input
-                  value={editingMember.address}
-                  onChange={(e) => setEditingMember({ ...editingMember, address: e.target.value })}
-                />
-                <Input
-                  value={editingMember.interests || ""}
-                  onChange={(e) => setEditingMember({ ...editingMember, interests: e.target.value })}
-                />
-                <Button
-                  onClick={async () => {
-                    await safeFetch("/api/members/update", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        email: editingMember.email,
-                        updatedData: editingMember,
-                      }),
-                    });
-                    setEditingMember(null);
-                    setSelectedMemberRows([]);
-                    onReload();
-                  }}
-                >
-                  Save Changes
-                </Button>
+                <h3 className="font-bold">Edit Member — {editingMember.email}</h3>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Full Name</label>
+                  <Input
+                    value={editingMember.name}
+                    onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Phone</label>
+                  <Input
+                    value={editingMember.phone}
+                    onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Address</label>
+                  <Input
+                    value={editingMember.address}
+                    onChange={(e) => setEditingMember({ ...editingMember, address: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Interests (comma-separated)
+                  </label>
+                  <Input
+                    value={editingMember.interests || ""}
+                    onChange={(e) => setEditingMember({ ...editingMember, interests: e.target.value })}
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button onClick={saveEditingMember} disabled={saving}>
+                    {saving ? "Saving..." : "Save Changes"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingMember(null)}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
