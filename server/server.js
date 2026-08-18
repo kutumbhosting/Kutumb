@@ -532,8 +532,13 @@ app.get("/api/all-registrations", requireAdmin, async (req, res) => {
 
 /* -----------------------------
    💳 RECORD PAYMENT FOR AN EVENT REGISTRATION
+   Public/self-service on purpose: this is called straight from the
+   registration success dialog on the public Events page, by whoever just
+   registered — they aren't logged in as an admin. It's scoped safely by
+   requiring an exact match on eventName + eventYear + email, and only ever
+   flips the record to "Paid" when a transaction number is actually supplied.
 ------------------------------ */
-app.post("/api/events/record-payment", requireAdmin, async (req, res) => {
+app.post("/api/events/record-payment", async (req, res) => {
   try {
     const { eventName, eventYear, email, bankTransferred, transactionNumber } = req.body;
     if (!eventName || !eventYear || !email) {
@@ -582,6 +587,16 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
+    // A "Paid" status must always be backed by a transaction number — the
+    // same rule the public registration-success dialog enforces when the
+    // registrant records their own bank transfer. This stops the admin
+    // console from marking something Paid with nothing to show for it.
+    const txnProvided = updatedData?.transactionNumber !== undefined;
+    const trimmedTxn = txnProvided ? String(updatedData.transactionNumber || "").trim() : "";
+    if (updatedData?.paymentStatus === "Paid" && !trimmedTxn) {
+      return res.status(400).json({ message: "A transaction number is required to mark this registration as Paid" });
+    }
+
     const { rows } = await pool.query(
       `UPDATE kutumb_event_registrations SET
          name = COALESCE($1, name),
@@ -590,8 +605,10 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
          children = COALESCE($4, children),
          comments = COALESCE($5, comments),
          fee = COALESCE($6, fee),
-         payment_status = COALESCE($7, payment_status)
-       WHERE event_name = $8 AND event_year = $9 AND lower(email) = lower($10)
+         payment_status = COALESCE($7, payment_status),
+         transaction_number = CASE WHEN $8 THEN NULLIF($9, '') ELSE transaction_number END,
+         bank_transferred = CASE WHEN $8 THEN ($9 <> '') ELSE bank_transferred END
+       WHERE event_name = $10 AND event_year = $11 AND lower(email) = lower($12)
        RETURNING *`,
       [
         updatedData?.name, updatedData?.phone,
@@ -599,6 +616,7 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
         updatedData?.children !== undefined ? Number(updatedData.children) : null,
         updatedData?.comments, updatedData?.fee !== undefined ? Number(updatedData.fee) : null,
         updatedData?.paymentStatus,
+        txnProvided, trimmedTxn,
         eventName, eventYear, email,
       ]
     );
@@ -724,15 +742,30 @@ app.post("/api/members/update", requireAdmin, async (req, res) => {
       interests = interests.split(",").map((i) => i.trim()).filter(Boolean);
     }
 
+    // A new email address may have been supplied — trim/normalize it and,
+    // if it's actually different from the current one, make sure it's not
+    // already used by a *different* member before writing it.
+    const newEmail = updatedData?.email?.trim();
+    if (newEmail) {
+      const dupCheck = await pool.query(
+        "SELECT id FROM kutumb_members WHERE lower(email) = lower($1) AND lower(email) <> lower($2)",
+        [newEmail, email]
+      );
+      if (dupCheck.rows.length > 0) {
+        return res.status(409).json({ message: "That email address is already used by another member" });
+      }
+    }
+
     const { rows } = await pool.query(
       `UPDATE kutumb_members SET
          name = COALESCE($1, name),
-         phone = COALESCE($2, phone),
-         address = COALESCE($3, address),
-         interests = COALESCE($4, interests)
-       WHERE lower(email) = lower($5)
+         email = COALESCE(NULLIF($2, ''), email),
+         phone = COALESCE($3, phone),
+         address = COALESCE($4, address),
+         interests = COALESCE($5, interests)
+       WHERE lower(email) = lower($6)
        RETURNING *`,
-      [updatedData?.name, updatedData?.phone, updatedData?.address, interests || null, email]
+      [updatedData?.name, newEmail || null, updatedData?.phone, updatedData?.address, interests || null, email]
     );
 
     if (rows.length === 0) return res.status(404).json({ message: "Member not found" });
