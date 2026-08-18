@@ -31,6 +31,12 @@ export const SETTINGS_SCHEMA = [
   { group: "Stripe", key: "stripe_secret_key", label: "Stripe Secret Key", secret: true },
   { group: "Stripe", key: "stripe_webhook_secret", label: "Stripe Webhook Signing Secret", secret: true },
   { group: "Platform", key: "public_base_url", label: "Public Base URL", secret: false },
+  // Toggle which payment methods registrants are offered on the event
+  // registration success page. Bank transfer defaults on (it needs no
+  // external setup); card defaults off until Stripe keys above are filled
+  // in and an admin deliberately switches it on.
+  { group: "Payment Methods", key: "payment_method_bank_transfer", label: "Bank Transfer", type: "boolean", default: "true" },
+  { group: "Payment Methods", key: "payment_method_card", label: "Pay by Card (Stripe)", type: "boolean", default: "false" },
 ];
 
 export async function getSetting(key) {
@@ -45,6 +51,10 @@ export async function getAllSettingsForAdmin() {
   return SETTINGS_SCHEMA.map((def) => {
     const row = byKey[def.key];
     const hasValue = !!row?.value;
+    if (def.type === "boolean") {
+      const raw = hasValue ? row.value : def.default ?? "false";
+      return { ...def, hasValue: true, value: raw === "true" ? "true" : "false", updatedAt: row?.updated_at || null };
+    }
     return {
       ...def,
       hasValue,
@@ -52,6 +62,22 @@ export async function getAllSettingsForAdmin() {
       updatedAt: row?.updated_at || null,
     };
   });
+}
+
+// Public (unauthenticated) view of just the payment-method toggles — used
+// by the registration success page to decide which payment options to show
+// a registrant. Deliberately doesn't expose anything else in the schema.
+export async function getPaymentMethodSettings() {
+  const bankDef = SETTINGS_SCHEMA.find((s) => s.key === "payment_method_bank_transfer");
+  const cardDef = SETTINGS_SCHEMA.find((s) => s.key === "payment_method_card");
+  const [bankRaw, cardRaw] = await Promise.all([
+    getSetting("payment_method_bank_transfer"),
+    getSetting("payment_method_card"),
+  ]);
+  return {
+    bankTransfer: (bankRaw ?? bankDef.default) === "true",
+    card: (cardRaw ?? cardDef.default) === "true",
+  };
 }
 
 export async function setSetting(key, value, isSecret) {

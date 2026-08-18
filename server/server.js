@@ -22,6 +22,7 @@ import {
 import { sendWhatsAppDocument } from "./lib/whatsapp.js";
 import { parseEventEndDate, sortPastEventsDescending } from "./lib/eventDates.js";
 import { requireAdmin } from "./lib/auth.js";
+import { getPaymentMethodSettings } from "./lib/settings.js";
 import { pool } from "./db/pool.js";
 import adminAuthRoutes from "./routes/adminAuth.routes.js";
 import adminConsoleRoutes from "./routes/adminConsole.routes.js";
@@ -660,6 +661,22 @@ app.get("/api/events/:eventName/:eventYear", requireAdmin, async (req, res) => {
     [eventName, eventYear]
   );
   res.json(rows);
+});
+
+/* -----------------------------
+   💳 PAYMENT METHODS (public)
+   Which payment options the registration-success page should offer —
+   toggled by an admin under Settings & Access → Payment Methods.
+------------------------------ */
+app.get("/api/payment-methods", async (req, res) => {
+  try {
+    res.json(await getPaymentMethodSettings());
+  } catch (err) {
+    console.error("PAYMENT METHODS ERROR:", err);
+    // Fail safe to the existing default behaviour rather than breaking the
+    // registration success page if this lookup has a problem.
+    res.json({ bankTransfer: true, card: false });
+  }
 });
 
 /* -----------------------------
