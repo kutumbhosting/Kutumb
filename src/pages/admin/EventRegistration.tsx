@@ -174,6 +174,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                     <th className="p-2 text-left">Children</th>
                     <th className="p-2 text-left">Fee</th>
                     <th className="p-2 text-left">Payment Status</th>
+                    <th className="p-2 text-left">Transaction No</th>
                     <th className="p-2 text-left">Membership No</th>
                     <th className="p-2 text-left">Comments</th>
                   </tr>
@@ -204,6 +205,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                           <span className="text-muted-foreground">{item.paymentStatus || "N/A"}</span>
                         )}
                       </td>
+                      <td className="p-2 font-mono">{item.transactionNumber || "-"}</td>
                       <td className="p-2">{item.membershipNumber || "-"}</td>
                       <td className="p-2">{item.comments || "-"}</td>
                     </tr>
@@ -245,6 +247,24 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                     value={editingEvent.fee ?? 0}
                     onChange={(e) => setEditingEvent({ ...editingEvent, fee: e.target.value })}
                   />
+
+                  <div>
+                    <label className="text-sm font-medium block mb-1">
+                      Transaction / Reference Number
+                    </label>
+                    <Input
+                      placeholder="e.g. TXN123456789 — from the bank transfer"
+                      value={editingEvent.transactionNumber || ""}
+                      onChange={(e) =>
+                        setEditingEvent({ ...editingEvent, transactionNumber: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Required before this registration can be marked Paid — leave blank while
+                      payment is still Pending.
+                    </p>
+                  </div>
+
                   <div>
                     <label className="text-sm font-medium block mb-1">Payment Status</label>
                     <select
@@ -265,6 +285,19 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                   <div className="flex gap-2">
                     <Button
                       onClick={async () => {
+                        if (
+                          editingEvent.paymentStatus === "Paid" &&
+                          !String(editingEvent.transactionNumber || "").trim()
+                        ) {
+                          toast({
+                            title: "Transaction number required",
+                            description:
+                              "Enter the bank transfer transaction number before marking this registration Paid.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
                         try {
                           const res = await fetch("/api/events/update", {
                             method: "POST",
@@ -278,6 +311,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                                 adults: Number(editingEvent.adults),
                                 children: Number(editingEvent.children),
                                 fee: Number(editingEvent.fee) || 0,
+                                transactionNumber: String(editingEvent.transactionNumber || "").trim(),
                               },
                             }),
                           });

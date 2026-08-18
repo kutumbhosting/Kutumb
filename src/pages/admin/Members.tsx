@@ -112,6 +112,10 @@ const Members = ({ memberData, onReload }: MembersProps) => {
     }
     setEditingMember({
       ...member,
+      // Kept separately from the (now editable) `email` field below so we
+      // still know which record to match on the server if the admin
+      // changes the email address itself.
+      originalEmail: member.email,
       interests: Array.isArray(member.interests)
         ? member.interests.join(", ")
         : typeof member.interests === "object" && member.interests !== null
@@ -122,14 +126,26 @@ const Members = ({ memberData, onReload }: MembersProps) => {
 
   const saveEditingMember = async () => {
     if (!editingMember) return;
+
+    const newEmail = (editingMember.email || "").trim();
+    if (!newEmail) {
+      toast({ title: "Email required", description: "Email address can't be empty.", variant: "destructive" });
+      return;
+    }
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail);
+    if (!emailValid) {
+      toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch("/api/members/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: editingMember.email,
-          updatedData: editingMember,
+          email: editingMember.originalEmail || editingMember.email,
+          updatedData: { ...editingMember, email: newEmail },
         }),
       });
 
@@ -188,6 +204,70 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           Modify Selected
         </Button>
 
+        {editingMember && (
+          <Card className="mb-6">
+            <CardContent className="p-4 space-y-3">
+              <h3 className="font-bold">Edit Member — {editingMember.originalEmail || editingMember.email}</h3>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Full Name</label>
+                <Input
+                  value={editingMember.name}
+                  onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Email Address</label>
+                <Input
+                  type="email"
+                  value={editingMember.email}
+                  onChange={(e) => setEditingMember({ ...editingMember, email: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Phone</label>
+                <Input
+                  value={editingMember.phone}
+                  onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Address</label>
+                <Input
+                  value={editingMember.address}
+                  onChange={(e) => setEditingMember({ ...editingMember, address: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Interests (comma-separated)
+                </label>
+                <Input
+                  value={editingMember.interests || ""}
+                  onChange={(e) => setEditingMember({ ...editingMember, interests: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button onClick={saveEditingMember} disabled={saving}>
+                  {saving ? "Saving..." : "Save Changes"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setEditingMember(null)}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -221,61 +301,6 @@ const Members = ({ memberData, onReload }: MembersProps) => {
               ))}
             </tbody>
           </table>
-
-          {editingMember && (
-            <Card className="mt-4">
-              <CardContent className="p-4 space-y-3">
-                <h3 className="font-bold">Edit Member — {editingMember.email}</h3>
-
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Full Name</label>
-                  <Input
-                    value={editingMember.name}
-                    onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Phone</label>
-                  <Input
-                    value={editingMember.phone}
-                    onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">Address</label>
-                  <Input
-                    value={editingMember.address}
-                    onChange={(e) => setEditingMember({ ...editingMember, address: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Interests (comma-separated)
-                  </label>
-                  <Input
-                    value={editingMember.interests || ""}
-                    onChange={(e) => setEditingMember({ ...editingMember, interests: e.target.value })}
-                  />
-                </div>
-
-                <div className="flex gap-2 pt-2">
-                  <Button onClick={saveEditingMember} disabled={saving}>
-                    {saving ? "Saving..." : "Save Changes"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setEditingMember(null)}
-                    disabled={saving}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </CardContent>
     </Card>
