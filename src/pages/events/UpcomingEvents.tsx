@@ -363,7 +363,7 @@ const UpcomingEvents = ({
                         className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
                       >
                         <Sparkles size={14} />
-                        Become a Kutumb Member — membership is free {memberSavesMoney ? " to unlock this special rate." : "."}
+                        Join Kutumb for free {memberSavesMoney ? "to unlock this rate." : "."}
                       </button>
                     </div>
                   )}
