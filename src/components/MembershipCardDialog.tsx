@@ -23,9 +23,18 @@ interface MembershipCardDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   card: MembershipCardData | null;
+  /** Optional CTA (e.g. "Continue to Event Registration") shown above the other actions. */
+  onContinue?: () => void;
+  continueLabel?: string;
 }
 
-const MembershipCardDialog = ({ open, onOpenChange, card }: MembershipCardDialogProps) => {
+const MembershipCardDialog = ({
+  open,
+  onOpenChange,
+  card,
+  onContinue,
+  continueLabel,
+}: MembershipCardDialogProps) => {
   if (!card) return null;
 
   const cardPdfUrl = `/api/members/${card.membershipNumber}/card.pdf`;
@@ -79,6 +88,11 @@ const MembershipCardDialog = ({ open, onOpenChange, card }: MembershipCardDialog
         </div>
 
         <DialogFooter className="pt-2 flex-col items-stretch gap-2 sm:flex-col">
+          {onContinue && (
+            <Button className="w-full btn-hero" onClick={onContinue}>
+              {continueLabel || "Continue"}
+            </Button>
+          )}
           <a href={cardPdfUrl} target="_blank" rel="noopener noreferrer" className="w-full">
             <Button variant="outline" className="w-full">
               <Download className="w-4 h-4 mr-2" />

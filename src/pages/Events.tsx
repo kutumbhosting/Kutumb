@@ -5,7 +5,9 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import UpcomingEvents from "@/pages/events/UpcomingEvents";
+import UpcomingEvents, {
+  EVENT_REGISTRATION_DRAFT_KEY,
+} from "@/pages/events/UpcomingEvents";
 import PastEvents from "@/pages/events/PastEvents";
 import DonateDialog from "@/components/DonateDialog";
 import EventRegistrationSuccessDialog, {
@@ -49,14 +51,32 @@ const Events = () => {
     loadUpcomingEvents();
   }, []);
 
-  // ── Scroll to form when navigating from Home / Activities ────────────────
+  // ── Scroll to form when navigating from Home / Activities, or when ───────
+  //    returning from the Membership page mid-registration ─────────────────
   useEffect(() => {
     if (location.state?.scrollTo === "registration") {
-      setFormData((prev) => ({
-        ...prev,
-        eventName: location.state.eventName || "",
-        eventDate: location.state.eventDate || "",
-      }));
+      if (location.state?.restoreDraft) {
+        // Coming back from the Membership page — restore the in-progress
+        // registration (name, email, phone, event, headcount, comments)
+        // exactly as the registrant left it.
+        try {
+          const draft = sessionStorage.getItem(EVENT_REGISTRATION_DRAFT_KEY);
+          if (draft) {
+            const parsed = JSON.parse(draft);
+            setFormData((prev) => ({ ...prev, ...parsed }));
+          }
+        } catch {
+          // ignore malformed/unavailable draft
+        } finally {
+          sessionStorage.removeItem(EVENT_REGISTRATION_DRAFT_KEY);
+        }
+      } else {
+        setFormData((prev) => ({
+          ...prev,
+          eventName: location.state.eventName || "",
+          eventDate: location.state.eventDate || "",
+        }));
+      }
 
       const timer = setTimeout(() => {
         const el = document.getElementById("registration-form");

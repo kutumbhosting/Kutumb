@@ -1,4 +1,4 @@
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useState } from "react";
 import Navbar from "@/components/Navbar";
@@ -32,6 +32,12 @@ const Membership = () => {
   const [donateOpen, setDonateOpen] = useState(false);
 
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // If we were sent here mid-event-registration (e.g. from the "Become a
+  // Member" prompt on the registration fee box), we know where to return
+  // the registrant once their membership is set up.
+  const returnTo: string | undefined = location.state?.returnTo;
 
   useEffect(() => {
     if (location.state?.scrollTo === "membership") {
@@ -49,7 +55,30 @@ const Membership = () => {
         }
       }, 200);
     }
+
+    // Pre-fill what we already know about them, so they don't have to
+    // retype it after coming from the event registration form.
+    const prefill = location.state?.prefill;
+    if (prefill) {
+      setFormData((prev) => ({
+        ...prev,
+        name: prefill.name || prev.name,
+        email: prefill.email || prev.email,
+        phone: prefill.phone || prev.phone,
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
+
+  // Send the registrant back to their in-progress event registration, which
+  // restores itself from the draft saved in sessionStorage and immediately
+  // re-checks membership status so the fee updates right away.
+  const handleReturnToRegistration = () => {
+    setCardOpen(false);
+    if (returnTo) {
+      navigate(returnTo, { state: { scrollTo: "registration", restoreDraft: true } });
+    }
+  };
 
   const benefits = [
     {
@@ -444,8 +473,17 @@ const Membership = () => {
 
       <MembershipCardDialog
         open={cardOpen}
-        onOpenChange={setCardOpen}
+        onOpenChange={(open) => {
+          setCardOpen(open);
+          // Also catch the case where they dismiss the dialog via the X
+          // button or an outside click, rather than the Continue CTA.
+          if (!open && returnTo) {
+            navigate(returnTo, { state: { scrollTo: "registration", restoreDraft: true } });
+          }
+        }}
         card={cardData}
+        onContinue={returnTo ? handleReturnToRegistration : undefined}
+        continueLabel="Continue to Event Registration"
       />
 
       <DonateDialog open={donateOpen} onOpenChange={setDonateOpen} />

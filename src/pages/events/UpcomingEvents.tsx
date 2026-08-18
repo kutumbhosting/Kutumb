@@ -1,11 +1,16 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TabsContent } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
-import { Calendar, MapPin, Users, Clock } from "lucide-react";
+import { Calendar, MapPin, Users, Clock, Sparkles } from "lucide-react";
+
+// Key used to stash the in-progress registration form while the registrant
+// pops over to the Membership page, so we can restore it on return.
+export const EVENT_REGISTRATION_DRAFT_KEY = "kutumb_event_registration_draft";
 
 interface FormData {
   eventName: string;
@@ -33,6 +38,8 @@ const UpcomingEvents = ({
   submitMessage,
   handleSubmit,
 }: UpcomingEventsProps) => {
+  const navigate = useNavigate();
+
   // ── Live membership lookup as the registrant fills in name + email ───────
   const [membershipNumber, setMembershipNumber] = useState<string | null>(null);
   const [checkingMembership, setCheckingMembership] = useState(false);
@@ -72,6 +79,36 @@ const UpcomingEvents = ({
     : null;
   const totalAttendees = 1 + (Number(formData.adults) || 0) + (Number(formData.children) || 0);
   const totalFee = perPersonFee !== null ? perPersonFee * totalAttendees : null;
+
+  // ── Member pricing preview, shown to non-members to encourage sign-up ────
+  const memberPerPersonFee = selectedEvent ? Number(selectedEvent.memberFee) || 0 : null;
+  const memberTotalFee = memberPerPersonFee !== null ? memberPerPersonFee * totalAttendees : null;
+  const memberSavesMoney =
+    !isMember &&
+    memberPerPersonFee !== null &&
+    perPersonFee !== null &&
+    memberPerPersonFee < perPersonFee;
+
+  // ── Send the registrant to the Membership page, preserving this form ─────
+  const handleBecomeMember = () => {
+    try {
+      sessionStorage.setItem(EVENT_REGISTRATION_DRAFT_KEY, JSON.stringify(formData));
+    } catch {
+      // sessionStorage unavailable — worst case the form just won't restore
+    }
+
+    navigate("/membership", {
+      state: {
+        scrollTo: "membership",
+        returnTo: "/events",
+        prefill: {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+        },
+      },
+    });
+  };
 
   return (
     <TabsContent value="upcoming" className="space-y-12">
@@ -296,6 +333,40 @@ const UpcomingEvents = ({
                   <p className="text-base">
                     Total: <strong>{totalFee && totalFee > 0 ? `$${totalFee}` : "Free"}</strong>
                   </p>
+
+                  {!isMember && (
+                    <div className="mt-3 pt-3 border-t border-orange-200">
+                      <p className="text-orange-700">
+                        {memberSavesMoney ? (
+                          <>
+                            Kutumb members pay just{" "}
+                            <strong>${memberPerPersonFee}</strong> per person for this event
+                            {memberTotalFee !== null && (
+                              <>
+                                {" "}
+                                — <strong>
+                                  {memberTotalFee > 0 ? `$${memberTotalFee}` : "Free"}
+                                </strong>{" "}
+                                total for {totalAttendees}{" "}
+                                {totalAttendees === 1 ? "attendee" : "attendees"}
+                              </>
+                            )}
+                            .
+                          </>
+                        ) : (
+                          <>Kutumb membership is free and unlocks member pricing on future events.</>
+                        )}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleBecomeMember}
+                        className="mt-2 inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline underline-offset-2 hover:text-primary/80"
+                      >
+                        <Sparkles size={14} />
+                        Become a Kutumb Member{memberSavesMoney ? " to unlock this rate" : ""}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
