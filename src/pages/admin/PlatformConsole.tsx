@@ -5,7 +5,16 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
-type SettingRow = { group: string; key: string; label: string; secret: boolean; value: string; hasValue: boolean };
+type SettingRow = {
+  group: string;
+  key: string;
+  label: string;
+  secret?: boolean;
+  type?: "boolean";
+  default?: string;
+  value: string;
+  hasValue: boolean;
+};
 
 async function api(path: string, options: RequestInit = {}) {
   const res = await fetch(path, {
@@ -21,6 +30,7 @@ function SettingsTab() {
   const { toast } = useToast();
   const [settings, setSettings] = useState<SettingRow[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const load = () => api("/api/admin-console/settings").then(setSettings).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -38,6 +48,24 @@ function SettingsTab() {
     }
   };
 
+  // Payment method toggles save immediately on click — no separate Save
+  // button needed for a checkbox, and it's exactly what should drive
+  // whether that option shows up on the registration success page.
+  const togglePaymentMethod = async (key: string, nextChecked: boolean) => {
+    setSavingKey(key);
+    try {
+      await api(`/api/admin-console/settings/${key}`, {
+        method: "PUT",
+        body: JSON.stringify({ value: nextChecked ? "true" : "false" }),
+      });
+      load();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   const clear = async (key: string) => {
     if (!confirm("Clear this key?")) return;
     await api(`/api/admin-console/settings/${key}`, { method: "DELETE" });
@@ -49,28 +77,67 @@ function SettingsTab() {
 
   return (
     <div className="space-y-8">
-      {groups.map((group) => (
-        <div key={group}>
-          <h3 className="font-bold text-lg mb-3">{group}</h3>
-          <div className="space-y-3">
-            {settings.filter((s) => s.group === group).map((s) => (
-              <div key={s.key} className="flex items-end gap-3 flex-wrap">
-                <div className="flex-1 min-w-[220px]">
-                  <Label>{s.label}{s.secret && s.hasValue && " (set — hidden)"}</Label>
-                  <Input
-                    type={s.secret ? "password" : "text"}
-                    placeholder={s.secret ? "••••••••" : ""}
-                    value={edits[s.key] ?? (s.secret ? "" : s.value)}
-                    onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
-                  />
-                </div>
-                <Button size="sm" onClick={() => save(s.key)}>Save</Button>
-                {s.hasValue && <Button size="sm" variant="outline" onClick={() => clear(s.key)}>Clear</Button>}
+      {groups.map((group) => {
+        const groupSettings = settings.filter((s) => s.group === group);
+        const isPaymentMethods = group === "Payment Methods";
+
+        return (
+          <div key={group}>
+            <h3 className="font-bold text-lg mb-3">{group}</h3>
+
+            {isPaymentMethods ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Tick a payment method to offer it on the event registration success page. Untick
+                  it to hide that option from registrants immediately.
+                </p>
+                <table className="w-full text-sm max-w-md">
+                  <thead>
+                    <tr className="text-left border-b">
+                      <th className="py-2">Payment Method</th>
+                      <th className="py-2 text-center">Enabled</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupSettings.map((s) => (
+                      <tr key={s.key} className="border-b">
+                        <td className="py-3">{s.label}</td>
+                        <td className="py-3 text-center">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4"
+                            checked={s.value === "true"}
+                            disabled={savingKey === s.key}
+                            onChange={(e) => togglePaymentMethod(s.key, e.target.checked)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : (
+              <div className="space-y-3">
+                {groupSettings.map((s) => (
+                  <div key={s.key} className="flex items-end gap-3 flex-wrap">
+                    <div className="flex-1 min-w-[220px]">
+                      <Label>{s.label}{s.secret && s.hasValue && " (set — hidden)"}</Label>
+                      <Input
+                        type={s.secret ? "password" : "text"}
+                        placeholder={s.secret ? "••••••••" : ""}
+                        value={edits[s.key] ?? (s.secret ? "" : s.value)}
+                        onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
+                      />
+                    </div>
+                    <Button size="sm" onClick={() => save(s.key)}>Save</Button>
+                    {s.hasValue && <Button size="sm" variant="outline" onClick={() => clear(s.key)}>Clear</Button>}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

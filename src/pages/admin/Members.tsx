@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ const Members = ({ memberData, onReload }: MembersProps) => {
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [justOpened, setJustOpened] = useState(false);
+  const editPanelRef = useRef<HTMLDivElement | null>(null);
 
   const toggleMemberRow = (email: string) =>
     setSelectedMemberRows((prev) =>
@@ -122,6 +124,14 @@ const Members = ({ memberData, onReload }: MembersProps) => {
         ? Object.keys(member.interests).filter((k) => member.interests[k]).join(", ")
         : member.interests || "",
     });
+
+    // Make it unmistakable that the panel just opened: scroll it into view
+    // and flash a highlight ring around it for a moment.
+    setJustOpened(true);
+    setTimeout(() => {
+      editPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+    setTimeout(() => setJustOpened(false), 1200);
   };
 
   const saveEditingMember = async () => {
@@ -205,7 +215,12 @@ const Members = ({ memberData, onReload }: MembersProps) => {
         </Button>
 
         {editingMember && (
-          <Card className="mb-6">
+          <Card
+            ref={editPanelRef}
+            className={`mb-6 transition-shadow duration-300 ${
+              justOpened ? "ring-4 ring-primary ring-offset-2 shadow-lg" : ""
+            }`}
+          >
             <CardContent className="p-4 space-y-3">
               <h3 className="font-bold">Edit Member — {editingMember.originalEmail || editingMember.email}</h3>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Mail } from "lucide-react";
+import RegistrationCheckoutModal from "@/components/RegistrationCheckoutModal";
 
 export interface EventRegistrationSuccessData {
   eventName: string;
@@ -51,6 +52,20 @@ const EventRegistrationSuccessDialog = ({
   const [transactionNumber, setTransactionNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentRecorded, setPaymentRecorded] = useState(false);
+  const [showCardPayment, setShowCardPayment] = useState(false);
+
+  // Which payment methods are currently offered, set by an admin under
+  // Settings & Access → Payment Methods. Bank transfer is on by default so
+  // the page still works before anyone visits that settings screen.
+  const [methods, setMethods] = useState({ bankTransfer: true, card: false });
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/payment-methods")
+      .then((res) => res.json())
+      .then((data) => setMethods({ bankTransfer: !!data.bankTransfer, card: !!data.card }))
+      .catch(() => setMethods({ bankTransfer: true, card: false }));
+  }, [open]);
 
   const feeOwed = !!data && typeof data.fee === "number" && data.fee > 0;
 
@@ -145,49 +160,69 @@ const EventRegistrationSuccessDialog = ({
         {/* Payment collection - only shown when a fee is owed */}
         {feeOwed && !paymentRecorded && (
           <div className="space-y-4 border-t pt-4">
-            <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 space-y-1 text-sm">
-              <p className="font-semibold text-orange-800 mb-1">Kutumb Bank Details</p>
-              <p><span className="font-medium">Account Name:</span> {BANK_DETAILS.accountName}</p>
-              <p><span className="font-medium">BSB:</span> {BANK_DETAILS.bsb}</p>
-              <p><span className="font-medium">Account:</span> {BANK_DETAILS.account}</p>
-              <p className="pt-1 font-medium">Amount: ${data.fee}</p>
-            </div>
-
-            <div>
-              <Label className="mb-2 block">Have you already completed a bank transfer? *</Label>
-              <RadioGroup value={bankTransferred} onValueChange={(v) => setBankTransferred(v as "yes" | "no")} className="flex gap-6">
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="yes" id="event-transferred-yes" />
-                  <label htmlFor="event-transferred-yes" className="text-sm cursor-pointer">Yes</label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="no" id="event-transferred-no" />
-                  <label htmlFor="event-transferred-no" className="text-sm cursor-pointer">No, not yet</label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            {bankTransferred === "yes" && (
-              <div>
-                <Label htmlFor="event-txn-number">Transaction / Reference Number *</Label>
-                <Input
-                  id="event-txn-number"
-                  value={transactionNumber}
-                  onChange={(e) => setTransactionNumber(e.target.value)}
-                  className="mt-2"
-                  placeholder="e.g. TXN123456789"
-                />
-              </div>
+            {!methods.card && !methods.bankTransfer && (
+              <p className="text-sm text-muted-foreground">
+                Payment options aren't available right now — we'll be in touch about how to pay.
+              </p>
             )}
 
-            <Button
-              onClick={handleRecordPayment}
-              disabled={submitting}
-              className="w-full text-white"
-              style={{ backgroundColor: "#c2410c" }}
-            >
-              {submitting ? "Submitting…" : "Confirm Payment Details"}
-            </Button>
+            {methods.card && (
+              <Button onClick={() => setShowCardPayment(true)} className="w-full btn-hero">
+                💳 Pay ${data.fee} by Card
+              </Button>
+            )}
+
+            {methods.card && methods.bankTransfer && (
+              <p className="text-center text-xs text-muted-foreground">— or pay by bank transfer instead —</p>
+            )}
+
+            {methods.bankTransfer && (
+              <>
+                <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 space-y-1 text-sm">
+                  <p className="font-semibold text-orange-800 mb-1">Kutumb Bank Details</p>
+                  <p><span className="font-medium">Account Name:</span> {BANK_DETAILS.accountName}</p>
+                  <p><span className="font-medium">BSB:</span> {BANK_DETAILS.bsb}</p>
+                  <p><span className="font-medium">Account:</span> {BANK_DETAILS.account}</p>
+                  <p className="pt-1 font-medium">Amount: ${data.fee}</p>
+                </div>
+
+                <div>
+                  <Label className="mb-2 block">Have you already completed a bank transfer? *</Label>
+                  <RadioGroup value={bankTransferred} onValueChange={(v) => setBankTransferred(v as "yes" | "no")} className="flex gap-6">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="yes" id="event-transferred-yes" />
+                      <label htmlFor="event-transferred-yes" className="text-sm cursor-pointer">Yes</label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="no" id="event-transferred-no" />
+                      <label htmlFor="event-transferred-no" className="text-sm cursor-pointer">No, not yet</label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {bankTransferred === "yes" && (
+                  <div>
+                    <Label htmlFor="event-txn-number">Transaction / Reference Number *</Label>
+                    <Input
+                      id="event-txn-number"
+                      value={transactionNumber}
+                      onChange={(e) => setTransactionNumber(e.target.value)}
+                      className="mt-2"
+                      placeholder="e.g. TXN123456789"
+                    />
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleRecordPayment}
+                  disabled={submitting}
+                  className="w-full text-white"
+                  style={{ backgroundColor: "#c2410c" }}
+                >
+                  {submitting ? "Submitting…" : "Confirm Payment Details"}
+                </Button>
+              </>
+            )}
           </div>
         )}
 
@@ -201,6 +236,17 @@ const EventRegistrationSuccessDialog = ({
           Close
         </Button>
       </DialogContent>
+
+      {showCardPayment && feeOwed && methods.card && (
+        <RegistrationCheckoutModal
+          eventTitle={data.eventName}
+          buyerName={data.name}
+          buyerEmail={data.email}
+          defaultQuantity={1 + data.adults + data.children}
+          totalFee={data.fee as number}
+          onClose={() => setShowCardPayment(false)}
+        />
+      )}
     </Dialog>
   );
 };

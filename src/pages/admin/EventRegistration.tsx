@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
   const [selectedEventRows, setSelectedEventRows] = useState<string[]>([]);
   const [editingEvent, setEditingEvent] = useState<any | null>(null);
   const [eventActionMessage, setEventActionMessage] = useState("");
+  const [justOpened, setJustOpened] = useState(false);
+  const editPanelRef = useRef<HTMLDivElement | null>(null);
 
   // ─── derived: selected event ─────────────────────────────────────────────
   const selectedEvent =
@@ -147,6 +149,13 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                   );
                   if (!member) return;
                   setEditingEvent({ ...member });
+
+                  // Scroll to and flash the edit panel so it's obvious it opened.
+                  setJustOpened(true);
+                  setTimeout(() => {
+                    editPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }, 50);
+                  setTimeout(() => setJustOpened(false), 1200);
                 }}
                 disabled={selectedEventRows.length !== 1}
               >
@@ -216,7 +225,12 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
 
             {/* Edit form */}
             {editingEvent && (
-              <Card className="mt-4">
+              <Card
+                ref={editPanelRef}
+                className={`mt-4 transition-shadow duration-300 ${
+                  justOpened ? "ring-4 ring-primary ring-offset-2 shadow-lg" : ""
+                }`}
+              >
                 <CardContent className="p-4 space-y-3">
                   <h3 className="font-bold">Edit Registration</h3>
                   <Input
