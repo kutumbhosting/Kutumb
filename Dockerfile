@@ -21,4 +21,4 @@ ENV PORT=8080
 
 EXPOSE 8080
 
-CMD ["node", "server/server.js"]
+CMD ["sh", "-c", "node server/db/migrate.js && node server/server.js"]
