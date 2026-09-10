@@ -746,12 +746,15 @@ app.get("/api/members", requireAdmin, async (req, res) => {
 ------------------------------ */
 app.post("/api/members/delete", requireAdmin, async (req, res) => {
   try {
-    const { emails } = req.body;
-    if (!emails || !Array.isArray(emails) || !emails.length) {
-      return res.status(400).json({ message: "No emails provided" });
+    const { membershipNumbers } = req.body;
+    if (!membershipNumbers || !Array.isArray(membershipNumbers) || !membershipNumbers.length) {
+      return res.status(400).json({ message: "No membership numbers provided" });
     }
 
-    await pool.query("DELETE FROM kutumb_members WHERE lower(email) = ANY($1)", [emails.map((e) => e.toLowerCase())]);
+    // Deletes by membership number, not email — email is intentionally not
+    // unique (family members can share one household email), so deleting
+    // by email would wipe out every member on that email at once.
+    await pool.query("DELETE FROM kutumb_members WHERE membership_number = ANY($1)", [membershipNumbers]);
     res.json({ message: "Members deleted" });
   } catch (err) {
     console.error(err);
@@ -764,25 +767,29 @@ app.post("/api/members/delete", requireAdmin, async (req, res) => {
 ------------------------------ */
 app.post("/api/members/update", requireAdmin, async (req, res) => {
   try {
-    const { email, updatedData } = req.body;
-    if (!email) return res.status(400).json({ message: "Email required" });
+    const { membershipNumber, updatedData } = req.body;
+    if (!membershipNumber) return res.status(400).json({ message: "Membership number required" });
 
     let interests = updatedData?.interests;
     if (typeof interests === "string") {
       interests = interests.split(",").map((i) => i.trim()).filter(Boolean);
     }
 
-    // A new email address may have been supplied — trim/normalize it and,
-    // if it's actually different from the current one, make sure it's not
-    // already used by a *different* member before writing it.
     const newEmail = updatedData?.email?.trim();
-    if (newEmail) {
+    const newName = updatedData?.name?.trim();
+
+    // If either name or email is changing, make sure the resulting
+    // (name, email) pair isn't already used by a *different* member —
+    // matching the same uniqueness rule enforced by the database
+    // constraint, checked here first for a friendlier error message.
+    if (newEmail && newName) {
       const dupCheck = await pool.query(
-        "SELECT id FROM kutumb_members WHERE lower(email) = lower($1) AND lower(email) <> lower($2)",
-        [newEmail, email]
+        `SELECT id FROM kutumb_members
+         WHERE lower(email) = lower($1) AND lower(name) = lower($2) AND membership_number <> $3`,
+        [newEmail, newName, membershipNumber]
       );
       if (dupCheck.rows.length > 0) {
-        return res.status(409).json({ message: "That email address is already used by another member" });
+        return res.status(409).json({ message: "That name and email combination is already used by another member" });
       }
     }
 
@@ -793,14 +800,17 @@ app.post("/api/members/update", requireAdmin, async (req, res) => {
          phone = COALESCE($3, phone),
          address = COALESCE($4, address),
          interests = COALESCE($5, interests)
-       WHERE lower(email) = lower($6)
+       WHERE membership_number = $6
        RETURNING *`,
-      [updatedData?.name, newEmail || null, updatedData?.phone, updatedData?.address, interests || null, email]
+      [updatedData?.name, newEmail || null, updatedData?.phone, updatedData?.address, interests || null, membershipNumber]
     );
 
     if (rows.length === 0) return res.status(404).json({ message: "Member not found" });
     res.json({ message: "Member updated successfully" });
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({ message: "That name and email combination is already used by another member" });
+    }
     console.error(err);
     res.status(500).json({ message: "Update failed" });
   }
