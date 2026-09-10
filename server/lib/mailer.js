@@ -220,6 +220,63 @@ export async function sendEventPaymentConfirmationEmail({
   });
 }
 
+/**
+ * Sends the same admin-composed announcement to a batch of recipients, one
+ * at a time (not one giant "to" list, so a bad address never exposes every
+ * other member's email in their inbox headers, and a failure for one
+ * recipient doesn't block the rest). Kept sequential with a small delay
+ * rather than firing all sends in parallel, to stay well under typical SMTP
+ * provider rate limits when the member list is large.
+ *
+ * Returns { total, sent, failed, failures: [{ to, error }] } so the admin
+ * console can show a clear summary instead of a single pass/fail flag.
+ */
+export async function sendBulkEmail({ recipients, subject, message }) {
+  const results = { total: recipients.length, sent: 0, failed: 0, failures: [] };
+
+  // Plain admin-composed text, lightly wrapped in the same branded shell as
+  // every other outgoing email. Line breaks in the textarea are preserved
+  // since the message is otherwise plain text, not HTML, from the admin.
+  const bodyHtml = String(message || "")
+    .split(/\r?\n/)
+    .map((line) => (line.trim() ? `<p style="margin:0 0 12px;">${escapeHtml(line)}</p>` : ""))
+    .join("");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      ${bodyHtml}
+      <p style="margin-top:24px;color:#555;font-size:13px;">
+        With Best Regards, &middot; Kutumb Executive Team
+      </p>
+    </div>
+  `;
+
+  for (const to of recipients) {
+    const result = await send({ to, subject, html, attachments: logoAttachment() });
+    if (result.sent) {
+      results.sent += 1;
+    } else {
+      results.failed += 1;
+      results.failures.push({ to, error: result.error || "Unknown error" });
+    }
+    // Small pacing delay between sends - avoids tripping SMTP provider
+    // rate limits on larger member lists.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+
+  return results;
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function sendDonationThankYouEmail({
   to,
   name,

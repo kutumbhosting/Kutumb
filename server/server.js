@@ -18,6 +18,7 @@ import {
   sendDonationThankYouEmail,
   checkEmailConfig,
   sendTestEmail,
+  sendBulkEmail,
 } from "./lib/mailer.js";
 import { sendWhatsAppDocument } from "./lib/whatsapp.js";
 import { parseEventEndDate, sortPastEventsDescending } from "./lib/eventDates.js";
@@ -33,6 +34,7 @@ import mediaRoutes from "./routes/media.routes.js";
 import { slugify } from "./lib/slugify.js";
 import { DATA_ROOT } from "./lib/dataRoot.js";
 import { importMembersDropIn } from "./lib/importMembersDropIn.js";
+import { generateEmailDraft } from "./lib/aiDraft.js";
 
 const app = express();
 
@@ -1056,6 +1058,74 @@ app.post("/api/email/test-send", requireAdmin, async (req, res) => {
   }
   res.json({ message: `Test email sent to ${to}` });
 });
+
+/* -----------------------------
+   📧 BULK EMAIL TO MEMBERS (ADMIN)
+   Sends the same subject/message to a chosen set of members - either every
+   currently registered member, or a specific list of emails picked in the
+   admin console. Sends are handled by sendBulkEmail (sequential, one at a
+   time), so a bad address for one member never blocks the rest, and the
+   admin gets back a clear sent/failed count instead of a single flag.
+------------------------------ */
+app.post("/api/members/send-bulk-email", requireAdmin, async (req, res) => {
+  try {
+    const { subject, message, emails, sendToAll } = req.body;
+
+    if (!subject?.trim() || !message?.trim()) {
+      return res.status(400).json({ message: "Subject and message are required" });
+    }
+
+    let recipients;
+    if (sendToAll) {
+      const { rows } = await pool.query("SELECT email FROM kutumb_members");
+      recipients = rows.map((r) => r.email).filter(Boolean);
+    } else {
+      if (!Array.isArray(emails) || emails.length === 0) {
+        return res.status(400).json({ message: "No recipients selected" });
+      }
+      recipients = emails.filter(Boolean);
+    }
+
+    // De-duplicate (case-insensitive) in case the same address slipped in twice.
+    const seen = new Set();
+    recipients = recipients.filter((email) => {
+      const key = email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (recipients.length === 0) {
+      return res.status(400).json({ message: "No recipients to send to" });
+    }
+
+    const results = await sendBulkEmail({ recipients, subject: subject.trim(), message });
+    res.json({
+      message: `Sent to ${results.sent} of ${results.total} recipient(s)${results.failed ? `, ${results.failed} failed` : ""}.`,
+      ...results,
+    });
+  } catch (err) {
+    console.error("BULK EMAIL ERROR:", err);
+    res.status(500).json({ message: "Failed to send bulk email" });
+  }
+});
+
+/* -----------------------------
+   ✨ AI-DRAFT AN EMAIL (ADMIN)
+   Takes a short brief ("reminder about the Diwali event, free for members")
+   and returns a subject + body the admin can review and edit in the Send
+   Email dialog before anything is sent. Never sends anything itself.
+------------------------------ */
+app.post("/api/members/generate-email-draft", requireAdmin, async (req, res) => {
+  try {
+    const { topic } = req.body;
+    const draft = await generateEmailDraft({ topic });
+    res.json(draft);
+  } catch (err) {
+    res.status(400).json({ message: err.message || "Failed to generate draft" });
+  }
+});
+
 
 app.get("/api/whatsapp/status", (req, res) => {
   const configured = !!(process.env.WHATSAPP_PHONE_NUMBER_ID && process.env.WHATSAPP_ACCESS_TOKEN);

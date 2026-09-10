@@ -37,6 +37,13 @@ export const SETTINGS_SCHEMA = [
   // in and an admin deliberately switches it on.
   { group: "Payment Methods", key: "payment_method_bank_transfer", label: "Bank Transfer", type: "boolean", default: "true" },
   { group: "Payment Methods", key: "payment_method_card", label: "Pay by Card (Stripe)", type: "boolean", default: "false" },
+  // Powers the "Generate with AI" draft button on the Members → Send Email
+  // dialog. Optional — without it, admins can still write emails by hand.
+  // No hardcoded default for groq_model: Groq's model lineup changes often,
+  // so the admin picks a real one from a live-fetched list instead of us
+  // guessing an id that might already be renamed or retired.
+  { group: "AI Email Draft", key: "groq_api_key", label: "Groq API Key", secret: true },
+  { group: "AI Email Draft", key: "groq_model", label: "Groq Model", secret: false },
 ];
 
 export async function getSetting(key) {
