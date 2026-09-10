@@ -5,6 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { TabsContent } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Calendar, MapPin, Users, Clock, Sparkles } from "lucide-react";
 
@@ -29,6 +35,11 @@ interface UpcomingEventsProps {
   setFormData: React.Dispatch<React.SetStateAction<FormData>>;
   submitMessage: string;
   handleSubmit: (e: React.FormEvent) => Promise<void>;
+  /** Controls the "Register for This Event" popup, lifted up to Events.tsx
+      so it can also be opened from "Register Now" links elsewhere on the
+      site and reopened automatically after returning from Membership. */
+  registrationOpen: boolean;
+  setRegistrationOpen: (open: boolean) => void;
 }
 
 const UpcomingEvents = ({
@@ -37,6 +48,8 @@ const UpcomingEvents = ({
   setFormData,
   submitMessage,
   handleSubmit,
+  registrationOpen,
+  setRegistrationOpen,
 }: UpcomingEventsProps) => {
   const navigate = useNavigate();
 
@@ -180,12 +193,7 @@ const UpcomingEvents = ({
                             adults: 0,
                             children: 0,
                           });
-
-                          setTimeout(() => {
-                            document
-                              .getElementById("registration-form")
-                              ?.scrollIntoView({ behavior: "smooth" });
-                          }, 0);
+                          setRegistrationOpen(true);
                         }}
                       >
                         Register for This Event
@@ -199,15 +207,13 @@ const UpcomingEvents = ({
           })}
       </div>
 
-      <div
-        id="registration-form"
-        className="max-w-2xl mx-auto mt-16 scroll-mt-24"
-      >
-        <Card className="border border-border">
-          <CardContent className="p-8">
-            <h2 className="mb-6 text-center">Event Registration</h2>
+      <Dialog open={registrationOpen} onOpenChange={setRegistrationOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Event Registration</DialogTitle>
+          </DialogHeader>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <Label htmlFor="event">Event Name *</Label>
                 <Input
@@ -405,9 +411,8 @@ const UpcomingEvents = ({
                 </p>
               )}
             </form>
-          </CardContent>
-        </Card>
-      </div>
+        </DialogContent>
+      </Dialog>
     </TabsContent>
   );
 };

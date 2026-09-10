@@ -138,12 +138,19 @@ const Members = ({ memberData, onReload }: MembersProps) => {
       }
 
       const result = await res.json();
+      // Surface the actual SMTP error, not just a count, so a failure is
+      // self-diagnosing from the toast alone instead of requiring a trip
+      // to the server console logs.
+      const firstError = result.failures?.[0]?.error;
+      const description = result.failed && firstError
+        ? `${result.message} Reason: ${firstError}`
+        : result.message;
       toast({
         title: result.failed ? "Sent with some failures" : "Email sent",
-        description: result.message,
+        description,
         variant: result.failed ? "destructive" : "default",
       });
-      setEmailDialogOpen(false);
+      if (!result.failed) setEmailDialogOpen(false);
     } catch (err) {
       console.error("[sendBulkEmail] network error", err);
       toast({

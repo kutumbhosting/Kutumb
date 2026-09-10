@@ -22,6 +22,7 @@ const Events = () => {
   const location = useLocation();
   const [submitMessage, setSubmitMessage] = useState<string>("");
   const [donateOpen, setDonateOpen] = useState(false);
+  const [registrationOpen, setRegistrationOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
   const [successData, setSuccessData] = useState<EventRegistrationSuccessData | null>(null);
   const [formData, setFormData] = useState({
@@ -51,8 +52,8 @@ const Events = () => {
     loadUpcomingEvents();
   }, []);
 
-  // ── Scroll to form when navigating from Home / Activities, or when ───────
-  //    returning from the Membership page mid-registration ─────────────────
+  // ── Open the registration popup when navigating from Home / Activities, ──
+  //    or when returning from the Membership page mid-registration ─────────
   useEffect(() => {
     if (location.state?.scrollTo === "registration") {
       if (location.state?.restoreDraft) {
@@ -78,15 +79,7 @@ const Events = () => {
         }));
       }
 
-      const timer = setTimeout(() => {
-        const el = document.getElementById("registration-form");
-        if (el) {
-          const y = el.getBoundingClientRect().top + window.pageYOffset - 90;
-          window.scrollTo({ top: y, behavior: "smooth" });
-        }
-      }, 500);
-
-      return () => clearTimeout(timer);
+      setRegistrationOpen(true);
     }
   }, [location.state]);
 
@@ -152,6 +145,7 @@ const Events = () => {
         email: data.email || formData.email,
         name: data.name || formData.name,
       });
+      setRegistrationOpen(false);
       setSuccessOpen(true);
 
       // ✅ Refetch so available spots update immediately in the UI
@@ -168,12 +162,6 @@ const Events = () => {
         adults: 0,
         children: 0,
       });
-
-      setTimeout(() => {
-        const el = document.getElementById("registration-form");
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
-
     } catch (error) {
       console.error("API Error:", error);
       setSubmitMessage("Submission failed. Try again.");
@@ -227,6 +215,8 @@ const Events = () => {
                 setFormData={setFormData}
                 submitMessage={submitMessage}
                 handleSubmit={handleSubmit}
+                registrationOpen={registrationOpen}
+                setRegistrationOpen={setRegistrationOpen}
               />
 
               <PastEvents />
