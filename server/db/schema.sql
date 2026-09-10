@@ -140,7 +140,34 @@ CREATE TABLE IF NOT EXISTS kutumb_members (
   qr_code TEXT, -- base64 data URL, generated at signup
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Duplicate members (same email AND name, different rows) were previously
+-- only prevented by scattered application-level checks — and the generic
+-- Database Tables admin editor had none at all, letting a duplicate slip
+-- straight into the table. Before enforcing a real uniqueness constraint,
+-- clean up any duplicates already sitting in the table: for each set of
+-- rows sharing the same email+name (case-insensitive), keep only the
+-- earliest-created one (lowest id) and remove the rest. This is safe to
+-- run on every startup — once there are no duplicates left, it's a no-op.
+-- Deliberately NOT email-alone: family members legitimately share one
+-- household email under different names, and that's a valid case, not a
+-- duplicate.
+DELETE FROM kutumb_members a
+USING kutumb_members b
+WHERE a.id > b.id
+  AND lower(a.email) = lower(b.email)
+  AND lower(a.name) = lower(b.name);
+
+-- Replaces the old plain (non-unique) email index with a real constraint
+-- on the (email, name) pair, so that exact combination can never be
+-- inserted twice again — via the signup form, the JSON importer, the
+-- Database Tables editor, or any future code path, including a raw SQL
+-- edit. Email alone is intentionally NOT unique, since one household email
+-- covering several family members under different names is valid.
+DROP INDEX IF EXISTS idx_kutumb_members_email;
+DROP INDEX IF EXISTS idx_kutumb_members_email_unique;
 CREATE INDEX IF NOT EXISTS idx_kutumb_members_email ON kutumb_members(lower(email));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_kutumb_members_email_name_unique ON kutumb_members(lower(email), lower(name));
 
 -- Replaces the per-event JSON registration files (server/data/events/*.json).
 -- One row per attendee registration; event identity is just the plain
