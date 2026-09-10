@@ -46,7 +46,13 @@ export async function importMembersDropIn() {
       continue;
     }
 
-    const { rows: existing } = await pool.query("SELECT id FROM kutumb_members WHERE lower(email) = lower($1)", [email]);
+    const { rows: existing } = await pool.query(
+      // Email alone is intentionally not the uniqueness key — family
+      // members can legitimately share one household email under
+      // different names. Only skip if this exact name+email pair exists.
+      "SELECT id FROM kutumb_members WHERE lower(email) = lower($1) AND lower(name) = lower($2)",
+      [email, name]
+    );
     if (existing.length > 0) {
       skipped++;
       continue;
@@ -66,12 +72,23 @@ export async function importMembersDropIn() {
 
     const qrCode = entry.qrCode || (await generateQrDataUrl(membershipNumber));
 
-    await pool.query(
-      `INSERT INTO kutumb_members (name, email, phone, address, interests, membership_number, qr_code, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, now()))`,
-      [name, email, entry.phone || null, entry.address || null, entry.interests || [], membershipNumber, qrCode, entry.createdAt || null]
-    );
-    imported++;
+    try {
+      await pool.query(
+        `INSERT INTO kutumb_members (name, email, phone, address, interests, membership_number, qr_code, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8, now()))`,
+        [name, email, entry.phone || null, entry.address || null, entry.interests || [], membershipNumber, qrCode, entry.createdAt || null]
+      );
+      imported++;
+    } catch (err) {
+      // Defense in depth on top of the email check above (e.g. a genuine
+      // race with a signup happening at the same moment) — skip this entry
+      // rather than aborting the whole batch import over one duplicate.
+      if (err.code === "23505") {
+        skipped++;
+      } else {
+        throw err;
+      }
+    }
   }
 
   // Clean up regardless of outcome (short of a parse error, handled above)
