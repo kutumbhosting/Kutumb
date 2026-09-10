@@ -195,7 +195,7 @@ const Admin = () => {
               </div>
               <Tabs defaultValue="events" className="max-w-7xl mx-auto">
 
-                <TabsList className="flex flex-wrap w-full max-w-4xl mx-auto gap-3 mb-12">
+                <TabsList className="flex flex-wrap h-auto w-full max-w-4xl mx-auto gap-3 mb-12">
                   <TabsTrigger value="events">Event Registrations</TabsTrigger>
                   <TabsTrigger value="members">Members</TabsTrigger>
                   <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
