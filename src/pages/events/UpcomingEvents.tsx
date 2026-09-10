@@ -220,7 +220,7 @@ const UpcomingEvents = ({
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle asChild>
-              <h1 className="text-center text-[#0a1f5c]">Event Registration</h1>
+              <h2 className="text-center text-[#0a1f5c] text-[2.8125rem] md:text-[3.375rem]">Event Registration</h2>
             </DialogTitle>
           </DialogHeader>
 
