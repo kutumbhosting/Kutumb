@@ -87,16 +87,24 @@ const Members = ({ memberData, onReload }: MembersProps) => {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [generatingDraft, setGeneratingDraft] = useState(false);
 
-  const toggleMemberRow = (email: string) =>
+  // Selection is keyed by membership number, not email — email is
+  // intentionally not unique (family members can share one household
+  // email), so keying by email meant checking one row also silently
+  // selected every other row sharing that email, including for deletion.
+  // Falls back to email+name for the rare legacy row missing a membership
+  // number, which is still unique in practice even if not DB-enforced.
+  const rowKey = (m: any) => m.membershipNumber || `${m.email}::${m.name}`;
+
+  const toggleMemberRow = (key: string) =>
     setSelectedMemberRows((prev) =>
-      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );
 
-  const allSelected = visibleMembers.length > 0 && visibleMembers.every((m) => selectedMemberRows.includes(m.email));
+  const allSelected = visibleMembers.length > 0 && visibleMembers.every((m) => selectedMemberRows.includes(rowKey(m)));
   const toggleSelectAll = () =>
     setSelectedMemberRows(allSelected
-      ? selectedMemberRows.filter((e) => !visibleMembers.some((m) => m.email === e))
-      : Array.from(new Set([...selectedMemberRows, ...visibleMembers.map((m) => m.email)]))
+      ? selectedMemberRows.filter((k) => !visibleMembers.some((m) => rowKey(m) === k))
+      : Array.from(new Set([...selectedMemberRows, ...visibleMembers.map(rowKey)]))
     );
 
   const openEmailDialog = () => {
@@ -178,7 +186,9 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           subject: emailSubject,
           message: emailMessage,
           sendToAll: emailAudience === "all",
-          emails: emailAudience === "selected" ? selectedMemberRows : undefined,
+          emails: emailAudience === "selected"
+            ? memberData.filter((m) => selectedMemberRows.includes(rowKey(m))).map((m) => m.email)
+            : undefined,
         }),
       });
 
@@ -241,7 +251,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
       const res = await fetch("/api/members/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: selectedMemberRows }),
+        body: JSON.stringify({ membershipNumbers: selectedMemberRows }),
       });
 
       if (!res.ok) {
@@ -291,7 +301,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
   };
 
   const openEditor = () => {
-    const member = memberData.find((m) => m.email === selectedMemberRows[0]);
+    const member = memberData.find((m) => rowKey(m) === selectedMemberRows[0]);
     if (!member) {
       toast({
         title: "Couldn't find that member",
@@ -302,10 +312,6 @@ const Members = ({ memberData, onReload }: MembersProps) => {
     }
     setEditingMember({
       ...member,
-      // Kept separately from the (now editable) `email` field below so we
-      // still know which record to match on the server if the admin
-      // changes the email address itself.
-      originalEmail: member.email,
       interests: Array.isArray(member.interests)
         ? member.interests.join(", ")
         : typeof member.interests === "object" && member.interests !== null
@@ -342,7 +348,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: editingMember.originalEmail || editingMember.email,
+          membershipNumber: editingMember.membershipNumber,
           updatedData: { ...editingMember, email: newEmail },
         }),
       });
@@ -452,7 +458,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
             }`}
           >
             <CardContent className="p-4 space-y-3">
-              <h3 className="font-bold">Edit Member — {editingMember.originalEmail || editingMember.email}</h3>
+              <h3 className="font-bold">Edit Member — #{editingMember.membershipNumber} ({editingMember.email})</h3>
 
               <div>
                 <label className="text-xs font-medium text-muted-foreground">Full Name</label>
@@ -554,8 +560,8 @@ const Members = ({ memberData, onReload }: MembersProps) => {
                   <td className="p-2">
                     <input
                       type="checkbox"
-                      checked={selectedMemberRows.includes(item.email)}
-                      onChange={() => toggleMemberRow(item.email)}
+                      checked={selectedMemberRows.includes(rowKey(item))}
+                      onChange={() => toggleMemberRow(rowKey(item))}
                     />
                   </td>
                   <td className="p-2 font-mono">{item.membershipNumber || "-"}</td>
