@@ -123,11 +123,20 @@ const UpcomingEvents = ({
     });
   };
 
+  const activeEvents = (Array.isArray(upcomingEvents) ? upcomingEvents : []).filter(
+    (event) => event.isActive
+  );
+
   return (
     <TabsContent value="upcoming" className="space-y-12">
-      <div className="grid md:grid-cols-2 gap-8">
-        {(Array.isArray(upcomingEvents) ? upcomingEvents : [])
-          .filter((event) => event.isActive)
+      <div
+        className={
+          activeEvents.length === 1
+            ? "max-w-xl mx-auto"
+            : "grid md:grid-cols-2 gap-8"
+        }
+      >
+        {activeEvents
           .map((event, index) => {
             const hasFlyer = !!event.flyerImage;
 
@@ -210,7 +219,9 @@ const UpcomingEvents = ({
       <Dialog open={registrationOpen} onOpenChange={setRegistrationOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Event Registration</DialogTitle>
+            <DialogTitle asChild>
+              <h1 className="text-center text-4xl md:text-5xl lg:text-6xl text-[#0a1f5c]">Event Registration</h1>
+            </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -221,18 +232,20 @@ const UpcomingEvents = ({
                   value={formData.eventName}
                   placeholder="Enter event name"
                   readOnly
-                  className="mt-2 bg-muted"
+                  disabled
+                  className="mt-2 bg-muted disabled:opacity-100 disabled:cursor-not-allowed"
                 />
               </div>
 
               <div>
-                <Label htmlFor="event">Event Date *</Label>
+                <Label htmlFor="date">Event Date *</Label>
                 <Input
                   id="date"
                   value={formData.eventDate}
                   placeholder="Enter event date"
                   readOnly
-                  className="mt-2 bg-muted"
+                  disabled
+                  className="mt-2 bg-muted disabled:opacity-100 disabled:cursor-not-allowed"
                 />
               </div>
 
