@@ -20,6 +20,23 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
   const [justOpened, setJustOpened] = useState(false);
   const editPanelRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Search / filter / sort ──────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortKey, setSortKey] = useState<
+    "registrationNumber" | "name" | "email" | "phone" | "adults" | "children" | "fee" | "paymentStatus" | "transactionNumber" | "membershipNumber"
+  >("registrationNumber");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
   // ─── derived: selected event ─────────────────────────────────────────────
   const selectedEvent =
     selectedEventKey && groupedEvents[selectedEventKey]?.length
@@ -41,6 +58,25 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
           ),
         }
       : null;
+
+  const visibleRegistrations = (selectedEvent?.members || [])
+    .filter((m: any) => {
+      if (statusFilter && (m.paymentStatus || "N/A") !== statusFilter) return false;
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return [m.registrationNumber, m.name, m.email, m.phone, m.transactionNumber, m.membershipNumber, m.comments]
+        .some((field: any) => String(field || "").toLowerCase().includes(q));
+    })
+    .sort((a: any, b: any) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (typeof av === "number" || typeof bv === "number") {
+        const cmp = (Number(av) || 0) - (Number(bv) || 0);
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+      const cmp = String(av || "").toLowerCase().localeCompare(String(bv || "").toLowerCase(), undefined, { numeric: true });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   const toggleEventRow = (email: string) =>
     setSelectedEventRows((prev) =>
@@ -87,6 +123,8 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
             setSelectedEventRows([]);
             setEditingEvent(null);
             setEventActionMessage("");
+            setSearch("");
+            setStatusFilter("");
           }}
         >
           <option value="">-- Choose Event --</option>
@@ -169,27 +207,77 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
               </div>
             )}
 
+            <div className="flex flex-wrap gap-2 mb-3 mt-3">
+              <Input
+                placeholder="Search by name, email, phone, transaction no, membership no, comments..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="max-w-sm"
+              />
+              <select
+                className="border rounded-md px-3 py-2 text-sm bg-background"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">All payment statuses</option>
+                <option value="N/A">N/A (no fee)</option>
+                <option value="Pending">Pending</option>
+                <option value="Paid">Paid</option>
+              </select>
+              {(search.trim() || statusFilter) && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter("");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )}
+              {(search.trim() || statusFilter) && (
+                <span className="text-sm text-muted-foreground self-center">
+                  Showing {visibleRegistrations.length} of {selectedEvent.members.length}
+                </span>
+              )}
+            </div>
+
             {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
                     <th className="p-2"></th>
-                    <th className="p-2 text-left">Reg. No</th>
-                    <th className="p-2 text-left">Name</th>
-                    <th className="p-2 text-left">Email</th>
-                    <th className="p-2 text-left">Phone</th>
-                    <th className="p-2 text-left">Adults</th>
-                    <th className="p-2 text-left">Children</th>
-                    <th className="p-2 text-left">Fee</th>
-                    <th className="p-2 text-left">Payment Status</th>
-                    <th className="p-2 text-left">Transaction No</th>
-                    <th className="p-2 text-left">Membership No</th>
+                    {[
+                      { key: "registrationNumber" as const, label: "Reg. No" },
+                      { key: "name" as const, label: "Name" },
+                      { key: "email" as const, label: "Email" },
+                      { key: "phone" as const, label: "Phone" },
+                      { key: "adults" as const, label: "Adults" },
+                      { key: "children" as const, label: "Children" },
+                      { key: "fee" as const, label: "Fee" },
+                      { key: "paymentStatus" as const, label: "Payment Status" },
+                      { key: "transactionNumber" as const, label: "Transaction No" },
+                      { key: "membershipNumber" as const, label: "Membership No" },
+                    ].map(({ key, label }) => (
+                      <th key={key} className="p-2 text-left">
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(key)}
+                          className="flex items-center gap-1 font-medium hover:text-primary whitespace-nowrap"
+                        >
+                          {label}
+                          <span className="text-xs text-muted-foreground">
+                            {sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+                          </span>
+                        </button>
+                      </th>
+                    ))}
                     <th className="p-2 text-left">Comments</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {selectedEvent?.members?.map((item, i) => (
+                  {visibleRegistrations.map((item, i) => (
                     <tr key={i} className="border-b">
                       <td className="p-2">
                         <input
@@ -219,6 +307,13 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                       <td className="p-2">{item.comments || "-"}</td>
                     </tr>
                   ))}
+                  {visibleRegistrations.length === 0 && (
+                    <tr>
+                      <td colSpan={11} className="p-4 text-center text-muted-foreground">
+                        No registrations match your search/filter.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

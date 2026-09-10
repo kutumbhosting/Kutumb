@@ -31,6 +31,53 @@ const Members = ({ memberData, onReload }: MembersProps) => {
   const [justOpened, setJustOpened] = useState(false);
   const editPanelRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Search / filter / sort ──────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [interestFilter, setInterestFilter] = useState("");
+  const [sortKey, setSortKey] = useState<"membershipNumber" | "name" | "email" | "phone" | "address">("membershipNumber");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Handles the three shapes `interests` shows up in across the app
+  // (array, {label: true} object, or a plain string) and always returns a
+  // clean array — used for both the filter dropdown's options and for
+  // matching a member against the selected filter.
+  const interestsArray = (interests: any): string[] => {
+    if (Array.isArray(interests)) return interests;
+    if (typeof interests === "object" && interests !== null)
+      return Object.keys(interests).filter((k) => interests[k]);
+    if (typeof interests === "string" && interests.trim())
+      return interests.split(/[|,]/).map((s) => s.trim()).filter(Boolean);
+    return [];
+  };
+
+  const interestOptions = Array.from(
+    new Set(memberData.flatMap((m) => interestsArray(m.interests)))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const visibleMembers = memberData
+    .filter((m) => {
+      if (interestFilter && !interestsArray(m.interests).includes(interestFilter)) return false;
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return [m.membershipNumber, m.name, m.email, m.phone, m.address]
+        .some((field) => String(field || "").toLowerCase().includes(q));
+    })
+    .sort((a, b) => {
+      const av = String(a[sortKey] || "").toLowerCase();
+      const bv = String(b[sortKey] || "").toLowerCase();
+      const cmp = av.localeCompare(bv, undefined, { numeric: true });
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
   // ── Bulk email ────────────────────────────────────────────────────────
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailAudience, setEmailAudience] = useState<"selected" | "all">("selected");
@@ -45,9 +92,12 @@ const Members = ({ memberData, onReload }: MembersProps) => {
       prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
 
-  const allSelected = memberData.length > 0 && selectedMemberRows.length === memberData.length;
+  const allSelected = visibleMembers.length > 0 && visibleMembers.every((m) => selectedMemberRows.includes(m.email));
   const toggleSelectAll = () =>
-    setSelectedMemberRows(allSelected ? [] : memberData.map((m) => m.email));
+    setSelectedMemberRows(allSelected
+      ? selectedMemberRows.filter((e) => !visibleMembers.some((m) => m.email === e))
+      : Array.from(new Set([...selectedMemberRows, ...visibleMembers.map((m) => m.email)]))
+    );
 
   const openEmailDialog = () => {
     // Default to "All members" if nothing is currently checked, since
@@ -338,8 +388,47 @@ const Members = ({ memberData, onReload }: MembersProps) => {
         </div>
 
         <p className="text-sm text-muted-foreground mb-4">
-          Total Registered Members: <span className="font-semibold text-foreground">{memberData.length}</span>
+          {search.trim() || interestFilter ? (
+            <>
+              Showing <span className="font-semibold text-foreground">{visibleMembers.length}</span> of{" "}
+              <span className="font-semibold text-foreground">{memberData.length}</span> members
+            </>
+          ) : (
+            <>
+              Total Registered Members: <span className="font-semibold text-foreground">{memberData.length}</span>
+            </>
+          )}
         </p>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Input
+            placeholder="Search by name, email, phone, address, or membership no..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-sm"
+          />
+          <select
+            className="border rounded-md px-3 py-2 text-sm bg-background"
+            value={interestFilter}
+            onChange={(e) => setInterestFilter(e.target.value)}
+          >
+            <option value="">All interests</option>
+            {interestOptions.map((interest) => (
+              <option key={interest} value={interest}>{interest}</option>
+            ))}
+          </select>
+          {(search.trim() || interestFilter) && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setSearch("");
+                setInterestFilter("");
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
 
         {selectedMemberRows.length > 0 && (
           <Button variant="destructive" className="mb-3" onClick={deleteMemberRows} disabled={deleting}>
@@ -433,19 +522,34 @@ const Members = ({ memberData, onReload }: MembersProps) => {
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleSelectAll}
-                    aria-label="Select all members"
+                    aria-label="Select all visible members"
                   />
                 </th>
-                <th className="p-2 text-left">Membership No</th>
-                <th className="p-2 text-left">Name</th>
-                <th className="p-2 text-left">Email</th>
-                <th className="p-2 text-left">Phone</th>
-                <th className="p-2 text-left">Address</th>
+                {[
+                  { key: "membershipNumber" as const, label: "Membership No" },
+                  { key: "name" as const, label: "Name" },
+                  { key: "email" as const, label: "Email" },
+                  { key: "phone" as const, label: "Phone" },
+                  { key: "address" as const, label: "Address" },
+                ].map(({ key, label }) => (
+                  <th key={key} className="p-2 text-left">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(key)}
+                      className="flex items-center gap-1 font-medium hover:text-primary"
+                    >
+                      {label}
+                      <span className="text-xs text-muted-foreground">
+                        {sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
+                      </span>
+                    </button>
+                  </th>
+                ))}
                 <th className="p-2 text-left">Interests</th>
               </tr>
             </thead>
             <tbody>
-              {memberData.map((item, i) => (
+              {visibleMembers.map((item, i) => (
                 <tr key={i} className="border-b">
                   <td className="p-2">
                     <input
@@ -462,6 +566,13 @@ const Members = ({ memberData, onReload }: MembersProps) => {
                   <td className="p-2">{normalizeInterests(item.interests)}</td>
                 </tr>
               ))}
+              {visibleMembers.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-4 text-center text-muted-foreground">
+                    No members match your search/filter.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
