@@ -7,7 +7,12 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Mail } from "lucide-react";
+import { Download, Mail, MessageCircle } from "lucide-react";
+
+// Kutumb's community WhatsApp group — shown after a fresh membership
+// signup (not on the "membership on file" card shown mid-event-registration,
+// since that person already has a chance to join at signup time).
+const WHATSAPP_GROUP_INVITE = "https://chat.whatsapp.com/Etit0vlcVj18n3WNvrcEFR?s=cl&p=i&ilr=4";
 
 export interface MembershipCardData {
   membershipNumber: string;
@@ -92,6 +97,16 @@ const MembershipCardDialog = ({
             <Button className="w-full btn-hero" onClick={onContinue}>
               {continueLabel || "Continue"}
             </Button>
+          )}
+          {/* Only shown right after a fresh membership signup, not on the
+              "membership on file" card shown mid-event-registration. */}
+          {!card.eventName && (
+            <a href={WHATSAPP_GROUP_INVITE} target="_blank" rel="noopener noreferrer" className="w-full">
+              <Button className="w-full bg-[#25D366] hover:bg-[#1ebe5b] text-white">
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Join the Kutumb WhatsApp Group
+              </Button>
+            </a>
           )}
           <a href={cardPdfUrl} target="_blank" rel="noopener noreferrer" className="w-full">
             <Button variant="outline" className="w-full">
