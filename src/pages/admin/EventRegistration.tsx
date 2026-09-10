@@ -110,7 +110,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
       {selectedEvent?.members?.length > 0 && (
         <Card className="mb-6">
           <CardContent className="p-6">
-            <div className="flex justify-between items-start mb-4">
+            <div className="flex flex-wrap justify-between items-start gap-3 mb-4">
               <div>
                 <h2 className="text-xl font-bold">
                   {selectedEvent.eventName} {selectedEvent.eventYear}

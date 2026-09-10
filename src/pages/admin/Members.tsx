@@ -2,6 +2,17 @@ import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { safeFetch, normalizeInterests, downloadCSV } from "./safeFetch";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,10 +31,130 @@ const Members = ({ memberData, onReload }: MembersProps) => {
   const [justOpened, setJustOpened] = useState(false);
   const editPanelRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Bulk email ────────────────────────────────────────────────────────
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailAudience, setEmailAudience] = useState<"selected" | "all">("selected");
+  const [emailTopic, setEmailTopic] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
+
   const toggleMemberRow = (email: string) =>
     setSelectedMemberRows((prev) =>
       prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
+
+  const allSelected = memberData.length > 0 && selectedMemberRows.length === memberData.length;
+  const toggleSelectAll = () =>
+    setSelectedMemberRows(allSelected ? [] : memberData.map((m) => m.email));
+
+  const openEmailDialog = () => {
+    // Default to "All members" if nothing is currently checked, since
+    // "selected" with zero recipients would just be a dead end.
+    setEmailAudience(selectedMemberRows.length > 0 ? "selected" : "all");
+    setEmailTopic("");
+    setEmailSubject("");
+    setEmailMessage("");
+    setEmailDialogOpen(true);
+  };
+
+  // Asks the server to draft a subject + message from a short topic/brief.
+  // The result lands in the same editable fields as manual entry, so the
+  // admin reviews and can change anything before it's ever sent.
+  const generateDraft = async () => {
+    if (!emailTopic.trim()) {
+      toast({
+        title: "Describe the email first",
+        description: "Type a quick topic or brief, e.g. \"reminder about Diwali event, free for members\".",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setGeneratingDraft(true);
+    try {
+      const res = await fetch("/api/members/generate-email-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: emailTopic }),
+      });
+
+      if (!res.ok) {
+        await handleAuthOrServerError(res, "Couldn't generate a draft.");
+        return;
+      }
+
+      const draft = await res.json();
+      setEmailSubject(draft.subject || "");
+      setEmailMessage(draft.message || "");
+      toast({ title: "Draft ready", description: "Review it below and edit anything before sending." });
+    } catch (err) {
+      console.error("[generateDraft] network error", err);
+      toast({
+        title: "Network error",
+        description: "Couldn't reach the server. Check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingDraft(false);
+    }
+  };
+
+  const sendBulkEmail = async () => {
+    if (!emailSubject.trim() || !emailMessage.trim()) {
+      toast({
+        title: "Subject and message required",
+        description: "Please fill in both the subject and message before sending.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (emailAudience === "selected" && selectedMemberRows.length === 0) {
+      toast({
+        title: "No members selected",
+        description: "Select at least one member, or choose \"All members\" instead.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const res = await fetch("/api/members/send-bulk-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: emailSubject,
+          message: emailMessage,
+          sendToAll: emailAudience === "all",
+          emails: emailAudience === "selected" ? selectedMemberRows : undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        await handleAuthOrServerError(res, "Couldn't send the email.");
+        return;
+      }
+
+      const result = await res.json();
+      toast({
+        title: result.failed ? "Sent with some failures" : "Email sent",
+        description: result.message,
+        variant: result.failed ? "destructive" : "default",
+      });
+      setEmailDialogOpen(false);
+    } catch (err) {
+      console.error("[sendBulkEmail] network error", err);
+      toast({
+        title: "Network error",
+        description: "Couldn't reach the server. Check your connection and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   // Shows a clear message instead of failing silently — in particular, if
   // the admin session cookie has expired, every request below 401s and the
@@ -190,6 +321,9 @@ const Members = ({ memberData, onReload }: MembersProps) => {
             <Button variant="outline" onClick={importFromDropIn} disabled={importing}>
               {importing ? "Importing..." : "📥 Import from members.json"}
             </Button>
+            <Button variant="outline" onClick={openEmailDialog} disabled={memberData.length === 0}>
+              ✉️ Send Email
+            </Button>
             <Button onClick={() => downloadCSV(memberData, "members.csv")}>
               Download CSV
             </Button>
@@ -287,7 +421,14 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b">
-                <th className="p-2"></th>
+                <th className="p-2">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all members"
+                  />
+                </th>
                 <th className="p-2 text-left">Membership No</th>
                 <th className="p-2 text-left">Name</th>
                 <th className="p-2 text-left">Email</th>
@@ -318,6 +459,87 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           </table>
         </div>
       </CardContent>
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Send Bulk Email</DialogTitle>
+            <DialogDescription>
+              Compose a message to send to Kutumb members.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Recipients</Label>
+              <RadioGroup
+                value={emailAudience}
+                onValueChange={(value) => setEmailAudience(value as "selected" | "all")}
+                className="mt-2 space-y-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="selected" id="audience-selected" disabled={selectedMemberRows.length === 0} />
+                  <Label htmlFor="audience-selected" className="font-normal cursor-pointer">
+                    Selected members ({selectedMemberRows.length} selected)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="all" id="audience-all" />
+                  <Label htmlFor="audience-all" className="font-normal cursor-pointer">
+                    All members ({memberData.length} total)
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">
+                What's this email about? <span className="font-normal">(optional — for AI drafting)</span>
+              </Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  value={emailTopic}
+                  onChange={(e) => setEmailTopic(e.target.value)}
+                  placeholder="e.g. Reminder about Diwali event on Nov 1, free for members"
+                />
+                <Button type="button" variant="secondary" onClick={generateDraft} disabled={generatingDraft}>
+                  {generatingDraft ? "Writing..." : "✨ Generate"}
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Subject</Label>
+              <Input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="e.g. Upcoming Kutumb Event"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Message</Label>
+              <Textarea
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                placeholder="Write your message here, or generate a draft above..."
+                rows={8}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>
+              Cancel
+            </Button>
+            <Button onClick={sendBulkEmail} disabled={sendingEmail}>
+              {sendingEmail
+                ? "Sending..."
+                : `Send to ${emailAudience === "all" ? memberData.length : selectedMemberRows.length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };

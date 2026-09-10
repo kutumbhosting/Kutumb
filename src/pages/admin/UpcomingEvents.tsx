@@ -45,7 +45,7 @@ const UpcomingEvents = () => {
       {/* ── Existing events table ── */}
       <Card className="border mb-6">
         <CardContent className="p-6">
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-6">
             <h2 className="text-xl font-bold">Upcoming Events Management</h2>
             <Button onClick={() => downloadCSV(upcomingEvents, "upcoming-events.csv")}>
               Download CSV

@@ -56,7 +56,7 @@ const JsonViewer = ({ folder, file, onClose }: JsonViewerProps) => {
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-6 border-b">
           <div>
             <h2 className="text-xl font-bold">{file}</h2>
             <p className="text-sm text-muted-foreground">{rows.length} records</p>
@@ -290,7 +290,7 @@ const FileManagement = () => {
             )}
 
             {files.map((file) => (
-              <div key={file} className="flex justify-between items-center border-b py-2">
+              <div key={file} className="flex flex-wrap justify-between items-center gap-2 border-b py-2">
                 <span
                   className={`cursor-pointer hover:underline ${
                     selectedFile === file ? "font-bold text-blue-600" : ""

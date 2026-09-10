@@ -130,7 +130,7 @@ export default function TicketingManager({ groupedEvents }: TicketingManagerProp
             ))}
             {ticketTypes.length === 0 && <p className="text-sm text-muted-foreground">No ticket types yet.</p>}
 
-            <div className="grid grid-cols-3 gap-2 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2">
               <div>
                 <Label className="text-xs">Name</Label>
                 <Input placeholder="e.g. General" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -154,18 +154,20 @@ export default function TicketingManager({ groupedEvents }: TicketingManagerProp
 
           <div className="border rounded-lg p-4 max-w-2xl">
             <h3 className="font-bold mb-3">Orders ({orders.length})</h3>
-            <table className="w-full text-sm">
-              <thead><tr className="text-left border-b"><th className="py-1">Buyer</th><th>Status</th><th>Total</th></tr></thead>
-              <tbody>
-                {orders.map((o) => (
-                  <tr key={o.id} className="border-b">
-                    <td className="py-1">{o.buyer_name} ({o.buyer_email})</td>
-                    <td>{o.status}</td>
-                    <td>${(o.total_cents / 100).toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left border-b"><th className="py-1">Buyer</th><th>Status</th><th>Total</th></tr></thead>
+                <tbody>
+                  {orders.map((o) => (
+                    <tr key={o.id} className="border-b">
+                      <td className="py-1">{o.buyer_name} ({o.buyer_email})</td>
+                      <td>{o.status}</td>
+                      <td>${(o.total_cents / 100).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="border rounded-lg p-4 max-w-2xl">

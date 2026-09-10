@@ -98,27 +98,29 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
           </div>
 
           <div className="border rounded-lg p-4 max-w-2xl">
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
               <h3 className="font-bold">Attendees ({attendees.length})</h3>
-              <Input className="w-48" placeholder="Search name/email" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input className="w-full sm:w-48" placeholder="Search name/email" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <table className="w-full text-sm">
-              <thead><tr className="text-left border-b"><th className="py-1">Name</th><th>Ticket</th><th>Status</th><th></th></tr></thead>
-              <tbody>
-                {filtered.map((a) => (
-                  <tr key={a.id} className="border-b">
-                    <td className="py-1">{a.name} ({a.email})</td>
-                    <td>{a.ticket_type_name}</td>
-                    <td>{a.checked_in_at ? `✅ ${new Date(a.checked_in_at).toLocaleTimeString()}` : "—"}</td>
-                    <td>
-                      {!a.checked_in_at && (
-                        <Button size="sm" onClick={() => manualCheckIn(a.id)}>Check in</Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left border-b"><th className="py-1">Name</th><th>Ticket</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  {filtered.map((a) => (
+                    <tr key={a.id} className="border-b">
+                      <td className="py-1">{a.name} ({a.email})</td>
+                      <td>{a.ticket_type_name}</td>
+                      <td>{a.checked_in_at ? `✅ ${new Date(a.checked_in_at).toLocaleTimeString()}` : "—"}</td>
+                      <td>
+                        {!a.checked_in_at && (
+                          <Button size="sm" onClick={() => manualCheckIn(a.id)}>Check in</Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {attendees.length === 0 && <p className="text-sm text-muted-foreground">No ticketed attendees for this event yet.</p>}
           </div>
         </>

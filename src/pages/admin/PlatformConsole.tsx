@@ -31,6 +31,8 @@ function SettingsTab() {
   const [settings, setSettings] = useState<SettingRow[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [groqModels, setGroqModels] = useState<string[]>([]);
+  const [loadingGroqModels, setLoadingGroqModels] = useState(false);
 
   const load = () => api("/api/admin-console/settings").then(setSettings).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -45,6 +47,24 @@ function SettingsTab() {
       load();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  // Fetches the live list of models this Groq account has access to, so
+  // the admin picks a real, currently-working model id instead of typing
+  // one that might already be renamed or retired.
+  const loadGroqModels = async () => {
+    setLoadingGroqModels(true);
+    try {
+      const result = await api("/api/admin-console/groq-models");
+      setGroqModels(result.models || []);
+      if (!result.models?.length) {
+        toast({ title: "No models found", description: "That Groq account doesn't appear to have any models available." });
+      }
+    } catch (err: any) {
+      toast({ title: "Couldn't load models", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingGroqModels(false);
     }
   };
 
@@ -91,48 +111,94 @@ function SettingsTab() {
                   Tick a payment method to offer it on the event registration success page. Untick
                   it to hide that option from registrants immediately.
                 </p>
-                <table className="w-full text-sm max-w-md">
-                  <thead>
-                    <tr className="text-left border-b">
-                      <th className="py-2">Payment Method</th>
-                      <th className="py-2 text-center">Enabled</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupSettings.map((s) => (
-                      <tr key={s.key} className="border-b">
-                        <td className="py-3">{s.label}</td>
-                        <td className="py-3 text-center">
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4"
-                            checked={s.value === "true"}
-                            disabled={savingKey === s.key}
-                            onChange={(e) => togglePaymentMethod(s.key, e.target.checked)}
-                          />
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm max-w-md">
+                    <thead>
+                      <tr className="text-left border-b">
+                        <th className="py-2">Payment Method</th>
+                        <th className="py-2 text-center">Enabled</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {groupSettings.map((s) => (
+                        <tr key={s.key} className="border-b">
+                          <td className="py-3">{s.label}</td>
+                          <td className="py-3 text-center">
+                            <input
+                              type="checkbox"
+                              className="w-4 h-4"
+                              checked={s.value === "true"}
+                              disabled={savingKey === s.key}
+                              onChange={(e) => togglePaymentMethod(s.key, e.target.checked)}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </>
             ) : (
               <div className="space-y-3">
-                {groupSettings.map((s) => (
-                  <div key={s.key} className="flex items-end gap-3 flex-wrap">
-                    <div className="flex-1 min-w-[220px]">
-                      <Label>{s.label}{s.secret && s.hasValue && " (set — hidden)"}</Label>
-                      <Input
-                        type={s.secret ? "password" : "text"}
-                        placeholder={s.secret ? "••••••••" : ""}
-                        value={edits[s.key] ?? (s.secret ? "" : s.value)}
-                        onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
-                      />
+                {groupSettings.map((s) => {
+                  // The Groq model picker gets a dropdown of live-fetched
+                  // model ids instead of a free-text box, so the admin
+                  // can't accidentally type a model that no longer exists.
+                  if (s.key === "groq_model") {
+                    const currentValue = edits[s.key] ?? s.value;
+                    const options = groqModels.includes(currentValue) || !currentValue
+                      ? groqModels
+                      : [currentValue, ...groqModels]; // keep the saved value visible even before a refresh
+                    return (
+                      <div key={s.key} className="flex items-end gap-3 flex-wrap">
+                        <div className="flex-1 min-w-[220px]">
+                          <Label>{s.label}</Label>
+                          <select
+                            className="w-full mt-1 p-2 border rounded text-foreground bg-background text-sm"
+                            value={currentValue}
+                            onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
+                          >
+                            <option value="">-- Choose a model --</option>
+                            {options.map((id) => (
+                              <option key={id} value={id}>{id}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={loadGroqModels}
+                          disabled={loadingGroqModels}
+                        >
+                          {loadingGroqModels ? "Loading..." : "Load models"}
+                        </Button>
+                        <Button size="sm" onClick={() => save(s.key)}>Save</Button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={s.key} className="flex items-end gap-3 flex-wrap">
+                      <div className="flex-1 min-w-[220px]">
+                        <Label>{s.label}{s.secret && s.hasValue && " (set — hidden)"}</Label>
+                        <Input
+                          type={s.secret ? "password" : "text"}
+                          placeholder={s.secret ? "••••••••" : ""}
+                          value={edits[s.key] ?? (s.secret ? "" : s.value)}
+                          onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
+                        />
+                      </div>
+                      <Button size="sm" onClick={() => save(s.key)}>Save</Button>
+                      {s.hasValue && <Button size="sm" variant="outline" onClick={() => clear(s.key)}>Clear</Button>}
                     </div>
-                    <Button size="sm" onClick={() => save(s.key)}>Save</Button>
-                    {s.hasValue && <Button size="sm" variant="outline" onClick={() => clear(s.key)}>Clear</Button>}
-                  </div>
-                ))}
+                  );
+                })}
+                {group === "AI Email Draft" && (
+                  <p className="text-xs text-muted-foreground">
+                    Save your Groq API key first, then click "Load models" to see which models your
+                    account can actually use, and pick one.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -179,19 +245,21 @@ function AdminUsersTab() {
         <div><Label>Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
         <Button onClick={create}>Add admin</Button>
       </div>
-      <table className="w-full text-sm">
-        <thead><tr className="text-left border-b"><th className="py-2">Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} className="border-b">
-              <td className="py-2">{u.name}</td>
-              <td>{u.email}</td>
-              <td>{u.role}</td>
-              <td><Button size="sm" variant="destructive" onClick={() => del(u.id)}>Delete</Button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead><tr className="text-left border-b"><th className="py-2">Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-b">
+                <td className="py-2">{u.name}</td>
+                <td>{u.email}</td>
+                <td>{u.role}</td>
+                <td><Button size="sm" variant="destructive" onClick={() => del(u.id)}>Delete</Button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -200,19 +268,21 @@ function AuditLogTab() {
   const [rows, setRows] = useState<any[]>([]);
   useEffect(() => { api("/api/admin-console/audit-log").then(setRows).catch(() => {}); }, []);
   return (
-    <table className="w-full text-sm">
-      <thead><tr className="text-left border-b"><th className="py-2">When</th><th>Admin</th><th>Action</th><th>Entity</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id} className="border-b">
-            <td className="py-2">{new Date(r.created_at).toLocaleString()}</td>
-            <td>{r.admin_email}</td>
-            <td>{r.action}</td>
-            <td>{r.entity || "—"}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead><tr className="text-left border-b"><th className="py-2">When</th><th>Admin</th><th>Action</th><th>Entity</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-b">
+              <td className="py-2">{new Date(r.created_at).toLocaleString()}</td>
+              <td>{r.admin_email}</td>
+              <td>{r.action}</td>
+              <td>{r.entity || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -317,7 +387,7 @@ export default function PlatformConsole({ currentAdminEmail }: { currentAdminEma
   return (
     <div>
       <Tabs defaultValue="settings">
-        <TabsList>
+        <TabsList className="flex flex-wrap h-auto w-full gap-1">
           <TabsTrigger value="settings">API Keys & Settings</TabsTrigger>
           <TabsTrigger value="database">Database</TabsTrigger>
           <TabsTrigger value="users">Admin Users</TabsTrigger>
