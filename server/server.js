@@ -372,6 +372,9 @@ app.post("/api/members", async (req, res) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('kutumb_members_seq'))");
 
     const dupCheck = await client.query(
+      // Email alone is intentionally not unique — one household email can
+      // legitimately cover several family members under different names.
+      // The (name, email) pair together is what must be unique.
       "SELECT id FROM kutumb_members WHERE lower(name) = $1 AND lower(email) = $2",
       [normalizedName, normalizedEmail]
     );
@@ -425,6 +428,14 @@ app.post("/api/members", async (req, res) => {
     });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
+    // Belt-and-suspenders: the check above should already catch this, but
+    // if a duplicate email somehow still reaches the insert (a concurrent
+    // request, or a future code path that doesn't check first), the
+    // database's own unique constraint on email is the actual backstop —
+    // surface it as the same friendly message rather than a raw 500.
+    if (err.code === "23505" && err.constraint === "idx_kutumb_members_email_name_unique") {
+      return res.status(409).json({ message: "This name and email combination is already a registered member" });
+    }
     console.error("POST /members error:", err);
     res.status(500).json({ message: "Server error" });
   } finally {
