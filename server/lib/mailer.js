@@ -18,6 +18,10 @@ function logoAttachment() {
 
 let transporter = null;
 
+// Kutumb's community WhatsApp group — included in the membership
+// confirmation email so new members can join right away.
+const WHATSAPP_GROUP_INVITE = "https://chat.whatsapp.com/Etit0vlcVj18n3WNvrcEFR?s=cl&p=i&ilr=4";
+
 function getTransporter() {
   if (transporter) return transporter;
 
@@ -113,6 +117,10 @@ export async function sendMembershipConfirmationEmail({
       <p style="font-size: 18px;"><strong>Membership Number: ${membershipNumber}</strong></p>
       <p>Your membership card is attached to this email as a PDF, and your QR code is shown below.</p>
       <img src="cid:membershipQr" alt="Membership QR Code" style="width:180px;height:180px;" />
+      <p style="margin:24px 0 8px;">Join our community WhatsApp group to stay up to date with events and activities:</p>
+      <a href="${WHATSAPP_GROUP_INVITE}" style="display:inline-block;background:#25D366;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:600;font-size:14px;">
+        Join the Kutumb WhatsApp Group
+      </a>
       <p style="margin-top:24px;color:#555;font-size:13px;">
         With Best Regards, &middot; Kutumb Executive Team
       </p>
