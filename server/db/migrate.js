@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
 import { pool } from "./pool.js";
 import { importAllMedia } from "./importMedia.js";
+import { getNextMembershipNumber } from "../lib/counters.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,6 +55,32 @@ async function run() {
   // database. Naturally idempotent (checked per filename), so this is safe
   // to run on every launch — it only ever imports genuinely new files.
   await importAllMedia();
+
+  // Backfill any member rows missing a membership number (a pre-existing
+  // data gap — e.g. from an older import path that didn't assign one).
+  // The admin console's edit/delete actions identify a member by this
+  // number, so a row without one can never be edited or deleted from
+  // there. Assigns each one using the same YYNNNN scheme as a normal
+  // signup, based on that row's own created_at year, oldest first so
+  // numbers stay chronological.
+  const { rows: missingNumberRows } = await pool.query(
+    `SELECT id, created_at FROM kutumb_members
+     WHERE membership_number IS NULL OR membership_number = ''
+     ORDER BY created_at ASC`
+  );
+  if (missingNumberRows.length > 0) {
+    console.log(`🔢 Found ${missingNumberRows.length} member(s) with no membership number — assigning one...`);
+    for (const row of missingNumberRows) {
+      const { rows: allMembers } = await pool.query("SELECT membership_number FROM kutumb_members");
+      const membershipNumber = getNextMembershipNumber(
+        allMembers.map((r) => ({ membershipNumber: r.membership_number })),
+        row.created_at ? new Date(row.created_at) : new Date()
+      );
+      await pool.query("UPDATE kutumb_members SET membership_number = $1 WHERE id = $2", [membershipNumber, row.id]);
+      console.log(`   → assigned ${membershipNumber} to member id ${row.id}`);
+    }
+    console.log("✅ Membership numbers backfilled.");
+  }
 
   const adminEmail = (process.env.ADMIN_EMAIL || "admin@kutumb.org.au").toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD || "ChangeMe123!";
