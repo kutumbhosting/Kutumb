@@ -2,6 +2,17 @@ import { useState, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { safeFetch, downloadCSV } from "./safeFetch";
 
@@ -83,6 +94,119 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
       prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
 
+  // ── Bulk email ────────────────────────────────────────────────────────
+  // "Selected" = checked rows, "filtered" = whatever the search/status
+  // filters above currently show (e.g. set the Payment Status filter to
+  // "Pending" and pick this to email every unpaid registrant at once),
+  // "all" = every registrant for this event regardless of filters.
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailAudience, setEmailAudience] = useState<"selected" | "filtered" | "all">("selected");
+  const [emailTopic, setEmailTopic] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
+
+  const audienceRecipients = () => {
+    const source =
+      emailAudience === "selected"
+        ? (selectedEvent?.members || []).filter((m: any) => selectedEventRows.includes(m.email))
+        : emailAudience === "filtered"
+        ? visibleRegistrations
+        : selectedEvent?.members || [];
+    return source.map((m: any) => ({ email: m.email, name: m.name }));
+  };
+
+  const openEmailDialog = () => {
+    // Default to "selected" only if rows are actually checked, otherwise
+    // fall back to whatever the current filter shows (e.g. Pending only),
+    // since that's the common case for chasing unpaid registrations.
+    setEmailAudience(selectedEventRows.length > 0 ? "selected" : "filtered");
+    setEmailTopic("");
+    setEmailSubject("");
+    setEmailMessage("");
+    setEmailDialogOpen(true);
+  };
+
+  const generateDraft = async () => {
+    if (!emailTopic.trim()) {
+      toast({
+        title: "Describe the email first",
+        description: "Type a quick topic or brief, e.g. \"reminder that payment is still pending\".",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setGeneratingDraft(true);
+    try {
+      const res = await fetch("/api/members/generate-email-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: emailTopic }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Couldn't generate a draft.");
+      setEmailSubject(data.subject || "");
+      setEmailMessage(data.message || "");
+      toast({ title: "Draft ready", description: "Review it below and edit anything before sending." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingDraft(false);
+    }
+  };
+
+  const sendBulkEmail = async () => {
+    if (!emailSubject.trim() || !emailMessage.trim()) {
+      toast({
+        title: "Subject and message required",
+        description: "Please fill in both the subject and message before sending.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const recipients = audienceRecipients();
+    if (recipients.length === 0) {
+      toast({
+        title: "No recipients",
+        description: "No registrants match this audience — pick another option.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const res = await fetch("/api/events/send-bulk-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventName: selectedEvent?.eventName,
+          eventYear: selectedEvent?.eventYear,
+          subject: emailSubject,
+          message: emailMessage,
+          recipients,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Couldn't send the email.");
+      const firstError = data.failures?.[0]?.error;
+      const description = data.failed && firstError ? `${data.message} Reason: ${firstError}` : data.message;
+      toast({
+        title: data.failed ? "Sent with some failures" : "Email sent",
+        description,
+        variant: data.failed ? "destructive" : "default",
+      });
+      if (!data.failed) setEmailDialogOpen(false);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const deleteEventRows = async () => {
     try {
       const res = await fetch("/api/events/delete", {
@@ -160,16 +284,21 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                   <span>💰 Fees Collected: ${selectedEvent.totalFees}</span>
                 </div>
               </div>
-              <Button
-                onClick={() =>
-                  downloadCSV(
-                    selectedEvent?.members || [],
-                    `${selectedEvent?.eventName || "event"}_${selectedEvent?.eventYear || "unknown"}.csv`
-                  )
-                }
-              >
-                Download CSV
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={openEmailDialog} disabled={!selectedEvent?.members?.length}>
+                  ✉️ Send Email
+                </Button>
+                <Button
+                  onClick={() =>
+                    downloadCSV(
+                      selectedEvent?.members || [],
+                      `${selectedEvent?.eventName || "event"}_${selectedEvent?.eventYear || "unknown"}.csv`
+                    )
+                  }
+                >
+                  Download CSV
+                </Button>
+              </div>
             </div>
 
             {/* Action buttons */}
@@ -447,6 +576,97 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-4 shrink-0">
+            <DialogTitle>Send Bulk Email</DialogTitle>
+            <DialogDescription>
+              Compose a message to send to registrants of {selectedEvent?.eventName} {selectedEvent?.eventYear}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 overflow-y-auto px-6 py-1 min-h-0">
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Recipients</Label>
+              <RadioGroup
+                value={emailAudience}
+                onValueChange={(value) => setEmailAudience(value as "selected" | "filtered" | "all")}
+                className="mt-2 space-y-2"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="selected" id="ev-audience-selected" disabled={selectedEventRows.length === 0} />
+                  <Label htmlFor="ev-audience-selected" className="font-normal cursor-pointer">
+                    Selected rows ({selectedEventRows.length} selected)
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="filtered" id="ev-audience-filtered" />
+                  <Label htmlFor="ev-audience-filtered" className="font-normal cursor-pointer">
+                    Everyone matching current filter ({visibleRegistrations.length})
+                    {statusFilter ? ` — Payment Status: ${statusFilter}` : ""}
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="all" id="ev-audience-all" />
+                  <Label htmlFor="ev-audience-all" className="font-normal cursor-pointer">
+                    All registrants ({selectedEvent?.members?.length || 0} total)
+                  </Label>
+                </div>
+              </RadioGroup>
+              <p className="text-xs text-muted-foreground mt-2">
+                Tip: to email everyone with a pending payment, set the "Payment Status" filter above
+                to Pending, then choose "Everyone matching current filter".
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">
+                What's this email about? <span className="font-normal">(optional — for AI drafting)</span>
+              </Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  value={emailTopic}
+                  onChange={(e) => setEmailTopic(e.target.value)}
+                  placeholder="e.g. Reminder that event payment is still pending"
+                />
+                <Button type="button" variant="secondary" onClick={generateDraft} disabled={generatingDraft}>
+                  {generatingDraft ? "Writing..." : "✨ Generate"}
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Subject</Label>
+              <Input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="e.g. Payment Reminder — Kutumb Utsav"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">Message</Label>
+              <Textarea
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+                placeholder="Write your message here, or generate a draft above..."
+                rows={6}
+                className="min-h-[100px] resize-y"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="p-6 pt-4 shrink-0 border-t">
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>
+              Cancel
+            </Button>
+            <Button onClick={sendBulkEmail} disabled={sendingEmail}>
+              {sendingEmail ? "Sending..." : `Send to ${audienceRecipients().length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

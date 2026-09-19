@@ -186,8 +186,10 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           subject: emailSubject,
           message: emailMessage,
           sendToAll: emailAudience === "all",
-          emails: emailAudience === "selected"
-            ? memberData.filter((m) => selectedMemberRows.includes(rowKey(m))).map((m) => m.email)
+          recipients: emailAudience === "selected"
+            ? memberData
+                .filter((m) => selectedMemberRows.includes(rowKey(m)))
+                .map((m) => ({ email: m.email, name: m.name }))
             : undefined,
         }),
       });
@@ -585,15 +587,15 @@ const Members = ({ memberData, onReload }: MembersProps) => {
       </CardContent>
 
       <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-4 shrink-0">
             <DialogTitle>Send Bulk Email</DialogTitle>
             <DialogDescription>
               Compose a message to send to Kutumb members.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto px-6 py-1 min-h-0">
             <div>
               <Label className="text-xs font-medium text-muted-foreground">Recipients</Label>
               <RadioGroup
@@ -647,12 +649,13 @@ const Members = ({ memberData, onReload }: MembersProps) => {
                 value={emailMessage}
                 onChange={(e) => setEmailMessage(e.target.value)}
                 placeholder="Write your message here, or generate a draft above..."
-                rows={8}
+                rows={6}
+                className="min-h-[100px] resize-y"
               />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="p-6 pt-4 shrink-0 border-t">
             <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>
               Cancel
             </Button>
