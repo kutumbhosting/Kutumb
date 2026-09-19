@@ -118,6 +118,7 @@ output right after starting - it will now say either:
 | Error contains...                              | Likely cause                                                      |
 |-------------------------------------------------|---------------------------------------------------------------------|
 | "Invalid login" / "535 5.7.8" / "Username and Password not accepted" | Wrong password, or an App Password is required (Gmail/Microsoft 365 with MFA) |
+| "535 5.7.3 Authentication unsuccessful"          | Microsoft 365 rejected the login itself - see the dedicated section below, this is *not* the same problem as 5.7.8 above |
 | "SmtpClientAuthentication is disabled for the Tenant/Mailbox" (535 5.7.139) | Microsoft 365 blocks basic username/password SMTP login by default - see below |
 | "getaddrinfo ENOTFOUND" / "ECONNREFUSED"        | `SMTP_HOST` or `SMTP_PORT` is wrong                                |
 | "self signed certificate" / TLS errors          | Try `SMTP_PORT=465` with `SMTP_SECURE=true` instead of 587/false   |
@@ -128,6 +129,40 @@ If `/api/email/status` reports `verified: true` but real registration emails
 still aren't arriving, the most likely cause is the last row above (spam
 filtering) rather than a configuration problem - try the test-send endpoint
 and check spam folders on the receiving side.
+
+---
+
+## "535 5.7.3 Authentication unsuccessful" (Microsoft 365)
+
+This means Microsoft 365 received the login attempt and rejected the
+credentials outright - work through these in order, since it's rarely just
+"the password is wrong":
+
+1. **`SMTP_USER` must be the full email address**, not just the mailbox
+   name - `pramod@kutumb.org.au`, never `pramod`.
+2. **Password may be stale.** Microsoft 365 periodically forces password
+   resets; log in to https://outlook.office.com directly with the same
+   credentials in `.env` to confirm they still work at all.
+3. **MFA is on for this account** → the normal password will never work
+   for SMTP, an **App Password** is required instead (Microsoft 365 admin →
+   the user → Security info → Add sign-in method → App password). If
+   there's no "App password" option at all, Security Defaults or a
+   Conditional Access policy is likely blocking legacy/basic auth tenant-wide
+   - only a Microsoft 365 admin can check this
+   (https://entra.microsoft.com → Identity → Overview → Properties →
+   Manage Security Defaults).
+4. **Authenticated SMTP may still be off for this specific mailbox** even
+   if it's enabled tenant-wide - Exchange admin center
+   (https://admin.exchange.microsoft.com) → Recipients → Mailboxes → select
+   the mailbox → Manage email apps → confirm "Authenticated SMTP" is
+   checked. (If it's fully disabled instead, Microsoft normally reports
+   that as `535 5.7.139`, not `5.7.3` - but tenants configured slightly
+   differently can still surface it as `5.7.3`.)
+5. **If none of the above resolves it, or an admin isn't available to
+   change tenant settings**, switch to a relay instead of authenticating
+   directly against `smtp.office365.com` - see "More durable fix" below.
+   This sidesteps Microsoft 365's basic-auth restrictions entirely and is
+   the recommended path if this keeps recurring.
 
 ---
 
