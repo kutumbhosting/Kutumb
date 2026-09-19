@@ -195,6 +195,32 @@ CREATE TABLE IF NOT EXISTS kutumb_event_registrations (
 CREATE INDEX IF NOT EXISTS idx_kutumb_evreg_event ON kutumb_event_registrations(event_name, event_year);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_kutumb_evreg_email_per_event ON kutumb_event_registrations(event_name, event_year, lower(email));
 
+-- Added for bank-statement payment reconciliation (see
+-- server/lib/paymentReconciliation.js). Populated automatically when an
+-- admin uploads a bank statement on the Event Registration page, and also
+-- editable by hand from the existing "Modify Selected" panel.
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_amount NUMERIC(10,2);
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_date TIMESTAMPTZ;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_match_confidence TEXT;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_match_note TEXT;
+
+-- One row per "Upload Bank Statement" run on the Event Registration page.
+-- `report` holds the full per-registration match detail and the list of
+-- unmatched bank credits at the time of the run, so the "Download Excel
+-- Report" button can regenerate that exact report later without needing
+-- the bank statement re-uploaded or the DB re-queried.
+CREATE TABLE IF NOT EXISTS kutumb_bank_reconciliations (
+  id SERIAL PRIMARY KEY,
+  event_name TEXT NOT NULL,
+  event_year TEXT NOT NULL,
+  uploaded_filename TEXT,
+  run_by TEXT,
+  run_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  summary JSONB NOT NULL DEFAULT '{}',
+  report JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_reconciliations_event ON kutumb_bank_reconciliations(event_name, event_year, run_at DESC);
+
 -- Replaces server/data/upcomingevents/upcomingEvents.json
 CREATE TABLE IF NOT EXISTS kutumb_upcoming_events (
   id SERIAL PRIMARY KEY,

@@ -31,6 +31,7 @@ import dbTablesRoutes from "./routes/dbTables.routes.js";
 import ticketingRoutes, { stripeWebhookHandler } from "./routes/ticketing.routes.js";
 import checkinRoutes from "./routes/checkin.routes.js";
 import mediaRoutes from "./routes/media.routes.js";
+import reconciliationRoutes from "./routes/reconciliation.routes.js";
 import { slugify } from "./lib/slugify.js";
 import { DATA_ROOT } from "./lib/dataRoot.js";
 import { importMembersDropIn } from "./lib/importMembersDropIn.js";
@@ -56,6 +57,7 @@ app.use("/api/admin-console", adminConsoleRoutes);
 app.use("/api/db-tables", dbTablesRoutes);
 app.use("/api/ticketing", ticketingRoutes);
 app.use("/api/checkin", checkinRoutes);
+app.use("/api/events/reconcile", reconciliationRoutes);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -535,6 +537,10 @@ app.get("/api/all-registrations", requireAdmin, async (req, res) => {
         bankTransferred: r.bank_transferred,
         transactionNumber: r.transaction_number,
         paymentStatus: r.payment_status,
+        paymentAmount: r.payment_amount !== null ? Number(r.payment_amount) : null,
+        paymentDate: r.payment_date,
+        paymentMatchConfidence: r.payment_match_confidence,
+        paymentMatchNote: r.payment_match_note,
         createdAt: r.created_at,
       }))
     );
@@ -611,6 +617,12 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: "A transaction number is required to mark this registration as Paid" });
     }
 
+    // Amount Paid / Date Paid are usually filled in automatically by the
+    // "Upload Bank Statement" reconciliation, but can also be corrected by
+    // hand here — e.g. if a match needs a manual fix.
+    const amountProvided = updatedData?.paymentAmount !== undefined;
+    const dateProvided = updatedData?.paymentDate !== undefined;
+
     const { rows } = await pool.query(
       `UPDATE kutumb_event_registrations SET
          name = COALESCE($1, name),
@@ -621,7 +633,9 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
          fee = COALESCE($6, fee),
          payment_status = COALESCE($7, payment_status),
          transaction_number = CASE WHEN $8 THEN NULLIF($9, '') ELSE transaction_number END,
-         bank_transferred = CASE WHEN $8 THEN ($9 <> '') ELSE bank_transferred END
+         bank_transferred = CASE WHEN $8 THEN ($9 <> '') ELSE bank_transferred END,
+         payment_amount = CASE WHEN $13 THEN $14 ELSE payment_amount END,
+         payment_date = CASE WHEN $15 THEN $16 ELSE payment_date END
        WHERE event_name = $10 AND event_year = $11 AND lower(email) = lower($12)
        RETURNING *`,
       [
@@ -632,6 +646,8 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
         updatedData?.paymentStatus,
         txnProvided, trimmedTxn,
         eventName, eventYear, email,
+        amountProvided, amountProvided ? Number(updatedData.paymentAmount) || null : null,
+        dateProvided, dateProvided ? (updatedData.paymentDate || null) : null,
       ]
     );
 
