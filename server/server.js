@@ -659,8 +659,73 @@ app.post("/api/events/delete", requireAdmin, async (req, res) => {
     );
     res.json({ message: "Deleted successfully" });
   } catch (err) {
-    console.error("DELETE ERROR:", err);
+    console.error("EVENT DELETE ERROR:", err);
     res.status(500).json({ message: "Delete failed" });
+  }
+});
+
+/* -----------------------------
+   📧 BULK EMAIL TO EVENT REGISTRANTS (ADMIN)
+   Sends the same subject/message to a chosen set of registrants for one
+   event — e.g. everyone whose payment is still Pending for "Kutumb Utsav".
+   Accepts an explicit recipients list (built client-side from whatever
+   rows the admin has selected or filtered to in the Event Registration
+   table), OR a paymentStatus filter so the server can pull the matching
+   set itself straight from the DB (handy for "email everyone Pending",
+   even rows not currently loaded/visible on the client).
+   Reuses sendBulkEmail, which personalizes each email with "Dear <name>,"
+   using the registrant's own name.
+------------------------------ */
+app.post("/api/events/send-bulk-email", requireAdmin, async (req, res) => {
+  try {
+    const { eventName, eventYear, subject, message, recipients: recipientsInput, paymentStatus } = req.body;
+
+    if (!eventName || !eventYear) {
+      return res.status(400).json({ message: "Missing event" });
+    }
+    if (!subject?.trim() || !message?.trim()) {
+      return res.status(400).json({ message: "Subject and message are required" });
+    }
+
+    let recipients;
+    if (Array.isArray(recipientsInput) && recipientsInput.length > 0) {
+      recipients = recipientsInput
+        .filter((r) => r?.email)
+        .map((r) => ({ email: r.email, name: r.name || "" }));
+    } else if (paymentStatus) {
+      // e.g. paymentStatus: "Pending" — email everyone still owing for this event.
+      const { rows } = await pool.query(
+        `SELECT name, email FROM kutumb_event_registrations
+         WHERE event_name = $1 AND event_year = $2 AND payment_status = $3`,
+        [eventName, eventYear, paymentStatus]
+      );
+      recipients = rows.filter((r) => r.email).map((r) => ({ email: r.email, name: r.name || "" }));
+    } else {
+      return res.status(400).json({ message: "No recipients selected" });
+    }
+
+    // De-duplicate (case-insensitive) — a family sharing one email registered
+    // as multiple rows would otherwise get the same email twice.
+    const seen = new Set();
+    recipients = recipients.filter(({ email }) => {
+      const key = email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (recipients.length === 0) {
+      return res.status(400).json({ message: "No recipients to send to" });
+    }
+
+    const results = await sendBulkEmail({ recipients, subject: subject.trim(), message });
+    res.json({
+      message: `Sent to ${results.sent} of ${results.total} recipient(s)${results.failed ? `, ${results.failed} failed` : ""}.`,
+      ...results,
+    });
+  } catch (err) {
+    console.error("EVENT BULK EMAIL ERROR:", err);
+    res.status(500).json({ message: "Failed to send bulk email" });
   }
 });
 
@@ -1090,7 +1155,7 @@ app.post("/api/email/test-send", requireAdmin, async (req, res) => {
 ------------------------------ */
 app.post("/api/members/send-bulk-email", requireAdmin, async (req, res) => {
   try {
-    const { subject, message, emails, sendToAll } = req.body;
+    const { subject, message, emails, recipients: recipientsInput, sendToAll } = req.body;
 
     if (!subject?.trim() || !message?.trim()) {
       return res.status(400).json({ message: "Subject and message are required" });
@@ -1098,18 +1163,28 @@ app.post("/api/members/send-bulk-email", requireAdmin, async (req, res) => {
 
     let recipients;
     if (sendToAll) {
-      const { rows } = await pool.query("SELECT email FROM kutumb_members");
-      recipients = rows.map((r) => r.email).filter(Boolean);
+      // Pull name alongside email so every member gets a "Dear <name>,"
+      // greeting instead of a generic one.
+      const { rows } = await pool.query("SELECT name, email FROM kutumb_members");
+      recipients = rows
+        .filter((r) => r.email)
+        .map((r) => ({ email: r.email, name: r.name || "" }));
+    } else if (Array.isArray(recipientsInput) && recipientsInput.length > 0) {
+      // Preferred shape: [{ email, name }, ...] from the admin console, so
+      // the greeting can be personalized for hand-picked recipients too.
+      recipients = recipientsInput
+        .filter((r) => r?.email)
+        .map((r) => ({ email: r.email, name: r.name || "" }));
+    } else if (Array.isArray(emails) && emails.length > 0) {
+      // Legacy shape: a bare list of email addresses, no name available.
+      recipients = emails.filter(Boolean).map((email) => ({ email, name: "" }));
     } else {
-      if (!Array.isArray(emails) || emails.length === 0) {
-        return res.status(400).json({ message: "No recipients selected" });
-      }
-      recipients = emails.filter(Boolean);
+      return res.status(400).json({ message: "No recipients selected" });
     }
 
     // De-duplicate (case-insensitive) in case the same address slipped in twice.
     const seen = new Set();
-    recipients = recipients.filter((email) => {
+    recipients = recipients.filter(({ email }) => {
       const key = email.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);

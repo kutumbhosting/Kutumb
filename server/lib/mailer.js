@@ -240,7 +240,14 @@ export async function sendEventPaymentConfirmationEmail({
  * console can show a clear summary instead of a single pass/fail flag.
  */
 export async function sendBulkEmail({ recipients, subject, message }) {
-  const results = { total: recipients.length, sent: 0, failed: 0, failures: [] };
+  // Recipients may be plain email strings (legacy callers) or
+  // { email, name } objects — normalize to the latter so every send below
+  // can address the recipient by name.
+  const normalized = recipients.map((r) =>
+    typeof r === "string" ? { email: r, name: "" } : { email: r.email, name: r.name || "" }
+  );
+
+  const results = { total: normalized.length, sent: 0, failed: 0, failures: [] };
 
   // Plain admin-composed text, lightly wrapped in the same branded shell as
   // every other outgoing email. Line breaks in the textarea are preserved
@@ -250,17 +257,23 @@ export async function sendBulkEmail({ recipients, subject, message }) {
     .map((line) => (line.trim() ? `<p style="margin:0 0 12px;">${escapeHtml(line)}</p>` : ""))
     .join("");
 
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
-      ${LOGO_HTML}
-      ${bodyHtml}
-      <p style="margin-top:24px;color:#555;font-size:13px;">
-        With Best Regards, &middot; Kutumb Executive Team
-      </p>
-    </div>
-  `;
+  for (const { email: to, name } of normalized) {
+    // Personalized "Dear <name>," greeting up top for every recipient,
+    // falling back to "Dear Member," when a name isn't on file.
+    const trimmedName = String(name || "").trim();
+    const greeting = trimmedName ? `Dear ${escapeHtml(trimmedName)},` : "Dear Member,";
 
-  for (const to of recipients) {
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+        ${LOGO_HTML}
+        <p style="margin:0 0 12px;">${greeting}</p>
+        ${bodyHtml}
+        <p style="margin-top:24px;color:#555;font-size:13px;">
+          With Best Regards, &middot; Kutumb Executive Team
+        </p>
+      </div>
+    `;
+
     const result = await send({ to, subject, html, attachments: logoAttachment() });
     if (result.sent) {
       results.sent += 1;
