@@ -31,11 +31,67 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
   const [justOpened, setJustOpened] = useState(false);
   const editPanelRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Bank statement reconciliation ───────────────────────────────────────
+  const bankStatementInputRef = useRef<HTMLInputElement | null>(null);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileResultOpen, setReconcileResultOpen] = useState(false);
+  const [reconcileResult, setReconcileResult] = useState<any | null>(null);
+  const [latestReconciliation, setLatestReconciliation] = useState<any | null>(null);
+
+  const fetchLatestReconciliation = async (eventName: string, eventYear: string) => {
+    if (!eventName || !eventYear) {
+      setLatestReconciliation(null);
+      return;
+    }
+    const data = await safeFetch(
+      `/api/events/reconcile/latest?eventName=${encodeURIComponent(eventName)}&eventYear=${encodeURIComponent(eventYear)}`
+    );
+    setLatestReconciliation(data || null);
+  };
+
+  const triggerBankStatementUpload = () => bankStatementInputRef.current?.click();
+
+  const handleBankStatementSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file || !selectedEvent) return;
+
+    setReconciling(true);
+    try {
+      const formData = new FormData();
+      formData.append("bankStatement", file);
+      formData.append("eventName", selectedEvent.eventName);
+      formData.append("eventYear", selectedEvent.eventYear);
+
+      const res = await fetch("/api/events/reconcile", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Reconciliation failed");
+
+      setReconcileResult(data);
+      setReconcileResultOpen(true);
+      setLatestReconciliation({
+        reconciliationId: data.reconciliationId,
+        uploadedFilename: file.name,
+        summary: data.summary,
+      });
+      toast({ title: "Reconciliation complete", description: data.message });
+      onReload();
+    } catch (err: any) {
+      toast({ title: "Couldn't reconcile that file", description: err.message, variant: "destructive" });
+    } finally {
+      setReconciling(false);
+    }
+  };
+
+  const downloadReconciliationReport = (id: number | string) => {
+    window.open(`/api/events/reconcile/${id}/export`, "_blank");
+  };
+
   // ── Search / filter / sort ──────────────────────────────────────────────
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortKey, setSortKey] = useState<
-    "registrationNumber" | "name" | "email" | "phone" | "adults" | "children" | "fee" | "paymentStatus" | "transactionNumber" | "membershipNumber"
+    "registrationNumber" | "name" | "email" | "phone" | "adults" | "children" | "fee" | "paymentStatus" | "paymentAmount" | "paymentDate" | "transactionNumber" | "membershipNumber"
   >("registrationNumber");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
@@ -249,6 +305,8 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
             setEventActionMessage("");
             setSearch("");
             setStatusFilter("");
+            const first = groupedEvents[e.target.value]?.[0];
+            fetchLatestReconciliation(first?.eventName, first?.eventYear);
           }}
         >
           <option value="">-- Choose Event --</option>
@@ -284,10 +342,28 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                   <span>💰 Fees Collected: ${selectedEvent.totalFees}</span>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap items-center">
                 <Button variant="outline" onClick={openEmailDialog} disabled={!selectedEvent?.members?.length}>
                   ✉️ Send Email
                 </Button>
+                <input
+                  ref={bankStatementInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={handleBankStatementSelected}
+                />
+                <Button variant="outline" onClick={triggerBankStatementUpload} disabled={reconciling}>
+                  {reconciling ? "Reconciling..." : "🏦 Upload Bank Statement"}
+                </Button>
+                {latestReconciliation?.reconciliationId && (
+                  <Button
+                    variant="outline"
+                    onClick={() => downloadReconciliationReport(latestReconciliation.reconciliationId)}
+                  >
+                    📊 Download Reconciliation Report
+                  </Button>
+                )}
                 <Button
                   onClick={() =>
                     downloadCSV(
@@ -386,6 +462,8 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                       { key: "children" as const, label: "Children" },
                       { key: "fee" as const, label: "Fee" },
                       { key: "paymentStatus" as const, label: "Payment Status" },
+                      { key: "paymentAmount" as const, label: "Amount Paid" },
+                      { key: "paymentDate" as const, label: "Date Paid" },
                       { key: "transactionNumber" as const, label: "Transaction No" },
                       { key: "membershipNumber" as const, label: "Membership No" },
                     ].map(({ key, label }) => (
@@ -402,6 +480,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                         </button>
                       </th>
                     ))}
+                    <th className="p-2 text-left">Match Confidence</th>
                     <th className="p-2 text-left">Comments</th>
                   </tr>
                 </thead>
@@ -431,14 +510,40 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                           <span className="text-muted-foreground">{item.paymentStatus || "N/A"}</span>
                         )}
                       </td>
+                      <td className="p-2">
+                        {typeof item.paymentAmount === "number" && item.paymentAmount > 0
+                          ? `$${item.paymentAmount}`
+                          : "-"}
+                      </td>
+                      <td className="p-2 whitespace-nowrap">
+                        {item.paymentDate ? new Date(item.paymentDate).toLocaleDateString("en-AU") : "-"}
+                      </td>
                       <td className="p-2 font-mono">{item.transactionNumber || "-"}</td>
                       <td className="p-2">{item.membershipNumber || "-"}</td>
+                      <td className="p-2">
+                        {item.paymentMatchConfidence ? (
+                          <span
+                            className={
+                              item.paymentMatchConfidence === "High"
+                                ? "text-green-700"
+                                : item.paymentMatchConfidence === "Medium"
+                                ? "text-orange-600"
+                                : "text-red-600"
+                            }
+                            title={item.paymentMatchNote || ""}
+                          >
+                            {item.paymentMatchConfidence}
+                          </span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
                       <td className="p-2">{item.comments || "-"}</td>
                     </tr>
                   ))}
                   {visibleRegistrations.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="p-4 text-center text-muted-foreground">
+                      <td colSpan={14} className="p-4 text-center text-muted-foreground">
                         No registrations match your search/filter.
                       </td>
                     </tr>
@@ -515,6 +620,28 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                       <option value="Paid">Paid</option>
                     </select>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium block mb-1">Amount Paid</label>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={editingEvent.paymentAmount ?? ""}
+                        onChange={(e) => setEditingEvent({ ...editingEvent, paymentAmount: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium block mb-1">Date Paid</label>
+                      <Input
+                        type="date"
+                        value={editingEvent.paymentDate ? String(editingEvent.paymentDate).slice(0, 10) : ""}
+                        onChange={(e) => setEditingEvent({ ...editingEvent, paymentDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground -mt-2">
+                    Usually filled in automatically by "Upload Bank Statement" — edit here only to correct a match.
+                  </p>
                   <Input
                     placeholder="Comments"
                     value={editingEvent.comments || ""}
@@ -550,6 +677,11 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                                 children: Number(editingEvent.children),
                                 fee: Number(editingEvent.fee) || 0,
                                 transactionNumber: String(editingEvent.transactionNumber || "").trim(),
+                                paymentAmount:
+                                  editingEvent.paymentAmount === "" || editingEvent.paymentAmount === null
+                                    ? null
+                                    : Number(editingEvent.paymentAmount),
+                                paymentDate: editingEvent.paymentDate || null,
                               },
                             }),
                           });
@@ -664,6 +796,99 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
             <Button onClick={sendBulkEmail} disabled={sendingEmail}>
               {sendingEmail ? "Sending..." : `Send to ${audienceRecipients().length}`}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reconcileResultOpen} onOpenChange={setReconcileResultOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-4 shrink-0">
+            <DialogTitle>Reconciliation Results</DialogTitle>
+            <DialogDescription>
+              {reconcileResult?.message}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 overflow-y-auto px-6 py-1 min-h-0">
+            {reconcileResult?.summary && (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground text-xs">Newly marked Paid</div>
+                  <div className="text-lg font-semibold text-green-700">{reconcileResult.summary.newlyMatched}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground text-xs">Still unpaid</div>
+                  <div className="text-lg font-semibold text-orange-600">{reconcileResult.summary.stillUnpaid}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground text-xs">Amount matched</div>
+                  <div className="text-lg font-semibold">${reconcileResult.summary.amountMatched}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-muted-foreground text-xs">Unmatched bank credits</div>
+                  <div className="text-lg font-semibold">
+                    {reconcileResult.summary.unmatchedCreditsCount} (${reconcileResult.summary.unmatchedCreditsValue})
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {reconcileResult?.updated?.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">Registrations newly matched</h4>
+                <div className="max-h-40 overflow-y-auto border rounded-md">
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {reconcileResult.updated.map((u: any, i: number) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="p-2">{u.name}</td>
+                          <td className="p-2">${u.amount}</td>
+                          <td className="p-2">{u.confidence}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {reconcileResult?.unmatchedCredits?.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">
+                  Bank credits that couldn't be matched to a registration
+                </h4>
+                <div className="max-h-40 overflow-y-auto border rounded-md">
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {reconcileResult.unmatchedCredits.map((u: any, i: number) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="p-2 whitespace-nowrap">
+                            {u.date ? new Date(u.date).toLocaleDateString("en-AU") : "-"}
+                          </td>
+                          <td className="p-2">${u.amount}</td>
+                          <td className="p-2 text-muted-foreground">{u.classification}</td>
+                          <td className="p-2 truncate max-w-[220px]" title={u.details}>{u.details}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  These are in the downloadable report too, with suggested follow-up for each.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="p-6 pt-4 shrink-0 border-t">
+            <Button variant="outline" onClick={() => setReconcileResultOpen(false)}>
+              Close
+            </Button>
+            {reconcileResult?.reconciliationId && (
+              <Button onClick={() => downloadReconciliationReport(reconcileResult.reconciliationId)}>
+                📊 Download Excel Report
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
