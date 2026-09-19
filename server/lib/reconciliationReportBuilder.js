@@ -3,8 +3,7 @@
 // Builds the downloadable Excel reconciliation report for one "Upload Bank
 // Statement" run — same shape as the manually-built Utsav 2026 workbook:
 // a Summary sheet, a Registrations sheet with payment status/amount/date
-// and a match-confidence column, an Unmatched Bank Credits sheet, and a
-// Matching Logic sheet explaining how the matches were made.
+// and a match-confidence column, and an Unmatched Bank Credits sheet.
 
 import ExcelJS from "exceljs";
 
@@ -229,37 +228,8 @@ export function buildReconciliationWorkbook({ eventName, eventYear, uploadedFile
   }
 
   // ---------------- Matching Logic ----------------
-  const logic = wb.addWorksheet("Matching Logic");
-  logic.getCell("A1").value = "How a bank credit was matched to a registration";
-  logic.getCell("A1").font = { name: "Arial", size: 13, bold: true, color: { argb: NAVY } };
-  headerRow(logic, 3, ["Step", "Rule applied", "Confidence"]);
-  logic.getColumn(1).width = 26;
-  logic.getColumn(2).width = 96;
-  logic.getColumn(3).width = 12;
-
-  const steps = [
-    ["0. Scope", "Only money IN was considered — debits and refunds are ignored.", "—"],
-    ["0. Donations", "Credits mentioning Nepal / flood / disaster / relief / donation, with no event wording, are pulled out and never matched to a registration.", "—"],
-    ["1. Registration number", "Bank reference contains the exact registration number.", "High"],
-    ["2. Membership number", "Bank reference contains the exact membership number.", "High"],
-    ["3. Email identity", "The name part of the registrant's email address appears in the reference.", "High"],
-    ["4. Full name", "All parts of the registered name appear in the reference (banks strip spaces and pack fields together, so matching is done on a space-stripped, upper-cased string).", "High"],
-    ["5. Name with spelling variant", "All name parts match allowing ~80% character similarity, to absorb spelling differences.", "Medium"],
-    ["6. One distinctive name", "Exactly one uncommon name part matches. Very common surnames (Kumar, Singh, Sharma, Patel, Gupta, Devi, Kaur, Rao) are not accepted alone, and tokens under 4 letters are ignored.", "Medium"],
-    ["7. Truncated name", "The first 4+ letters of a name part match, accepted only when the amount equals the fee exactly.", "Low"],
-    ["Acceptance", "Steps 1–4 are accepted on identity alone. Steps 5–6 need an exact fee match or event wording. Step 7 needs an exact fee match.", "—"],
-    ["Aggregation", "A registrant can have more than one matched transaction (e.g. paid in two instalments) — amounts are summed and the earliest date is kept.", "—"],
-    ["Amount", "The amount is never used to create a match on its own — many registrations share the same fee.", "—"],
-  ];
-  steps.forEach((s, i) => {
-    const row = logic.getRow(4 + i);
-    row.values = s;
-    row.eachCell((cell, colNumber) => {
-      cell.font = { name: "Arial", size: 10 };
-      cell.border = thinBorder();
-      cell.alignment = { vertical: "top", wrapText: colNumber === 2, horizontal: colNumber === 3 ? "center" : "left" };
-    });
-  });
+  // Intentionally omitted from the report — this sheet is meant for
+  // treasurers to hand out/read, not to explain the matching internals.
 
   return wb;
 }
