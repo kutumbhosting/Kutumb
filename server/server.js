@@ -833,9 +833,6 @@ app.post("/api/events/registration/:id/send-payment-reminder", async (req, res) 
     if (!registration) return res.json({ sent: false });
 
     const baseUrl = await getPublicBaseUrl(req);
-    // Same toggles the pay page uses (Settings & Access → Payment Methods),
-    // so the email only offers methods that will actually work when clicked.
-    const paymentMethods = await getPaymentMethodSettings();
     // Registrations don't store the event date themselves — best-effort
     // look it up, same as the by-token endpoint above.
     const { rows: eventRows } = await pool.query(
@@ -852,7 +849,6 @@ app.post("/api/events/registration/:id/send-payment-reminder", async (req, res) 
       membershipNumber: registration.membership_number,
       payToken: registration.pay_token,
       baseUrl,
-      paymentMethods,
     }).catch((err) => console.error("Payment reminder email error:", err));
 
     res.json({ sent: true });

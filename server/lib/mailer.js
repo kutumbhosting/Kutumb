@@ -31,64 +31,6 @@ const BANK_DETAILS = {
   account: "778280517",
 };
 
-/**
- * The "or pay by bank transfer" section of the registration email — the
- * ONLY other payment option ever listed in the email alongside the main
- * "Pay Now" button.
- *
- * Card / PayPal / Square are deliberately NOT given their own rows/links
- * here. They used to be (one row each, linking to `${payUrl}?method=…`),
- * but that meant two different, divergent ways to pay by card or Square:
- * the one true one is the in-app "Choose how to pay" panel that the main
- * "Pay Now" button opens — the same panel used everywhere else in the app
- * (the post-registration dialog, the standalone pay page) — which is also
- * the only place that can open Stripe/Square in a popup sized and
- * positioned to match it (see checkoutPopup.ts). A raw link straight to
- * `?method=card` skipped all of that, and since it's a plain emailed
- * `<a href>` its target URL is baked in at send time — if the site's
- * configured Public Base URL was ever wrong (e.g. not yet set, so it
- * fell back to the address the app happened to be running on — such as
- * http://localhost:8080 — see getPublicBaseUrl in publicUrl.js) every
- * copy of that link stays broken for whoever received that email, even
- * after the setting is fixed. The single "Pay Now" button below is
- * generated the exact same way (same payUrl, same fallback behaviour),
- * so fixing the Public Base URL setting fixes it for both — there's just
- * only the one link to get right instead of four. Bank transfer keeps
- * its own inline row because its details are useful read directly from
- * the inbox, with no click-through needed at all.
- *
- * Built from inline-styled divs and one small table per row, because that's
- * what renders reliably across Gmail, Outlook and Yahoo.
- */
-function buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMethods }) {
-  const methods = paymentMethods || {};
-  if (!methods.bankTransfer) return "";
-
-  const link = (method) => `${payUrl}?method=${method}`;
-  const reference = registrationNumber || "your name";
-  const bankRow = `
-    <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin:0 0 10px;">
-      <div style="font-size:14px;font-weight:600;color:#9a3412;">🏦 Bank transfer</div>
-      <div style="font-size:13px;color:#111827;margin-top:6px;line-height:1.6;">
-        Account Name: <strong>${BANK_DETAILS.accountName}</strong><br />
-        BSB: <strong>${BANK_DETAILS.bsb}</strong><br />
-        Account Number: <strong>${BANK_DETAILS.account}</strong><br />
-        Amount: <strong>$${fee}</strong><br />
-        Reference: <strong>${reference}</strong>
-      </div>
-      <div style="font-size:12px;color:#6b7280;margin-top:6px;">
-        Please use the reference above so we can match your payment. Tickets are issued
-        once your transfer has been verified.
-        Once you've transferred, <a href="${link("bank")}" target="_blank" rel="noopener" style="color:#c2410c;">let us know here</a>
-        with your transaction number.
-      </div>
-    </div>`;
-
-  return `
-    <p style="font-size:14px;font-weight:600;margin:20px 0 8px;">Prefer to pay by bank transfer instead?</p>
-    ${bankRow}`;
-}
-
 function getTransporter() {
   if (transporter) return transporter;
 
@@ -220,7 +162,6 @@ export async function sendEventConfirmationEmail({
   membershipNumber, // optional - mentioned as plain text only, no card/QR/PDF
   payToken, // optional - the registration's opaque pay_token; powers the "Pay Now" link below
   baseUrl, // optional - required (together with payToken) for the "Pay Now" link to appear
-  paymentMethods, // optional - { bankTransfer, card, square, paypal } booleans; which payment options to list
   flyerBuffer, // optional - the event's flyer image, attached as a keepsake
   flyerFilename, // optional - original filename, used to infer extension/content type
 }) {
@@ -239,19 +180,15 @@ export async function sendEventConfirmationEmail({
   // pending row (or a call site that doesn't pass baseUrl) just quietly
   // gets no link rather than a broken one.
   const payUrl = feeOwed && payToken && baseUrl ? `${baseUrl}/pay/${payToken}` : null;
-  // The main button opens the pay page, which offers every enabled method;
-  // the option rows below jump straight to one method on that same page.
-  // With no methods passed, only the main button and copy-paste link appear.
-  const payOptions = payUrl
-    ? buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMethods })
-    : "";
+  // Just the one button. It opens the pay page, which offers every method
+  // the admin has enabled (Card, PayPal, Square, Bank transfer) — the email
+  // itself doesn't list or duplicate any of them.
   const payButton = payUrl
     ? `<p style="text-align:center;margin:20px 0 4px;">
          <a href="${payUrl}" target="_blank" rel="noopener" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
            Pay $${fee} Now
          </a>
        </p>
-       ${payOptions}
        <p style="font-size:12px;color:#888;text-align:center;">
          Or copy and paste this link into your browser: <a href="${payUrl}" style="color:#888;">${payUrl}</a>
        </p>`
