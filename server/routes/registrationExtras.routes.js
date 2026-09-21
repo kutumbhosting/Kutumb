@@ -5,6 +5,7 @@ import { requireAdmin } from "../lib/auth.js";
 import { redeemCouponForRegistration } from "../lib/coupons.js";
 import { sendEventPaymentConfirmationEmail } from "../lib/mailer.js";
 import { generateQrDataUrl } from "../lib/membershipCard.js";
+import { sendEventTickets } from "../lib/tickets.js";
 
 const router = Router();
 
@@ -72,6 +73,8 @@ router.post("/apply-coupon", async (req, res) => {
         fee,
         transactionNumber: `Coupon ${coupon.code}`,
       }).catch((err) => console.error("Coupon payment email error:", err));
+
+      sendEventTickets(updated[0].id).catch((err) => console.error("Ticket email error:", err));
     }
 
     res.json({

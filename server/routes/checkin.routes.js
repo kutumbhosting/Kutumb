@@ -81,6 +81,39 @@ async function findByToken(qrToken) {
   return null;
 }
 
+// Marks one attendee (either source) checked in — but ONLY if they aren't
+// already, atomically. The check ("is this person already checked in?")
+// and the write happen as a single UPDATE ... WHERE checked_in_at IS NULL,
+// not a separate SELECT followed by an UPDATE. That matters: two scans of
+// the exact same QR code arriving close together (two check-in stations, a
+// flaky connection retrying, someone tapping twice, or the same ticket
+// photographed and reused) must never both succeed. With a read-then-write
+// pattern, both requests can read "not checked in yet" before either write
+// lands, and both go through. A single conditional UPDATE doesn't have
+// that gap — Postgres serializes concurrent writes to the same row, so
+// whichever request's UPDATE reaches the database first wins and flips the
+// row; the second one's WHERE clause no longer matches (checked_in_at is
+// no longer null) and it updates zero rows, which is what we check below.
+// `override: true` is the only way to check someone in again after that —
+// a deliberate admin action, not something that can happen by accident.
+async function markCheckedIn({ source, id, checkedInBy, override }) {
+  if (source === "registration") {
+    const query = override
+      ? `UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1
+         WHERE id = $2 RETURNING *`
+      : `UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1
+         WHERE id = $2 AND checked_in_at IS NULL RETURNING *`;
+    const { rows } = await pool.query(query, [checkedInBy, id]);
+    return rows[0] || null;
+  }
+
+  const query = override
+    ? `UPDATE kutumb_attendees SET checked_in_at = now() WHERE id = $1 RETURNING *`
+    : `UPDATE kutumb_attendees SET checked_in_at = now() WHERE id = $1 AND checked_in_at IS NULL RETURNING *`;
+  const { rows } = await pool.query(query, [id]);
+  return rows[0] || null;
+}
+
 // Scan a QR token (from either source). `override: true` lets an
 // authorised admin deliberately re-check-in someone already checked in
 // (e.g. correcting an accidental duplicate scan) instead of silently
@@ -93,61 +126,74 @@ router.post("/scan", async (req, res) => {
   if (!found) return res.status(404).json({ message: "No ticket/attendee found for this QR code" });
   const { source, row } = found;
 
-  if (row.checked_in_at && !override) {
+  const updated = await markCheckedIn({ source, id: row.id, checkedInBy: req.admin?.email || null, override });
+
+  if (!updated) {
+    // The conditional UPDATE matched nothing — someone (possibly a
+    // concurrent scan of this same code) already checked this row in.
+    // Re-fetch the current state so the "already checked in at ..."
+    // message reflects reality even if it was a race, not just a re-scan.
+    const current = await findByToken(qrToken);
+    const currentRow = current?.row || row;
     return res.status(409).json({
-      message: `Already checked in at ${new Date(row.checked_in_at).toLocaleTimeString()}`,
-      attendee: row,
+      message: `Already checked in at ${new Date(currentRow.checked_in_at).toLocaleTimeString()}`,
+      attendee: currentRow,
       source,
       canOverride: true,
     });
   }
 
-  if (source === "registration") {
-    const { rows: updated } = await pool.query(
-      "UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1 WHERE id = $2 RETURNING *",
-      [req.admin?.email || null, row.id]
-    );
-    await logAudit(req.admin, "checkin.scan", row.event_name, {
-      attendeeId: row.id, registrationNumber: row.registration_number, override: !!override,
-    });
-    return res.json({
-      message: "Checked in",
-      attendee: { ...updated[0], registration_number: row.registration_number, payment_status: row.payment_status, registration_status: row.registration_status },
-      source,
-    });
-  }
+  await logAudit(req.admin, "checkin.scan", source === "registration" ? row.event_name : row.event_id, {
+    attendeeId: row.id,
+    registrationNumber: source === "registration" ? row.registration_number : undefined,
+    override: !!override,
+  });
 
-  const { rows: updated } = await pool.query(
-    "UPDATE kutumb_attendees SET checked_in_at = now() WHERE id = $1 RETURNING *",
-    [row.id]
-  );
-  await logAudit(req.admin, "checkin.scan", row.event_id, { attendeeId: row.id, override: !!override });
-  res.json({ message: "Checked in", attendee: updated[0], source });
+  res.json({
+    message: "Checked in",
+    attendee:
+      source === "registration"
+        ? { ...updated, registration_number: row.registration_number, payment_status: row.payment_status, registration_status: row.registration_status }
+        : updated,
+    source,
+  });
 });
 
 // Manual check-in from the attendee list, id is "tkt:<id>" or "reg:<id>".
+// Same atomic guard as /scan, and the same override escape hatch — the
+// attendee list normally hides the "Check in" button once someone is
+// already checked in, but the guard here is what actually enforces it
+// server-side against a stale list, a double-click, or two admins acting
+// on the same row at once.
 router.post("/manual/:attendeeId", async (req, res) => {
   const raw = req.params.attendeeId;
   const [prefix, idStr] = raw.includes(":") ? raw.split(":") : ["tkt", raw];
   const id = Number(idStr);
+  const source = prefix === "reg" ? "registration" : "ticket";
+  const override = !!req.body?.override;
 
-  if (prefix === "reg") {
-    const { rows } = await pool.query(
-      "UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1 WHERE id = $2 RETURNING *",
-      [req.admin?.email || null, id]
-    );
-    if (!rows[0]) return res.status(404).json({ message: "Attendee not found" });
-    await logAudit(req.admin, "checkin.manual", rows[0].event_name, { attendeeId: id });
-    return res.json({ message: "Checked in", attendee: rows[0] });
+  const updated = await markCheckedIn({ source, id, checkedInBy: req.admin?.email || null, override });
+
+  if (!updated) {
+    // Either the attendee doesn't exist, or (far more likely) they're
+    // already checked in — tell those apart so the admin isn't shown a
+    // misleading "not found" for someone who simply beat them to it.
+    const table = source === "registration" ? "kutumb_registration_attendees" : "kutumb_attendees";
+    const { rows: existing } = await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [id]);
+    if (!existing[0]) return res.status(404).json({ message: "Attendee not found" });
+    return res.status(409).json({
+      message: `Already checked in at ${new Date(existing[0].checked_in_at).toLocaleTimeString()}`,
+      attendee: existing[0],
+      source,
+      canOverride: true,
+    });
   }
 
-  const { rows } = await pool.query(
-    "UPDATE kutumb_attendees SET checked_in_at = now() WHERE id = $1 RETURNING *",
-    [id]
-  );
-  if (!rows[0]) return res.status(404).json({ message: "Attendee not found" });
-  await logAudit(req.admin, "checkin.manual", rows[0].event_id, { attendeeId: id });
-  res.json({ message: "Checked in", attendee: rows[0] });
+  await logAudit(req.admin, "checkin.manual", source === "registration" ? updated.event_name : updated.event_id, {
+    attendeeId: id,
+    override,
+  });
+  res.json({ message: "Checked in", attendee: updated });
 });
 
 export default router;

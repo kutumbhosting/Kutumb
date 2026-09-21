@@ -45,6 +45,7 @@ import reconciliationRoutes from "./routes/reconciliation.routes.js";
 import couponsRoutes from "./routes/coupons.routes.js";
 import registrationExtrasRoutes from "./routes/registrationExtras.routes.js";
 import { syncRegistrationAttendees } from "./lib/attendees.js";
+import { sendEventTickets } from "./lib/tickets.js";
 import { slugify } from "./lib/slugify.js";
 import { DATA_ROOT } from "./lib/dataRoot.js";
 import { importMembersDropIn } from "./lib/importMembersDropIn.js";
@@ -393,6 +394,13 @@ app.post("/api/events", async (req, res) => {
     flyerBuffer,
     flyerFilename,
   }).catch((err) => console.error("Event email error:", err));
+
+  // Free events are confirmed immediately, so their QR tickets go out
+  // right away too. Paid events start "pending_payment" — sendEventTickets
+  // no-ops here and instead fires later, from whichever payment path
+  // (card/Square/PayPal, coupon, or admin bank-transfer verification)
+  // actually confirms the registration.
+  sendEventTickets(newRegistration.id).catch((err) => console.error("Ticket email error:", err));
 
   res.status(201).json({
     message: "Registration successful",
@@ -761,6 +769,17 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
         console.error("Attendee sync after admin edit failed:", err)
       );
     }
+
+    // Covers admin bank-transfer verification (Payment Status → Paid),
+    // which is the one "becomes confirmed" path that doesn't already send
+    // tickets elsewhere. sendEventTickets's own one-time claim makes this
+    // a safe no-op on every other edit to an already-confirmed/already-
+    // ticketed registration, so it's fine to just call it here unconditionally
+    // rather than working out whether *this* edit was the transition.
+    if (rows[0].registration_status === "confirmed") {
+      sendEventTickets(rows[0].id).catch((err) => console.error("Ticket email error:", err));
+    }
+
     res.json({ message: "Event registration updated successfully" });
   } catch (err) {
     console.error("EVENT UPDATE ERROR:", err);

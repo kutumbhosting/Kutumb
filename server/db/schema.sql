@@ -451,3 +451,13 @@ CREATE TABLE IF NOT EXISTS kutumb_donation_payments (
 );
 CREATE INDEX IF NOT EXISTS idx_kutumb_donpayments_donation ON kutumb_donation_payments(donation_id);
 CREATE INDEX IF NOT EXISTS idx_kutumb_donpayments_reference ON kutumb_donation_payments(provider, provider_reference);
+
+-- ============================================================
+-- Per-attendee QR tickets, emailed once a registration is actually
+-- confirmed (free at signup, or paid — card/Square/PayPal/coupon/admin
+-- bank-transfer verification). tickets_sent_at is a one-way claim: several
+-- different code paths can each flip a registration to "confirmed", so
+-- this stops more than one of them from ever emailing the same tickets
+-- twice (see sendEventTickets in server/lib/tickets.js).
+-- ============================================================
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS tickets_sent_at TIMESTAMPTZ;

@@ -1,5 +1,6 @@
 import { pool } from "../db/pool.js";
 import { sendEventPaymentConfirmationEmail } from "./mailer.js";
+import { sendEventTickets } from "./tickets.js";
 
 /** One row per checkout attempt, so a webhook/return-page poll can find the
  *  right registration to update. */
@@ -92,6 +93,8 @@ export async function markPaymentPaid(paymentId, rawStatus, transactionRef) {
         fee: Number(updatedRegistration.fee),
         transactionNumber: transactionRef || `${payment.provider} payment`,
       }).catch((err) => console.error(`${payment.provider} payment confirmation email error:`, err));
+
+      sendEventTickets(updatedRegistration.id).catch((err) => console.error("Ticket email error:", err));
     }
 
     return payment;

@@ -168,11 +168,22 @@ export async function sendEventConfirmationEmail({
        <p style="font-size:13px;color:#555;">You'll receive a separate confirmation email once your payment has been recorded.</p>`
     : `<p style="font-size:14px;">Registration Fee: <strong>Free</strong></p>`;
 
+  // A paid event's registration is only a hold until payment actually
+  // clears — don't tell them it's "Confirmed" in the subject line and
+  // opening sentence while a fee is still outstanding; that's the same
+  // premature-success messaging that was fixed in the success dialog and
+  // the post-submit toast, just showing up in the inbox instead.
+  const heading = feeOwed ? "Registration Received — Payment Required" : "Registration Confirmed";
+  const openingLine = feeOwed
+    ? `Hi ${name}, we've received your registration for:`
+    : `Hi ${name}, you're registered for:`;
+  const subject = feeOwed ? `Registration Received (Payment Required) - ${eventName}` : `Registration Confirmed - ${eventName}`;
+
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
       ${LOGO_HTML}
-      <h2 style="color:#7c3f00;">Registration Confirmed</h2>
-      <p>Hi ${name}, you're registered for:</p>
+      <h2 style="color:#7c3f00;">${heading}</h2>
+      <p>${openingLine}</p>
       <p style="font-size:16px;"><strong>${eventName}</strong>${eventDate ? ` &mdash; ${eventDate}` : ""}</p>
       ${registrationLine}
       ${membershipLine}
@@ -186,11 +197,87 @@ export async function sendEventConfirmationEmail({
 
   return send({
     to,
-    subject: `Registration Confirmed - ${eventName}`,
+    subject,
     html,
     attachments: [
       ...logoAttachment(),
       ...(flyerBuffer ? [{ filename: flyerFilename || "event-flyer.jpg", content: flyerBuffer }] : []),
+    ],
+  });
+}
+
+const ATTENDEE_CATEGORY_LABELS = {
+  primary_adult: "Registrant",
+  adult: "Additional Adult",
+  child_under5: "Child (Under 5)",
+  child_5plus: "Child (5+)",
+};
+
+/**
+ * Sends one email per registration with every attendee's individual QR
+ * ticket — the primary registrant, each additional adult, and each child
+ * (under-5 and 5+) — inline in the email body (as cid images, same
+ * technique as the membership QR) and as a combined multi-page PDF
+ * attachment for printing or showing at the door. Only ever called once a
+ * registration is actually confirmed (see sendEventTickets in tickets.js,
+ * which is what enforces the "only after payment" rule and the one-time
+ * send guard).
+ */
+export async function sendEventTicketsEmail({
+  to,
+  name,
+  eventName,
+  eventDate,
+  registrationNumber,
+  attendees, // [{ name, category, qrPngBuffer }]
+  ticketsPdfBuffer,
+}) {
+  const ticketBlocks = attendees
+    .map(
+      (a, i) => `
+        <div style="margin:20px 0;padding:16px;border:1px solid #eee;border-radius:8px;text-align:center;">
+          <img src="cid:eventTicketQr${i}" alt="QR code for ${a.name}" style="width:160px;height:160px;" />
+          <p style="margin:10px 0 2px;font-size:14px;font-weight:bold;">${a.name}</p>
+          <p style="margin:0;font-size:12px;color:#b45309;font-weight:600;">
+            ${ATTENDEE_CATEGORY_LABELS[a.category] || "Attendee"}
+          </p>
+        </div>`
+    )
+    .join("");
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#15803d;">Your Tickets 🎟️</h2>
+      <p>Hi ${name}, here ${attendees.length === 1 ? "is your ticket" : `are your ${attendees.length} tickets`} for:</p>
+      <p style="font-size:16px;"><strong>${eventName}</strong>${eventDate ? ` &mdash; ${eventDate}` : ""}</p>
+      ${registrationNumber ? `<p style="font-size:14px;">Registration Number: <strong>${registrationNumber}</strong></p>` : ""}
+      <p style="font-size:13px;color:#555;">
+        Each person listed below has their own scannable QR code — show it at check-in
+        (on your phone or printed from the attached PDF). One scan per ticket.
+      </p>
+      ${ticketBlocks}
+      <p>We look forward to seeing you there!</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">
+        With Best Regards, &middot; Kutumb Executive Team
+      </p>
+    </div>
+  `;
+
+  return send({
+    to,
+    subject: `Your Tickets - ${eventName}`,
+    html,
+    attachments: [
+      ...logoAttachment(),
+      ...attendees.map((a, i) => ({
+        filename: `ticket-${i + 1}.png`,
+        content: a.qrPngBuffer,
+        cid: `eventTicketQr${i}`,
+      })),
+      ...(ticketsPdfBuffer
+        ? [{ filename: `kutumb-tickets-${registrationNumber || "event"}.pdf`, content: ticketsPdfBuffer }]
+        : []),
     ],
   });
 }
