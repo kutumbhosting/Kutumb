@@ -1427,14 +1427,21 @@ app.post("/api/donations", async (req, res) => {
     );
     const donation = rows[0];
 
-    sendDonationThankYouEmail({
-      to: email,
-      name,
-      amount: Number(donation.amount),
-      membershipNumber: donation.membership_number,
-      bankTransferred: donation.bank_transferred,
-      transactionNumber: donation.transaction_number,
-    }).catch((err) => console.error("Donation email error:", err));
+    // Only send the thank-you email here when the donation is already paid
+    // (a bank transfer the donor says they've already made). For card,
+    // Square and PayPal, this row is just "Pending" — the email goes out
+    // later from markDonationPaymentPaid(), once the provider actually
+    // confirms the payment.
+    if (donation.payment_status === "Paid") {
+      sendDonationThankYouEmail({
+        to: email,
+        name,
+        amount: Number(donation.amount),
+        membershipNumber: donation.membership_number,
+        bankTransferred: donation.bank_transferred,
+        transactionNumber: donation.transaction_number,
+      }).catch((err) => console.error("Donation email error:", err));
+    }
 
     res.status(201).json({
       message: "Thank you for your donation",
