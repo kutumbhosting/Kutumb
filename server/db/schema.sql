@@ -461,3 +461,10 @@ CREATE INDEX IF NOT EXISTS idx_kutumb_donpayments_reference ON kutumb_donation_p
 -- twice (see sendEventTickets in server/lib/tickets.js).
 -- ============================================================
 ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS tickets_sent_at TIMESTAMPTZ;
+
+-- Opaque, unguessable token so the "pay now" link in the pending-payment
+-- confirmation email can take someone straight to a page that pays THIS
+-- one registration — without them needing to log in, and without the URL
+-- being a guessable sequential id that would let anyone view or pay
+-- someone else's registration just by incrementing a number.
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS pay_token TEXT UNIQUE;

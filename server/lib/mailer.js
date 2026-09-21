@@ -151,6 +151,8 @@ export async function sendEventConfirmationEmail({
   registrationNumber, // optional
   fee, // optional - total fee owed (0 or undefined = no fee)
   membershipNumber, // optional - mentioned as plain text only, no card/QR/PDF
+  payToken, // optional - the registration's opaque pay_token; powers the "Pay Now" link below
+  baseUrl, // optional - required (together with payToken) for the "Pay Now" link to appear
   flyerBuffer, // optional - the event's flyer image, attached as a keepsake
   flyerFilename, // optional - original filename, used to infer extension/content type
 }) {
@@ -163,6 +165,23 @@ export async function sendEventConfirmationEmail({
     : "";
 
   const feeOwed = typeof fee === "number" && fee > 0;
+  // Only ever build this link when there's actually a fee owed AND we have
+  // both a token and a base URL to build it from — payToken is only set on
+  // registrations created after the pay_token column existed, so an older
+  // pending row (or a call site that doesn't pass baseUrl) just quietly
+  // gets no link rather than a broken one.
+  const payUrl = feeOwed && payToken && baseUrl ? `${baseUrl}/pay/${payToken}` : null;
+  const payButton = payUrl
+    ? `<p style="text-align:center;margin:20px 0;">
+         <a href="${payUrl}" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
+           Pay $${fee} Now
+         </a>
+       </p>
+       <p style="font-size:12px;color:#888;text-align:center;">
+         Or copy and paste this link into your browser: <a href="${payUrl}" style="color:#888;">${payUrl}</a>
+       </p>`
+    : "";
+
   // Tickets (one QR code per attendee — you, any additional adults, any
   // children) are a separate email, sent only once a registration is
   // actually confirmed (see sendEventTickets) — never before payment for a
@@ -170,8 +189,9 @@ export async function sendEventConfirmationEmail({
   // surprise, or worse, implying a ticket exists already.
   const paymentLine = feeOwed
     ? `<p style="font-size:14px;">Registration Fee: <strong>$${fee}</strong> &middot; Payment Status: <strong style="color:#b45309;">Pending</strong></p>
+       ${payButton}
        <p style="font-size:13px;color:#555;">
-         You'll receive a separate confirmation email once your payment has been recorded —
+         Once your payment has been recorded, you'll receive a separate confirmation email —
          and your ticket(s), with a QR code for each person on this registration, will be
          generated and emailed to you at that point.
        </p>`

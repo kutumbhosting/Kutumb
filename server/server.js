@@ -1,4 +1,5 @@
 import "dotenv/config";
+import crypto from "crypto";
 import express from "express";
 import cookieParser from "cookie-parser";
 import fs from "fs";
@@ -335,16 +336,17 @@ app.post("/api/events", async (req, res) => {
         // itself, a confirmed registration for a paid event.
         const registrationStatus = applicableFee > 0 ? "pending_payment" : "confirmed";
 
+        const payToken = crypto.randomBytes(20).toString("hex");
         const { rows: inserted } = await client.query(
           `INSERT INTO kutumb_event_registrations
              (event_name, event_year, name, email, phone, adults, children, children_under5, children_5plus, child_fee,
               comments, registration_number, is_member, membership_number, fee, per_person_fee,
-              bank_transferred, transaction_number, payment_status, registration_status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,NULL,$17,$18) RETURNING *`,
+              bank_transferred, transaction_number, payment_status, registration_status, pay_token)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,NULL,$17,$18,$19) RETURNING *`,
           [
             eventName, eventYear, name, email, phone, Number(adults) || 0, numChildrenTotal, numChildrenUnder5, numChildren5Plus, childFeeApplied,
             comments || null, registrationNumber, isMember, matchedMember?.membership_number || null,
-            applicableFee, perPersonFee, applicableFee > 0 ? "Pending" : "N/A", registrationStatus,
+            applicableFee, perPersonFee, applicableFee > 0 ? "Pending" : "N/A", registrationStatus, payToken,
           ]
         );
         newRegistration = inserted[0];
@@ -383,6 +385,7 @@ app.post("/api/events", async (req, res) => {
 
   // ── Send a simple success confirmation email (text mention of membership
   // number if applicable - no card, no QR, no PDF) ────────────────────────
+  const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
   sendEventConfirmationEmail({
     to: email,
     name,
@@ -391,6 +394,11 @@ app.post("/api/events", async (req, res) => {
     registrationNumber: newRegistration.registration_number,
     fee: applicableFee,
     membershipNumber: matchedMember?.membership_number || null,
+    // Only meaningful (and only ever included in the email) when a fee is
+    // actually owed — see sendEventConfirmationEmail, which only renders a
+    // "Pay Now" link when payToken is present AND the fee is > 0.
+    payToken: newRegistration.pay_token,
+    baseUrl,
     flyerBuffer,
     flyerFilename,
   }).catch((err) => console.error("Event email error:", err));
@@ -643,6 +651,55 @@ app.get("/api/all-registrations", requireAdmin, async (req, res) => {
    requiring an exact match on eventName + eventYear + email, and only ever
    flips the record to "Paid" when a transaction number is actually supplied.
 ------------------------------ */
+// PUBLIC: looks up one registration by its opaque pay_token — this is what
+// powers the "Pay Now" link in the pending-payment confirmation email,
+// landing on the standalone /pay/:token page rather than requiring the
+// person to dig back through the site to find their registration again.
+// Keyed by an unguessable token (not the numeric id), the same model as
+// qr_token for attendees — no login required, but also no way to browse to
+// someone else's registration.
+app.get("/api/events/registration/by-token/:token", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM kutumb_event_registrations WHERE pay_token = $1",
+      [req.params.token]
+    );
+    const reg = rows[0];
+    if (!reg) return res.status(404).json({ message: "Registration not found" });
+
+    // Registrations don't store the event date themselves — best-effort
+    // look it up from the event so the pay page can show it too.
+    const { rows: eventRows } = await pool.query(
+      "SELECT date_text FROM kutumb_upcoming_events WHERE lower(title) = lower($1)",
+      [reg.event_name]
+    );
+
+    const totalFee = Number(reg.fee) || 0;
+    const amountPaid = Number(reg.payment_amount) || 0;
+
+    res.json({
+      id: reg.id,
+      eventName: reg.event_name,
+      eventDate: eventRows[0]?.date_text || null,
+      eventYear: reg.event_year,
+      registrationNumber: reg.registration_number,
+      name: reg.name,
+      email: reg.email,
+      adults: reg.adults,
+      children: reg.children,
+      // The amount still owed right now — not necessarily the original
+      // fee, e.g. if a coupon partially covered it already.
+      fee: Math.max(totalFee - amountPaid, 0),
+      totalFee,
+      paymentStatus: reg.payment_status,
+      registrationStatus: reg.registration_status,
+    });
+  } catch (err) {
+    console.error("REGISTRATION BY TOKEN ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 app.post("/api/events/record-payment", async (req, res) => {
   try {
     const { eventName, eventYear, email, bankTransferred, transactionNumber } = req.body;
