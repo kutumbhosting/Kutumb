@@ -22,6 +22,98 @@ let transporter = null;
 // confirmation email so new members can join right away.
 const WHATSAPP_GROUP_INVITE = "https://chat.whatsapp.com/Etit0vlcVj18n3WNvrcEFR?s=cl&p=i&ilr=4";
 
+// Kutumb's bank account for bank-transfer payments — shown in the
+// registration and donation emails. (The website's payment panel has its own
+// copy in RegistrationPaymentPanel.tsx; keep the two in step.)
+const BANK_DETAILS = {
+  accountName: "Kutumb Australia Inc",
+  bsb: "082-356",
+  account: "778280517",
+};
+
+/**
+ * The "choose how to pay" section of the registration email: one row per
+ * payment method the admin has switched on (Settings & Access → Payment
+ * Methods). Card / PayPal / Square rows link to the pay page with that
+ * method pre-selected; the bank-transfer row lists the account details
+ * inline so it works straight from the inbox.
+ *
+ * Built from inline-styled divs and one small table per row, because that's
+ * what renders reliably across Gmail, Outlook and Yahoo.
+ */
+function buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMethods }) {
+  const methods = paymentMethods || {};
+  const link = (method) => `${payUrl}?method=${method}`;
+
+  const row = ({ title, description, buttonLabel, href, buttonColor }) => `
+    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:0 0 10px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="vertical-align:middle;padding-right:10px;">
+            <div style="font-size:14px;font-weight:600;color:#111827;">${title}</div>
+            <div style="font-size:12px;color:#6b7280;margin-top:2px;">${description}</div>
+          </td>
+          <td style="vertical-align:middle;text-align:right;white-space:nowrap;">
+            <a href="${href}" style="display:inline-block;background:${buttonColor};color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:6px;font-weight:600;font-size:13px;">${buttonLabel}</a>
+          </td>
+        </tr>
+      </table>
+    </div>`;
+
+  const rows = [];
+  if (methods.card) {
+    rows.push(row({
+      title: "💳 Credit / debit card",
+      description: "Secure checkout powered by Stripe",
+      buttonLabel: `Pay $${fee}`,
+      href: link("card"),
+      buttonColor: "#635bff",
+    }));
+  }
+  if (methods.paypal) {
+    rows.push(row({
+      title: "PayPal",
+      description: "Pay with your PayPal account",
+      buttonLabel: `Pay $${fee}`,
+      href: link("paypal"),
+      buttonColor: "#0070ba",
+    }));
+  }
+  if (methods.square) {
+    rows.push(row({
+      title: "Square",
+      description: "Secure checkout powered by Square",
+      buttonLabel: `Pay $${fee}`,
+      href: link("square"),
+      buttonColor: "#1f2937",
+    }));
+  }
+  if (methods.bankTransfer) {
+    const reference = registrationNumber || "your name";
+    rows.push(`
+    <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin:0 0 10px;">
+      <div style="font-size:14px;font-weight:600;color:#9a3412;">🏦 Bank transfer</div>
+      <div style="font-size:13px;color:#111827;margin-top:6px;line-height:1.6;">
+        Account Name: <strong>${BANK_DETAILS.accountName}</strong><br />
+        BSB: <strong>${BANK_DETAILS.bsb}</strong><br />
+        Account Number: <strong>${BANK_DETAILS.account}</strong><br />
+        Amount: <strong>$${fee}</strong><br />
+        Reference: <strong>${reference}</strong>
+      </div>
+      <div style="font-size:12px;color:#6b7280;margin-top:6px;">
+        Please use the reference above so we can match your payment.
+        Once you've transferred, <a href="${link("bank")}" style="color:#c2410c;">let us know here</a>
+        with your transaction number.
+      </div>
+    </div>`);
+  }
+
+  if (rows.length === 0) return "";
+  return `
+    <p style="font-size:14px;font-weight:600;margin:20px 0 8px;">Or choose how you'd like to pay:</p>
+    ${rows.join("")}`;
+}
+
 function getTransporter() {
   if (transporter) return transporter;
 
@@ -153,6 +245,7 @@ export async function sendEventConfirmationEmail({
   membershipNumber, // optional - mentioned as plain text only, no card/QR/PDF
   payToken, // optional - the registration's opaque pay_token; powers the "Pay Now" link below
   baseUrl, // optional - required (together with payToken) for the "Pay Now" link to appear
+  paymentMethods, // optional - { bankTransfer, card, square, paypal } booleans; which payment options to list
   flyerBuffer, // optional - the event's flyer image, attached as a keepsake
   flyerFilename, // optional - original filename, used to infer extension/content type
 }) {
@@ -171,12 +264,19 @@ export async function sendEventConfirmationEmail({
   // pending row (or a call site that doesn't pass baseUrl) just quietly
   // gets no link rather than a broken one.
   const payUrl = feeOwed && payToken && baseUrl ? `${baseUrl}/pay/${payToken}` : null;
+  // The main button opens the pay page, which offers every enabled method;
+  // the option rows below jump straight to one method on that same page.
+  // With no methods passed, only the main button and copy-paste link appear.
+  const payOptions = payUrl
+    ? buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMethods })
+    : "";
   const payButton = payUrl
-    ? `<p style="text-align:center;margin:20px 0;">
+    ? `<p style="text-align:center;margin:20px 0 4px;">
          <a href="${payUrl}" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
            Pay $${fee} Now
          </a>
        </p>
+       ${payOptions}
        <p style="font-size:12px;color:#888;text-align:center;">
          Or copy and paste this link into your browser: <a href="${payUrl}" style="color:#888;">${payUrl}</a>
        </p>`
@@ -457,9 +557,9 @@ export async function sendDonationThankYouEmail({
     : `<p style="font-size:14px;">Payment Status: <strong style="color:#b45309;">Pending</strong> - please complete your bank transfer using the details below when ready.</p>
        <div style="border:2px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 16px;margin:12px 0;font-size:14px;">
          <p style="font-weight:600;color:#9a3412;margin:0 0 4px;">Kutumb Bank Details</p>
-         <p style="margin:2px 0;">Account Name: Kutumb Australia Inc</p>
-         <p style="margin:2px 0;">BSB: 082-356</p>
-         <p style="margin:2px 0;">Account: 778280517</p>
+         <p style="margin:2px 0;">Account Name: ${BANK_DETAILS.accountName}</p>
+         <p style="margin:2px 0;">BSB: ${BANK_DETAILS.bsb}</p>
+         <p style="margin:2px 0;">Account: ${BANK_DETAILS.account}</p>
        </div>`;
 
   const html = `

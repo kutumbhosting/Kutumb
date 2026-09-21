@@ -26,6 +26,7 @@ import { parseEventEndDate, sortPastEventsDescending } from "./lib/eventDates.js
 import { requireAdmin, requireSuperAdmin } from "./lib/auth.js";
 import { getPaymentMethodSettings, getSetting } from "./lib/settings.js";
 import { getStripe } from "./lib/stripeClient.js";
+import { getPublicBaseUrl, getConfiguredPublicBaseUrl } from "./lib/publicUrl.js";
 import {
   recordDonationPaymentAttempt,
   findDonationPaymentByReference,
@@ -746,7 +747,7 @@ app.post("/api/events/registration/:id/checkout-card", async (req, res) => {
       return res.status(503).json({ message: "Card payments aren't configured yet. Ask the admin to add a Stripe secret key in the Admin Console." });
     }
 
-    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    const baseUrl = await getPublicBaseUrl(req);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -830,7 +831,10 @@ app.post("/api/events/registration/:id/send-payment-reminder", async (req, res) 
     const registration = rows[0];
     if (!registration) return res.json({ sent: false });
 
-    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    const baseUrl = await getPublicBaseUrl(req);
+    // Same toggles the pay page uses (Settings & Access → Payment Methods),
+    // so the email only offers methods that will actually work when clicked.
+    const paymentMethods = await getPaymentMethodSettings();
     // Registrations don't store the event date themselves — best-effort
     // look it up, same as the by-token endpoint above.
     const { rows: eventRows } = await pool.query(
@@ -847,6 +851,7 @@ app.post("/api/events/registration/:id/send-payment-reminder", async (req, res) 
       membershipNumber: registration.membership_number,
       payToken: registration.pay_token,
       baseUrl,
+      paymentMethods,
     }).catch((err) => console.error("Payment reminder email error:", err));
 
     res.json({ sent: true });
@@ -1747,7 +1752,7 @@ app.post("/api/donations/:id/checkout-card", async (req, res) => {
       return res.status(503).json({ message: "Card payments aren't configured yet. Ask the admin to add a Stripe secret key in the Admin Console." });
     }
 
-    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    const baseUrl = await getPublicBaseUrl(req);
     const amount = Number(donation.amount);
 
     const session = await stripe.checkout.sessions.create({
@@ -1957,6 +1962,15 @@ app.listen(PORT, "0.0.0.0", () => {
   } else {
     console.warn("⚠️  WhatsApp is NOT configured - set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN in .env");
   }
+
+  // Every emailed "Pay Now" link is built from the public base URL, so say
+  // loudly at startup if the setting is missing or was saved wrongly.
+  getConfiguredPublicBaseUrl()
+    .then((url) => {
+      if (url) console.log(`✅ Public base URL: ${url}`);
+      else console.warn("⚠️  No valid public base URL configured - set it under Settings & Access → Platform (or PUBLIC_BASE_URL in .env). Emailed payment links will fall back to the address of the request that triggered them.");
+    })
+    .catch((err) => console.error("Public base URL check failed:", err));
 
   // Move any already-expired events into Past Events on startup,
   // then re-check once an hour as a background safety net (the

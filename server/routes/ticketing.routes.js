@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { requireAdmin } from "../lib/auth.js";
 import { getStripe } from "../lib/stripeClient.js";
 import { getSetting } from "../lib/settings.js";
+import { getPublicBaseUrl } from "../lib/publicUrl.js";
 import { logAudit } from "../lib/audit.js";
 import { slugify } from "../lib/slugify.js";
 import { findDonationPaymentByReference, markDonationPaymentPaid } from "../lib/donationPayments.js";
@@ -277,7 +278,7 @@ router.post("/:eventId/checkout", async (req, res) => {
       return res.status(503).json({ message: "Payments aren't configured yet. Ask the admin to add a Stripe secret key in the Admin Console." });
     }
 
-    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    const baseUrl = await getPublicBaseUrl(req);
     // Stripe-hosted Checkout (not Embedded Checkout) — the browser is sent
     // to a page Stripe fully owns and hosts, then back to /checkout/return
     // once payment completes. The client opens that URL in a popup sized

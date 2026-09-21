@@ -30,7 +30,7 @@ export const SETTINGS_SCHEMA = [
   { group: "Stripe", key: "stripe_publishable_key", label: "Stripe Publishable Key", secret: false },
   { group: "Stripe", key: "stripe_secret_key", label: "Stripe Secret Key", secret: true },
   { group: "Stripe", key: "stripe_webhook_secret", label: "Stripe Webhook Signing Secret", secret: true },
-  { group: "Platform", key: "public_base_url", label: "Public Base URL", secret: false },
+  { group: "Platform", key: "public_base_url", label: "Public Base URL (your website address, e.g. https://www.kutumb.org.au — NOT a Stripe/PayPal/Square address)", secret: false },
   // Toggle which payment methods registrants are offered on the event
   // registration success page. Bank transfer defaults on (it needs no
   // external setup); card defaults off until Stripe keys above are filled

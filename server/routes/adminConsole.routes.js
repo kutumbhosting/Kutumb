@@ -5,6 +5,7 @@ import { buildPoolConfig } from "../db/pool.js";
 import { readEnvFile, setEnvVar } from "../lib/envFile.js";
 import { requireSuperAdmin, hashPassword } from "../lib/auth.js";
 import { getAllSettingsForAdmin, setSetting, deleteSetting, getSetting, SETTINGS_SCHEMA } from "../lib/settings.js";
+import { normalizeBaseUrl } from "../lib/publicUrl.js";
 import { logAudit } from "../lib/audit.js";
 import { importMembersDropIn } from "../lib/importMembersDropIn.js";
 import { listGroqModels } from "../lib/aiDraft.js";
@@ -26,7 +27,18 @@ router.put("/settings/:key", async (req, res) => {
   if (!def) return res.status(400).json({ message: "Unknown setting key" });
   const { value } = req.body;
   if (value === undefined) return res.status(400).json({ message: "value is required" });
-  await setSetting(def.key, value, def.secret);
+
+  // Every emailed "Pay Now" link and every Stripe/Square return URL is built
+  // from this, so refuse values that would send people somewhere other than
+  // this website (it was once saved as https://api.stripe.com).
+  let toStore = value;
+  if (def.key === "public_base_url") {
+    const { url, error } = normalizeBaseUrl(value);
+    if (error) return res.status(400).json({ message: error });
+    toStore = url;
+  }
+
+  await setSetting(def.key, toStore, def.secret);
   await logAudit(req.admin, "settings.update", def.key, { secret: def.secret });
   res.json({ message: "Saved" });
 });

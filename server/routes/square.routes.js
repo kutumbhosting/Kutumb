@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { pool } from "../db/pool.js";
 import { squareFetch, getSquareConfig } from "../lib/squareClient.js";
 import { getSetting } from "../lib/settings.js";
+import { getPublicBaseUrl, getConfiguredPublicBaseUrl } from "../lib/publicUrl.js";
 import {
   recordPaymentAttempt,
   findPaymentByReference,
@@ -46,7 +47,7 @@ router.post("/:registrationId/checkout", async (req, res) => {
       return res.status(503).json({ message: "Square isn't configured yet. Ask the admin to add Square details in Settings & Access." });
     }
 
-    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    const baseUrl = await getPublicBaseUrl(req);
 
     const data = await squareFetch("/v2/online-checkout/payment-links", {
       method: "POST",
@@ -135,7 +136,7 @@ router.post("/donations/:donationId/checkout", async (req, res) => {
       return res.status(503).json({ message: "Square isn't configured yet. Ask the admin to add Square details in Settings & Access." });
     }
 
-    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    const baseUrl = await getPublicBaseUrl(req);
     const amount = Number(donation.amount);
 
     const data = await squareFetch("/v2/online-checkout/payment-links", {
@@ -208,7 +209,7 @@ export async function squareWebhookHandler(req, res) {
   try {
     const signatureKey = await getSetting("square_webhook_signature_key");
     const signatureHeader = req.headers["x-square-hmacsha256-signature"];
-    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "";
+    const baseUrl = (await getConfiguredPublicBaseUrl()) || "";
     const notificationUrl = `${baseUrl}/api/square/webhook`;
 
     if (signatureKey && signatureHeader) {
