@@ -2,11 +2,21 @@ import { useEffect, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { CHECKOUT_POPUP_NAME } from "@/lib/checkoutPopup";
 
 // Stripe's Embedded Checkout navigates the browser HERE once payment
 // completes (it's a real page load, not just closing the modal — that's
 // how Embedded Checkout is designed to work). We look up the payment
 // status by session_id and show a simple confirmation.
+//
+// This page can be reached two ways:
+//  1. Inside a popup window we opened ourselves (window.open(url,
+//     CHECKOUT_POPUP_NAME, ...)) for a Stripe or Square redirect checkout.
+//     Once we know the outcome, we post it back to the opener and offer to
+//     close the popup automatically.
+//  2. As an ordinary page load (no opener, or a popup got blocked and the
+//     browser navigated the main tab instead) — in that case we just show
+//     the normal confirmation UI, same as before.
 export default function CheckoutReturn() {
   const [params] = useSearchParams();
   const sessionId = params.get("session_id");
@@ -16,6 +26,57 @@ export default function CheckoutReturn() {
   const [orderId, setOrderId] = useState<number | null>(null);
 
   const donationId = params.get("donationId");
+
+  // Only treat this as "running inside our popup" when it really is one:
+  // has an opener, isn't the top-level window some other way, and was
+  // given our popup name.
+  const isPopup =
+    typeof window !== "undefined" &&
+    !!window.opener &&
+    window.opener !== window &&
+    window.name === CHECKOUT_POPUP_NAME;
+
+  const [autoCloseIn, setAutoCloseIn] = useState<number | null>(null);
+
+  // Tell the opener what happened as soon as we have a definite answer, and
+  // start the auto-close countdown. We never auto-close on "pending" —
+  // that state means we genuinely don't know yet, so the person should be
+  // able to read the message and decide for themselves.
+  useEffect(() => {
+    if (!isPopup || status === "loading" || status === "pending") return;
+
+    try {
+      window.opener.postMessage(
+        {
+          source: "kutumb-checkout",
+          status, // "paid" | "error"
+          provider,
+          donationId: donationId || null,
+          registrationId: registrationId || null,
+          orderId,
+        },
+        window.location.origin
+      );
+    } catch (err) {
+      console.error("Could not notify opener window:", err);
+    }
+
+    setAutoCloseIn(status === "paid" ? 3 : 6);
+  }, [isPopup, status, provider, donationId, registrationId, orderId]);
+
+  // Count down, then close. If window.close() is refused by the browser
+  // (it can be, depending on how the popup was opened), the countdown just
+  // reaches 0 and the person uses the "Close this window" button instead —
+  // handled below.
+  useEffect(() => {
+    if (autoCloseIn === null) return;
+    if (autoCloseIn <= 0) {
+      window.close();
+      return;
+    }
+    const t = setTimeout(() => setAutoCloseIn((s) => (s !== null ? s - 1 : s)), 1000);
+    return () => clearTimeout(t);
+  }, [autoCloseIn]);
 
   useEffect(() => {
     if (provider === "square" && registrationId) {
@@ -54,6 +115,47 @@ export default function CheckoutReturn() {
       })
       .catch(() => setStatus("error"));
   }, [sessionId, provider, registrationId, donationId]);
+
+  // Inside our popup, skip the site chrome entirely — it's a small window
+  // whose only job is to show the outcome for a few seconds and disappear.
+  if (isPopup) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center px-6">
+        {status === "loading" && <p className="text-muted-foreground">Checking your payment...</p>}
+
+        {status === "paid" && (
+          <>
+            <p className="text-3xl mb-2">🎉</p>
+            <h1 className="text-xl font-extrabold mb-2">Payment confirmed!</h1>
+            <p className="text-muted-foreground mb-4">
+              {donationId ? "Thank you for your donation!" : "Your payment has been recorded."}
+            </p>
+          </>
+        )}
+
+        {status === "error" && (
+          <>
+            <h1 className="text-xl font-bold mb-2">Something went wrong</h1>
+            <p className="text-muted-foreground mb-4">
+              We couldn't confirm that payment. If you were charged, please contact us.
+            </p>
+          </>
+        )}
+
+        {autoCloseIn !== null && (
+          <p className="text-sm text-muted-foreground mb-2">
+            This window will close automatically in {autoCloseIn}s…
+          </p>
+        )}
+        <button
+          onClick={() => window.close()}
+          className="text-primary hover:underline text-sm"
+        >
+          Close this window
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Mail } from "lucide-react";
 import RegistrationCheckoutModal from "@/components/RegistrationCheckoutModal";
 import PayPalButton from "@/components/PayPalButton";
+import { openCheckoutPopup } from "@/lib/checkoutPopup";
 
 export interface EventRegistrationSuccessData {
   id?: number;
@@ -81,8 +82,9 @@ const EventRegistrationSuccessDialog = ({
       .catch(() => setMethods({ bankTransfer: true, card: false, square: false, paypal: false }));
   }, [open]);
 
-  // ── Square: redirect-based checkout (Square-hosted payment link) ───────
+  // ── Square: popup-based checkout (Square-hosted payment link) ──────────
   const [startingSquare, setStartingSquare] = useState(false);
+  const [waitingOnSquarePopup, setWaitingOnSquarePopup] = useState(false);
   const handlePaySquare = async () => {
     if (!data.id) {
       toast({ title: "Can't start Square checkout", description: "Missing registration reference.", variant: "destructive" });
@@ -93,7 +95,53 @@ const EventRegistrationSuccessDialog = ({
       const res = await fetch(`/api/square/${data.id}/checkout`, { method: "POST" });
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Could not start Square checkout");
-      window.location.href = result.url;
+
+      setWaitingOnSquarePopup(true);
+      openCheckoutPopup({
+        url: result.url,
+        onResult: (popupResult) => {
+          setWaitingOnSquarePopup(false);
+          setStartingSquare(false);
+          if (popupResult.status === "paid") {
+            toast({ title: "Payment confirmed 🎉", description: "Your Square payment was successful." });
+            setPaymentRecorded(true);
+          } else {
+            toast({
+              title: "Payment not completed",
+              description: "The checkout window was cancelled or the payment didn't go through.",
+              variant: "destructive",
+            });
+          }
+        },
+        onBlocked: () => {
+          // Pop-up blocked — fall back to the old full-page redirect.
+          setWaitingOnSquarePopup(false);
+          window.location.href = result.url;
+        },
+        onClosedWithoutResult: () => {
+          setWaitingOnSquarePopup(false);
+          setStartingSquare(false);
+          fetch(`/api/square/status/${data.id}`)
+            .then((r) => r.json())
+            .then((statusData) => {
+              if (statusData.status === "paid") {
+                toast({ title: "Payment confirmed 🎉", description: "Your Square payment was successful." });
+                setPaymentRecorded(true);
+              } else {
+                toast({
+                  title: "Checkout window closed",
+                  description: "We didn't receive confirmation of payment. If you completed the payment, it may still be processing.",
+                });
+              }
+            })
+            .catch(() => {
+              toast({
+                title: "Checkout window closed",
+                description: "We couldn't confirm whether the payment went through. Check your email, or contact us if you were charged.",
+              });
+            });
+        },
+      });
     } catch (err: any) {
       toast({ title: "Square checkout failed", description: err.message, variant: "destructive" });
       setStartingSquare(false);
@@ -261,7 +309,11 @@ const EventRegistrationSuccessDialog = ({
 
             {methods.square && (
               <Button onClick={handlePaySquare} disabled={startingSquare} variant="outline" className="w-full">
-                {startingSquare ? "Redirecting to Square..." : `⬛ Pay $${(couponResult ? couponResult.remaining : data.fee)?.toFixed?.(2) ?? data.fee} with Square`}
+                {waitingOnSquarePopup
+                  ? "Waiting for payment in popup..."
+                  : startingSquare
+                  ? "Opening Square checkout..."
+                  : `⬛ Pay $${(couponResult ? couponResult.remaining : data.fee)?.toFixed?.(2) ?? data.fee} with Square`}
               </Button>
             )}
 

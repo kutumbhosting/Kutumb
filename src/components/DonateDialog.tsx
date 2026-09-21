@@ -13,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { HeartHandshake } from "lucide-react";
 import PayPalButton from "@/components/PayPalButton";
+import { openCheckoutPopup } from "@/lib/checkoutPopup";
 
 interface DonateDialogProps {
   open: boolean;
@@ -53,6 +54,10 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
   const [donationId, setDonationId] = useState<number | null>(null);
   const [paymentDone, setPaymentDone] = useState(false);
   const [showingPaypal, setShowingPaypal] = useState(false);
+  // Set while the Stripe/Square popup is open and we're waiting to hear
+  // back from it, so the form can show "Waiting for payment..." instead of
+  // just sitting there looking idle once the button click returns.
+  const [waitingOnPopup, setWaitingOnPopup] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +103,7 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
       setDonationId(null);
       setPaymentDone(false);
       setShowingPaypal(false);
+      setWaitingOnPopup(false);
     }
   }, [open]);
 
@@ -175,23 +181,83 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
         const cardRes = await fetch(`/api/donations/${newDonationId}/checkout-card`, { method: "POST" });
         const cardResult = await cardRes.json();
         if (!cardRes.ok) throw new Error(cardResult.message || "Could not start card checkout");
-        window.location.href = cardResult.url;
+        openProviderPopup(cardResult.url, "card", newDonationId);
         return;
       }
       if (paymentMethod === "square") {
         const squareRes = await fetch(`/api/square/donations/${newDonationId}/checkout`, { method: "POST" });
         const squareResult = await squareRes.json();
         if (!squareRes.ok) throw new Error(squareResult.message || "Could not start Square checkout");
-        window.location.href = squareResult.url;
+        openProviderPopup(squareResult.url, "square", newDonationId);
         return;
       }
       if (paymentMethod === "paypal") {
         setShowingPaypal(true);
+        setSubmitting(false);
       }
     } catch (err: any) {
       toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
       setSubmitting(false);
     }
+  };
+
+  // Opens the Stripe/Square hosted checkout page in a popup instead of
+  // navigating away from the donation dialog, and reacts once
+  // /checkout/return (inside that popup) reports the outcome.
+  const openProviderPopup = (url: string, provider: "card" | "square", forDonationId: number) => {
+    setWaitingOnPopup(true);
+    openCheckoutPopup({
+      url,
+      onResult: (result) => {
+        setWaitingOnPopup(false);
+        setSubmitting(false);
+        if (result.status === "paid") {
+          toast({ title: "Payment confirmed 🎉", description: "Thank you for your donation!" });
+          setPaymentDone(true);
+        } else {
+          toast({
+            title: "Payment not completed",
+            description: "The checkout window was cancelled or the payment didn't go through.",
+            variant: "destructive",
+          });
+        }
+      },
+      onBlocked: () => {
+        // Pop-up blocked — fall back to the old full-page redirect so the
+        // donor can still pay.
+        setWaitingOnPopup(false);
+        window.location.href = url;
+      },
+      onClosedWithoutResult: () => {
+        // They closed the popup before we heard back. Ask the server
+        // directly rather than leaving the dialog stuck on "waiting".
+        setWaitingOnPopup(false);
+        setSubmitting(false);
+        const statusUrl =
+          provider === "card"
+            ? `/api/donations/${forDonationId}/status`
+            : `/api/square/donation-status/${forDonationId}`;
+        fetch(statusUrl)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.status === "paid") {
+              toast({ title: "Payment confirmed 🎉", description: "Thank you for your donation!" });
+              setPaymentDone(true);
+            } else {
+              toast({
+                title: "Checkout window closed",
+                description: "We didn't receive confirmation of payment. If you completed the payment, it may still be processing.",
+              });
+            }
+          })
+          .catch(() => {
+            toast({
+              title: "Checkout window closed",
+              description: "We couldn't confirm whether the payment went through. Check your email, or contact us if you were charged.",
+            });
+          });
+      },
+    });
   };
 
   const anyOnlineMethod = methods.card || methods.square || methods.paypal;
@@ -214,6 +280,17 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
             <p className="text-2xl">💛</p>
             <p className="font-semibold">Thank you for your donation!</p>
             <Button onClick={() => onOpenChange(false)} className="mt-4">Close</Button>
+          </div>
+        ) : waitingOnPopup ? (
+          <div className="text-center py-6 space-y-2">
+            <p className="text-2xl">💳</p>
+            <p className="font-semibold">Complete your payment in the popup window</p>
+            <p className="text-sm text-muted-foreground">
+              This dialog will update automatically once payment is confirmed.
+            </p>
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="mt-2">
+              Cancel
+            </Button>
           </div>
         ) : showingPaypal && donationId ? (
           <div className="space-y-4">
