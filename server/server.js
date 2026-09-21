@@ -47,6 +47,7 @@ import couponsRoutes from "./routes/coupons.routes.js";
 import registrationExtrasRoutes from "./routes/registrationExtras.routes.js";
 import { syncRegistrationAttendees } from "./lib/attendees.js";
 import { sendEventTickets } from "./lib/tickets.js";
+import { recordPaymentAttempt, markPaymentPaid, getPayment } from "./lib/registrationPayments.js";
 import { slugify } from "./lib/slugify.js";
 import { DATA_ROOT } from "./lib/dataRoot.js";
 import { importMembersDropIn } from "./lib/importMembersDropIn.js";
@@ -385,23 +386,34 @@ app.post("/api/events", async (req, res) => {
 
   // ── Send a simple success confirmation email (text mention of membership
   // number if applicable - no card, no QR, no PDF) ────────────────────────
-  const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
-  sendEventConfirmationEmail({
-    to: email,
-    name,
-    eventName,
-    eventDate,
-    registrationNumber: newRegistration.registration_number,
-    fee: applicableFee,
-    membershipNumber: matchedMember?.membership_number || null,
-    // Only meaningful (and only ever included in the email) when a fee is
-    // actually owed — see sendEventConfirmationEmail, which only renders a
-    // "Pay Now" link when payToken is present AND the fee is > 0.
-    payToken: newRegistration.pay_token,
-    baseUrl,
-    flyerBuffer,
-    flyerFilename,
-  }).catch((err) => console.error("Event email error:", err));
+  //
+  // For a FREE registration this fires immediately, same as always — the
+  // registration is already confirmed, nothing else is going to happen.
+  //
+  // For a PAID registration, this is deliberately held back. The success
+  // dialog the browser is about to show offers to pay right there — an
+  // email saying "payment required, here's a link" the instant they've
+  // already submitted the form, while they're still looking at that exact
+  // payment UI, is redundant at best and confusing at worst (a "please
+  // pay" email arriving while they're mid-payment). It's sent instead
+  // from /api/events/registration/:id/send-payment-reminder, triggered by
+  // the client when the dialog is closed/abandoned still unpaid — i.e.
+  // only when it's actually useful. If they pay right there instead, they
+  // get the "Payment Confirmed" email from that path, and this one never
+  // needs to go out at all.
+  if (applicableFee <= 0) {
+    sendEventConfirmationEmail({
+      to: email,
+      name,
+      eventName,
+      eventDate,
+      registrationNumber: newRegistration.registration_number,
+      fee: applicableFee,
+      membershipNumber: matchedMember?.membership_number || null,
+      flyerBuffer,
+      flyerFilename,
+    }).catch((err) => console.error("Event email error:", err));
+  }
 
   // Free events are confirmed immediately, so their QR tickets go out
   // right away too. Paid events start "pending_payment" — sendEventTickets
@@ -697,6 +709,153 @@ app.get("/api/events/registration/by-token/:token", async (req, res) => {
   } catch (err) {
     console.error("REGISTRATION BY TOKEN ERROR:", err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ============================================================
+   PUBLIC: pay a registration's remaining balance by card — a dedicated
+   Stripe Checkout session for exactly what's owed on THIS registration.
+   Deliberately NOT routed through the ticketing/ticket-types system
+   (kutumb_orders/kutumb_ticket_types) the way the old RegistrationCheckoutModal
+   was: that system has no concept of "this registration's fee" — it prices
+   off a shared per-event "General" ticket type, whose price is set once,
+   the first time anyone pays with it, and never changes after. Every
+   subsequent registration for that event (a different headcount, a
+   different member/non-member rate) would silently be charged that first
+   price instead of its own — that's what caused $20 owed to charge $60.
+   Uses the same pattern as Square/PayPal's registration payments instead
+   (registrationPayments.js, kutumb_registration_payments — the remaining
+   balance is computed here, server-side, from the registration itself).
+   ============================================================ */
+app.post("/api/events/registration/:id/checkout-card", async (req, res) => {
+  try {
+    const registrationId = Number(req.params.id);
+    const { rows } = await pool.query("SELECT * FROM kutumb_event_registrations WHERE id = $1", [registrationId]);
+    const registration = rows[0];
+    if (!registration) return res.status(404).json({ message: "Registration not found" });
+
+    const fee = Number(registration.fee) || 0;
+    const alreadyPaid = Number(registration.payment_amount) || 0;
+    const remaining = Math.max(fee - alreadyPaid, 0);
+    if (remaining <= 0) {
+      return res.status(400).json({ message: "This registration has no remaining balance to pay" });
+    }
+
+    const stripe = await getStripe();
+    if (!stripe) {
+      return res.status(503).json({ message: "Card payments aren't configured yet. Ask the admin to add a Stripe secret key in the Admin Console." });
+    }
+
+    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: registration.email,
+      line_items: [
+        {
+          price_data: {
+            currency: "aud",
+            product_data: { name: `${registration.event_name} registration — ${registration.name}` },
+            unit_amount: Math.round(remaining * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${baseUrl}/checkout/return?provider=registration-card&registrationId=${registrationId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/checkout/return?provider=registration-card&registrationId=${registrationId}&cancelled=1`,
+      metadata: { registrationCardPayment: "1", registrationId: String(registrationId) },
+    });
+
+    await recordPaymentAttempt(registrationId, "card", session.id, remaining);
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error("REGISTRATION CARD CHECKOUT ERROR:", err);
+    res.status(500).json({ message: "Could not start card checkout" });
+  }
+});
+
+// Fallback for the /checkout/return page, in case the webhook hasn't
+// landed yet — same pattern as the donation and Square equivalents.
+app.get("/api/events/registration/:id/card-status", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM kutumb_registration_payments WHERE registration_id = $1 AND provider = 'card' ORDER BY created_at DESC LIMIT 1",
+      [req.params.id]
+    );
+    const payment = rows[0];
+    if (!payment) return res.status(404).json({ message: "No card payment found for this registration" });
+
+    if (payment.status === "pending") {
+      const stripe = await getStripe();
+      if (stripe) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(payment.provider_reference);
+          if (session.payment_status === "paid") {
+            await markPaymentPaid(payment.id, session.payment_status, session.payment_intent);
+          }
+        } catch (err) {
+          console.error("REGISTRATION CARD STATUS CHECK ERROR:", err);
+        }
+      }
+    }
+
+    const refreshed = await getPayment(payment.id);
+    res.json({ status: refreshed?.status || payment.status, registrationId: payment.registration_id });
+  } catch (err) {
+    console.error("REGISTRATION CARD STATUS ERROR:", err);
+    res.status(500).json({ message: "Could not check payment status" });
+  }
+});
+
+// PUBLIC: sends the "Registration Received — Payment Required" email
+// (with its "Pay Now" link) for one still-pending registration. Called
+// from the browser when the success dialog is dismissed — closed, or the
+// tab/window itself is closed — while payment still hasn't happened; see
+// the long comment on the immediate-email decision in POST /api/events.
+// Never sends more than once (payment_email_sent_at is a one-way claim,
+// same idea as tickets_sent_at), and is a silent no-op — not an error —
+// for a registration that's already paid, already emailed, or that never
+// owed anything in the first place, so the client can fire this
+// speculatively without checking any of that itself first.
+app.post("/api/events/registration/:id/send-payment-reminder", async (req, res) => {
+  try {
+    const registrationId = Number(req.params.id);
+    const { rows } = await pool.query(
+      `UPDATE kutumb_event_registrations
+       SET payment_email_sent_at = now()
+       WHERE id = $1 AND registration_status = 'pending_payment' AND payment_email_sent_at IS NULL
+       RETURNING *`,
+      [registrationId]
+    );
+    const registration = rows[0];
+    if (!registration) return res.json({ sent: false });
+
+    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    // Registrations don't store the event date themselves — best-effort
+    // look it up, same as the by-token endpoint above.
+    const { rows: eventRows } = await pool.query(
+      "SELECT date_text FROM kutumb_upcoming_events WHERE lower(title) = lower($1)",
+      [registration.event_name]
+    );
+    sendEventConfirmationEmail({
+      to: registration.email,
+      name: registration.name,
+      eventName: registration.event_name,
+      eventDate: eventRows[0]?.date_text || null,
+      registrationNumber: registration.registration_number,
+      fee: Number(registration.fee),
+      membershipNumber: registration.membership_number,
+      payToken: registration.pay_token,
+      baseUrl,
+    }).catch((err) => console.error("Payment reminder email error:", err));
+
+    res.json({ sent: true });
+  } catch (err) {
+    console.error("SEND PAYMENT REMINDER ERROR:", err);
+    // Still 200 here on purpose — this can be called via navigator.sendBeacon
+    // on tab close, which never sees the response anyway, and the client's
+    // explicit-close path already treats this as fire-and-forget.
+    res.status(200).json({ sent: false });
   }
 });
 

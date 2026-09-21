@@ -7,6 +7,7 @@ import { getSetting } from "../lib/settings.js";
 import { logAudit } from "../lib/audit.js";
 import { slugify } from "../lib/slugify.js";
 import { findDonationPaymentByReference, markDonationPaymentPaid } from "../lib/donationPayments.js";
+import { findPaymentByReference, markPaymentPaid } from "../lib/registrationPayments.js";
 
 const router = Router();
 
@@ -396,6 +397,16 @@ export async function stripeWebhookHandler(req, res) {
       const donationRecord = await findDonationPaymentByReference("card", session.id);
       if (donationRecord) {
         await markDonationPaymentPaid(donationRecord.id, session.payment_status, session.payment_intent);
+      }
+    } else if (session.metadata?.registrationId) {
+      // A registration's fee paid by card via the dedicated
+      // /api/events/registration/:id/checkout-card endpoint — also doesn't
+      // go through kutumb_orders. Same registrationPayments.js path
+      // Square/PayPal already use, so it gets the same partial-payment
+      // handling, confirmation email, and ticket email for free.
+      const paymentRecord = await findPaymentByReference("card", session.id);
+      if (paymentRecord) {
+        await markPaymentPaid(paymentRecord.id, session.payment_status, session.payment_intent);
       }
     }
   }

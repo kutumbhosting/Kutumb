@@ -468,3 +468,10 @@ ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS tickets_sent_at 
 -- being a guessable sequential id that would let anyone view or pay
 -- someone else's registration just by incrementing a number.
 ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS pay_token TEXT UNIQUE;
+
+-- One-way claim (same pattern as tickets_sent_at) so the "payment
+-- required" reminder email — sent only once someone leaves the success
+-- dialog still unpaid, see /api/events/registration/:id/send-payment-reminder
+-- — can never go out twice for the same registration, even if the
+-- beforeunload beacon and an explicit Close click both fire.
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_email_sent_at TIMESTAMPTZ;
