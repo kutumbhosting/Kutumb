@@ -167,13 +167,22 @@ const Events = () => {
         childrenUnder5: 0,
         children5Plus: 0,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("API Error:", error);
+      // Show the server's actual reason when we have one (e.g. "that event
+      // couldn't be found, please refresh") instead of always blaming the
+      // connection — a network failure is only one of several ways this
+      // can fail, and the wrong message here just sends people chasing the
+      // wrong fix.
+      const description =
+        error instanceof TypeError
+          ? "Couldn't reach the server. Check your connection and try again."
+          : error?.message || "Something went wrong. Please try again.";
       setSubmitMessage("Submission failed. Try again.");
       setTimeout(() => setSubmitMessage(""), 5000);
       toast({
         title: "Submission Failed",
-        description: "Backend not running or API not reachable.",
+        description,
         variant: "destructive",
       });
     }
