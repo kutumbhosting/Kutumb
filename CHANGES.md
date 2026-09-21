@@ -16,6 +16,89 @@ TypeScript compiles clean, Vite build succeeds) is in this zip.
 
 ---
 
+## Fix: "Pay Now" email link opened api.stripe.com; email now lists every payment method
+
+**Bug.** The pending-payment registration email builds its link as
+`{public base URL}/pay/{token}`. The saved *Public Base URL*
+(Settings & Access → Platform, or `PUBLIC_BASE_URL` in `.env`) had been set to
+`https://api.stripe.com`, so the button pointed at Stripe's API host instead of
+this website. The same value is used for Stripe/Square return URLs.
+
+**Fix.**
+- `server/lib/publicUrl.js` (new) — one place that decides the base URL. It
+  rejects Stripe/PayPal/Square addresses, strips paths/trailing slashes, and if
+  the setting is missing or invalid falls back to `PUBLIC_BASE_URL`, then the
+  address of the request that triggered the email, then localhost. All seven
+  places that previously read the setting directly now use it.
+- Saving *Public Base URL* in Settings & Access is validated (a provider
+  address gets a clear error instead of being stored).
+- A startup log line reports the base URL in use, or warns if none is valid.
+- **You still need to correct the saved value** — see below.
+
+**Email.** The registration email now shows the main *Pay $X Now* button plus
+one option per enabled payment method (Settings & Access → Payment Methods):
+card (Stripe), PayPal, Square — each linking to `/pay/{token}?method=…` — and
+bank transfer with the account details inline and the registration number as
+the payment reference (the reconciliation matcher already keys on it). The pay
+page opens with the chosen method first and highlighted; the others remain
+available below it.
+
+---
+
+## Payment link opens the wrong address; checkout window; tickets-after-verification wording
+
+**Wrong link (`http://localhost:8080/pay/...`).** With the saved Public Base URL
+unusable (it was `https://api.stripe.com`) and no `PUBLIC_BASE_URL` set, the link
+falls back to the address the app is running on — `localhost:8080` when run on a
+PC — which only opens on that PC. The site's real domain isn't stored anywhere,
+so it has to be set once: **Settings & Access → Platform → Public Base URL**
+(e.g. `https://www.kutumb.org.au`), or `PUBLIC_BASE_URL` in `.env`. The Settings
+field now shows a red warning whenever the value is unusable, unset, or a
+localhost/LAN address, and the server console logs the same.
+
+**Checkout window.** The email's *Pay Now* and per-method buttons open (in a new
+window) a focused checkout page — no site menu or footer — showing the amount
+due and the options: card, Square, PayPal, bank transfer. Card and Square still
+open the provider's checkout in a popup from there. (A link in an email cannot
+itself open a JavaScript popup; this is the closest equivalent.)
+
+**Bank transfer wording.** After a transfer reference is submitted, the payment
+page, the registration dialog, the toast, and the acknowledgement email all say
+the ticket(s) will be issued after the payment has been verified. The bank block
+shows the same note before submitting.
+
+---
+
+## Fix: registrations showing "Paid" but still "Pending Payment", with no tickets
+
+**Bug.** Typing a bank-transfer reference on the payment page marked the
+registration `Paid` immediately (and emailed "Payment Confirmed ✅") even though
+nothing had been verified. The registration itself stayed `Pending Payment`,
+with no amount, date or method, and no tickets were sent. Bank-statement
+reconciliation had a similar gap: it set `Paid` without confirming.
+
+**Behaviour now.**
+- A registrant's transfer reference is a *claim*: it is stored, the registration
+  stays `Pending`, and they get a "Bank Transfer Received (Pending
+  Verification)" email. The payment page and success dialog say the same
+  ("Transfer details received — awaiting verification"), not "confirmed". Choosing
+  "No, not yet" records nothing and no longer shows a success screen.
+- Payment is verified by an admin setting Payment Status → Paid, or by uploading
+  a bank statement. Both set Paid + Confirmed together and send the tickets once.
+  A statement credit that only partly covers the fee records the amount but
+  leaves the registration Pending.
+- `schema.sql` repairs rows already in the contradictory state (runs on every
+  start, safe to repeat): unverified claims go back to Pending (reference kept);
+  rows backed by a bank credit that covers the fee become Confirmed; short
+  payments become Pending.
+- Sending tickets now builds the per-person QR list first if a registration has
+  none, instead of marking tickets "sent" and sending nothing.
+
+**Note.** Rows the repair *confirms* (bank credit already matched) get their
+tickets the next time an admin re-saves that registration's Payment Status.
+
+---
+
 ## 1. What changed, by requirement
 
 | # | Requirement | Where |
