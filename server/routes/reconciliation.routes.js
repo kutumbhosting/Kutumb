@@ -22,6 +22,8 @@ import { requireAdmin } from "../lib/auth.js";
 import { parseBankStatement } from "../lib/bankStatementParser.js";
 import { reconcile, groupAllocationsByRegistration } from "../lib/paymentReconciliation.js";
 import { buildReconciliationWorkbook } from "../lib/reconciliationReportBuilder.js";
+import { sendEventPaymentConfirmationEmail } from "../lib/mailer.js";
+import { sendEventTickets } from "../lib/tickets.js";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
@@ -45,6 +47,7 @@ function dbRowToRegistration(r) {
     bankTransferred: r.bank_transferred,
     transactionNumber: r.transaction_number,
     paymentStatus: r.payment_status,
+    registrationStatus: r.registration_status,
     paymentAmount: r.payment_amount !== null ? Number(r.payment_amount) : null,
     paymentDate: r.payment_date,
     paymentMatchConfidence: r.payment_match_confidence,
@@ -91,21 +94,33 @@ router.post("/", requireAdmin, upload.single("bankStatement"), async (req, res) 
     const { allocations, unmatchedCredits } = reconcile(registrations, parsed.transactions);
     const grouped = groupAllocationsByRegistration(allocations, (reg) => reg.id);
 
-    // ── Apply updates: only flip Pending/N-A → Paid; never touch a row
-    // already Paid, and never overwrite a manually-entered transaction
-    // number. Already-Paid rows missing amount/date get those backfilled
-    // only (so older manually-marked-Paid rows still gain the new columns).
+    // ── Apply updates. A bank credit that fully covers the fee is a VERIFIED
+    // payment, so in one statement the registration becomes Paid AND
+    // Confirmed, with its payment method set (previously only payment_status
+    // changed, leaving a row showing "Paid" yet still "Pending Payment", with
+    // no tickets). A credit that covers only part of the fee records the
+    // amount, date and match but leaves the registration Pending — the same
+    // convention card/coupon part-payments use — so a short payment never
+    // confirms a registration or releases tickets by itself; an admin can
+    // still mark it Paid by hand. Never overwrites a manually-entered
+    // transaction number, and re-running the same statement can't double
+    // count (amount/date are only filled when empty).
     const updatedRows = [];
     for (const reg of registrations) {
       const match = grouped.get(reg.id);
       if (!match) continue;
 
       const wasPaid = reg.paymentStatus === "Paid";
-      const newStatus = wasPaid ? reg.paymentStatus : "Paid";
+      const fee = Number(reg.fee) || 0;
+      const amountRecorded = reg.paymentAmount !== null ? reg.paymentAmount : match.amount;
+      const coversFee = amountRecorded >= fee;
+      const newStatus = wasPaid || coversFee ? "Paid" : reg.paymentStatus;
 
       const { rows } = await pool.query(
         `UPDATE kutumb_event_registrations SET
            payment_status = $1,
+           registration_status = CASE WHEN $1 = 'Paid' THEN 'confirmed' ELSE registration_status END,
+           payment_method = CASE WHEN $1 = 'Paid' THEN COALESCE(payment_method, 'bank_transfer') ELSE payment_method END,
            payment_amount = COALESCE(payment_amount, $2),
            payment_date = COALESCE(payment_date, $3),
            payment_match_confidence = $4,
@@ -125,7 +140,22 @@ router.post("/", requireAdmin, upload.single("bankStatement"), async (req, res) 
         newStatus: finalRow.paymentStatus,
         amount: match.amount,
         confidence: match.confidence,
+        partial: !wasPaid && !coversFee,
       });
+
+      // Only when this run is what confirmed it. sendEventTickets has its
+      // own one-time claim, so it's safe even if another path got there first.
+      if (finalRow.registrationStatus === "confirmed" && reg.registrationStatus !== "confirmed") {
+        sendEventPaymentConfirmationEmail({
+          to: finalRow.email,
+          name: finalRow.name,
+          eventName: finalRow.eventName,
+          registrationNumber: finalRow.registrationNumber,
+          fee: finalRow.fee,
+          transactionNumber: finalRow.transactionNumber || "Bank transfer",
+        }).catch((err) => console.error("Reconciliation payment confirmation email error:", err));
+        sendEventTickets(finalRow.id).catch((err) => console.error("Reconciliation ticket email error:", err));
+      }
     }
 
     // Re-fetch fresh rows for the report (guarantees we reflect exactly
@@ -150,7 +180,8 @@ router.post("/", requireAdmin, upload.single("bankStatement"), async (req, res) 
     const summary = {
       totalRegistrations: registrations.length,
       totalTransactionsInFile: parsed.transactions.length,
-      newlyMatched: updatedRows.filter((u) => u.previousStatus !== "Paid").length,
+      newlyMatched: updatedRows.filter((u) => u.previousStatus !== "Paid" && u.newStatus === "Paid").length,
+      partialPayments: updatedRows.filter((u) => u.partial).length,
       alreadyPaid: registrations.filter((r) => r.paymentStatus === "Paid").length,
       stillUnpaid: reportRows.filter((r) => r.paymentStatus !== "Paid").length,
       amountMatched: reportRows.reduce((s, r) => s + (Number(r.paymentAmount) || 0), 0),
@@ -182,7 +213,7 @@ router.post("/", requireAdmin, upload.single("bankStatement"), async (req, res) 
     );
 
     res.json({
-      message: `Reconciled ${parsed.transactions.length} bank credit(s) against ${registrations.length} registration(s): ${summary.newlyMatched} newly marked Paid.`,
+      message: `Reconciled ${parsed.transactions.length} bank credit(s) against ${registrations.length} registration(s): ${summary.newlyMatched} newly marked Paid${summary.partialPayments ? `, ${summary.partialPayments} part-payment(s) left Pending` : ""}.`,
       reconciliationId: savedRun[0].id,
       summary,
       updated: updatedRows,

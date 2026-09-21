@@ -54,6 +54,27 @@ export function normalizeBaseUrl(raw) {
   return { url: parsed.origin };
 }
 
+/** True for addresses only reachable from the machine running the server
+ *  (localhost, 127.x, ::1, private LAN ranges, *.local). A link to one of
+ *  these opens for the person running the app and for nobody else. */
+export function isLocalUrl(url) {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return (
+      h === "localhost" ||
+      h.endsWith(".localhost") ||
+      h.endsWith(".local") ||
+      h === "[::1]" ||
+      /^127\./.test(h) ||
+      /^10\./.test(h) ||
+      /^192\.168\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+    );
+  } catch {
+    return false;
+  }
+}
+
 const warned = new Set();
 function warnOnce(key, message) {
   if (warned.has(key)) return;
@@ -89,22 +110,59 @@ export async function getConfiguredPublicBaseUrl() {
  *      so links still point at the real site if the setting is missing/bad
  *   3. http://localhost:8080 (local development)
  */
+function warnIfLocal(url) {
+  if (isLocalUrl(url)) {
+    warnOnce(
+      `fallback-local:${url}`,
+      `No public base URL is configured, so payment links are being built from ${url}, which only works on this computer. Set your real website address in Settings & Access → Platform (or PUBLIC_BASE_URL in .env).`
+    );
+  }
+  return url;
+}
+
 export async function getPublicBaseUrl(req) {
   const configured = await getConfiguredPublicBaseUrl();
-  if (configured) return configured;
+  if (configured && !isLocalUrl(configured)) return configured;
+  if (configured) {
+    warnOnce(`local:${configured}`, `Public Base URL is ${configured} — emailed payment links only work on this computer. Set your real website address in Settings & Access → Platform (or PUBLIC_BASE_URL in .env).`);
+    return configured;
+  }
 
   if (req) {
     const origin = req.get?.("origin");
     if (origin) {
       const { url } = normalizeBaseUrl(origin);
-      if (url) return url;
+      if (url) return warnIfLocal(url);
     }
     const host = req.get?.("x-forwarded-host") || req.get?.("host");
     if (host) {
       const proto = (req.get?.("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
       const { url } = normalizeBaseUrl(`${proto}://${host.split(",")[0].trim()}`);
-      if (url) return url;
+      if (url) return warnIfLocal(url);
     }
   }
-  return `http://localhost:${process.env.PORT || 8080}`;
+  return warnIfLocal(`http://localhost:${process.env.PORT || 8080}`);
+}
+
+/**
+ * Used by the admin Settings screen: says what the Public Base URL setting
+ * is actually resolving to and, if that isn't a real public address, why —
+ * so a bad value shows up as a red message on the field instead of only as
+ * broken links in emails. Returns null when everything is fine.
+ */
+export async function getPublicBaseUrlWarning() {
+  const saved = await getSetting("public_base_url");
+  if (saved) {
+    const { url, error } = normalizeBaseUrl(saved);
+    if (error) {
+      return `The saved value can't be used (${error}) — emailed payment links are ignoring it. Enter your website address, e.g. https://www.kutumb.org.au`;
+    }
+    if (isLocalUrl(url)) {
+      return `${url} only works on the computer running the app. Anyone who opens an emailed payment link will not reach it. Enter your real website address, e.g. https://www.kutumb.org.au`;
+    }
+    return null;
+  }
+  const configured = await getConfiguredPublicBaseUrl();
+  if (configured && !isLocalUrl(configured)) return null;
+  return "Not set. Until it is, emailed payment links point at the address the app is running on (e.g. http://localhost:8080), which nobody else can open. Enter your real website address, e.g. https://www.kutumb.org.au";
 }

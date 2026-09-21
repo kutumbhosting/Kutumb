@@ -5,7 +5,7 @@ import { buildPoolConfig } from "../db/pool.js";
 import { readEnvFile, setEnvVar } from "../lib/envFile.js";
 import { requireSuperAdmin, hashPassword } from "../lib/auth.js";
 import { getAllSettingsForAdmin, setSetting, deleteSetting, getSetting, SETTINGS_SCHEMA } from "../lib/settings.js";
-import { normalizeBaseUrl } from "../lib/publicUrl.js";
+import { normalizeBaseUrl, getPublicBaseUrlWarning } from "../lib/publicUrl.js";
 import { logAudit } from "../lib/audit.js";
 import { importMembersDropIn } from "../lib/importMembersDropIn.js";
 import { listGroqModels } from "../lib/aiDraft.js";
@@ -19,7 +19,11 @@ router.use(requireSuperAdmin);
 
 /* -------- Settings (Stripe keys etc.) -------- */
 router.get("/settings", async (req, res) => {
-  res.json(await getAllSettingsForAdmin());
+  const settings = await getAllSettingsForAdmin();
+  // Flag an unusable/local Public Base URL right on its field — it otherwise
+  // only shows up as broken links in emailed payment buttons.
+  const warning = await getPublicBaseUrlWarning().catch(() => null);
+  res.json(settings.map((s) => (s.key === "public_base_url" && warning ? { ...s, warning } : s)));
 });
 
 router.put("/settings/:key", async (req, res) => {

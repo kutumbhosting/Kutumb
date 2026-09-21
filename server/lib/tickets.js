@@ -1,5 +1,5 @@
 import { pool } from "../db/pool.js";
-import { getAttendeesForRegistration } from "./attendees.js";
+import { getAttendeesForRegistration, syncRegistrationAttendees } from "./attendees.js";
 import { generateQrPngBuffer, buildEventTicketsPdf } from "./membershipCard.js";
 import { sendEventTicketsEmail } from "./mailer.js";
 
@@ -30,7 +30,16 @@ export async function sendEventTickets(registrationId) {
     const registration = claimed[0];
     if (!registration) return; // not confirmed yet, or tickets already sent
 
-    const attendeeRows = await getAttendeesForRegistration(registrationId);
+    let attendeeRows = await getAttendeesForRegistration(registrationId);
+    if (attendeeRows.length === 0) {
+      // A registration created outside the normal signup flow (legacy or
+      // imported rows) can have no per-person QR rows yet. The claim above has
+      // already landed, so bailing out here would mean tickets are marked
+      // sent but never go out — build the attendee list from the
+      // registration's headcount instead (idempotent), then carry on.
+      await syncRegistrationAttendees(pool, registration);
+      attendeeRows = await getAttendeesForRegistration(registrationId);
+    }
     if (attendeeRows.length === 0) {
       console.error(`No attendees found for registration ${registrationId} — skipping ticket email`);
       return;

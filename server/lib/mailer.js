@@ -54,7 +54,7 @@ function buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMetho
             <div style="font-size:12px;color:#6b7280;margin-top:2px;">${description}</div>
           </td>
           <td style="vertical-align:middle;text-align:right;white-space:nowrap;">
-            <a href="${href}" style="display:inline-block;background:${buttonColor};color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:6px;font-weight:600;font-size:13px;">${buttonLabel}</a>
+            <a href="${href}" target="_blank" rel="noopener" style="display:inline-block;background:${buttonColor};color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:6px;font-weight:600;font-size:13px;">${buttonLabel}</a>
           </td>
         </tr>
       </table>
@@ -101,8 +101,9 @@ function buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMetho
         Reference: <strong>${reference}</strong>
       </div>
       <div style="font-size:12px;color:#6b7280;margin-top:6px;">
-        Please use the reference above so we can match your payment.
-        Once you've transferred, <a href="${link("bank")}" style="color:#c2410c;">let us know here</a>
+        Please use the reference above so we can match your payment. Tickets are issued
+        once your transfer has been verified.
+        Once you've transferred, <a href="${link("bank")}" target="_blank" rel="noopener" style="color:#c2410c;">let us know here</a>
         with your transaction number.
       </div>
     </div>`);
@@ -272,7 +273,7 @@ export async function sendEventConfirmationEmail({
     : "";
   const payButton = payUrl
     ? `<p style="text-align:center;margin:20px 0 4px;">
-         <a href="${payUrl}" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
+         <a href="${payUrl}" target="_blank" rel="noopener" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
            Pay $${fee} Now
          </a>
        </p>
@@ -412,6 +413,51 @@ export async function sendEventTicketsEmail({
         ? [{ filename: `kutumb-tickets-${registrationNumber || "event"}.pdf`, content: ticketsPdfBuffer }]
         : []),
     ],
+  });
+}
+
+/**
+ * Sent when a registrant says they've made a bank transfer and enters its
+ * reference. It is an acknowledgement only — the registration stays pending
+ * until the transfer is actually found in Kutumb's bank account, at which
+ * point the real "Payment Confirmed" email and the tickets go out.
+ */
+export async function sendBankTransferReceivedEmail({
+  to,
+  name,
+  eventName,
+  registrationNumber,
+  fee,
+  transactionNumber,
+}) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">Bank Transfer Details Received</h2>
+      <p>Hi ${name}, thanks - we've noted your bank transfer for:</p>
+      <p style="font-size:16px;"><strong>${eventName}</strong></p>
+      ${registrationNumber ? `<p style="font-size:14px;">Registration Number: <strong>${registrationNumber}</strong></p>` : ""}
+      <p style="font-size:14px;">Amount: <strong>$${fee}</strong> &middot; Your Reference: <strong>${transactionNumber}</strong></p>
+      <p style="font-size:14px;">Status: <strong style="color:#b45309;">Awaiting verification</strong></p>
+      <p style="font-size:14px;font-weight:600;color:#9a3412;">
+        Your ticket(s) will be issued after your payment has been verified.
+      </p>
+      <p style="font-size:13px;color:#555;">
+        We'll confirm your registration as soon as the payment shows in our bank account
+        (this can take a few business days). You'll then receive a confirmation email, and
+        your ticket(s) with a QR code for each person on this registration.
+      </p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">
+        With Best Regards, &middot; Kutumb Executive Team
+      </p>
+    </div>
+  `;
+
+  return send({
+    to,
+    subject: `Bank Transfer Received (Pending Verification) - ${eventName}`,
+    html,
+    attachments: logoAttachment(),
   });
 }
 

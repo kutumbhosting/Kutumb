@@ -16,6 +16,7 @@ import {
   sendMembershipConfirmationEmail,
   sendEventConfirmationEmail,
   sendEventPaymentConfirmationEmail,
+  sendBankTransferReceivedEmail,
   sendDonationThankYouEmail,
   checkEmailConfig,
   sendTestEmail,
@@ -26,7 +27,7 @@ import { parseEventEndDate, sortPastEventsDescending } from "./lib/eventDates.js
 import { requireAdmin, requireSuperAdmin } from "./lib/auth.js";
 import { getPaymentMethodSettings, getSetting } from "./lib/settings.js";
 import { getStripe } from "./lib/stripeClient.js";
-import { getPublicBaseUrl, getConfiguredPublicBaseUrl } from "./lib/publicUrl.js";
+import { getPublicBaseUrl, getConfiguredPublicBaseUrl, isLocalUrl } from "./lib/publicUrl.js";
 import {
   recordDonationPaymentAttempt,
   findDonationPaymentByReference,
@@ -866,40 +867,66 @@ app.post("/api/events/registration/:id/send-payment-reminder", async (req, res) 
 
 app.post("/api/events/record-payment", async (req, res) => {
   try {
-    const { eventName, eventYear, email, bankTransferred, transactionNumber } = req.body;
-    if (!eventName || !eventYear || !email) {
+    const { registrationId, eventName, eventYear, email, bankTransferred, transactionNumber } = req.body;
+    if (!registrationId && (!eventName || !eventYear || !email)) {
       return res.status(400).json({ message: "Missing required fields" });
     }
-    if (bankTransferred && !transactionNumber?.trim()) {
+    // Nothing to record unless they're saying a transfer has been made.
+    if (!bankTransferred) return res.json({ message: "No payment recorded", status: "none" });
+    const txn = String(transactionNumber || "").trim();
+    if (!txn) {
       return res.status(400).json({ message: "Transaction number is required when bank transfer is marked as done" });
     }
 
+    // Prefer the exact registration id (sent by the payment panel); fall back
+    // to event + year + email, taking the newest if there's more than one.
+    const { rows: found } = registrationId
+      ? await pool.query("SELECT * FROM kutumb_event_registrations WHERE id = $1", [Number(registrationId)])
+      : await pool.query(
+          `SELECT * FROM kutumb_event_registrations
+           WHERE event_name = $1 AND event_year = $2 AND lower(email) = lower($3)
+           ORDER BY created_at DESC LIMIT 1`,
+          [eventName, eventYear, email]
+        );
+    const existing = found[0];
+    if (!existing) return res.status(404).json({ message: "Registration not found" });
+
+    // Never downgrade or overwrite a registration that's already paid.
+    if (existing.payment_status === "Paid" || existing.registration_status === "confirmed") {
+      return res.json({ message: "This registration is already paid", status: "already_paid" });
+    }
+
+    // A transaction number typed in by the registrant is a CLAIM, not proof.
+    // Record it, but leave payment_status 'Pending' and registration_status
+    // 'pending_payment' — they only change once the transfer is verified: an
+    // admin sets Payment Status = Paid, or the bank-statement reconciliation
+    // matches it (both flip status, method and confirmation together, and
+    // send the tickets). Marking it Paid here is what used to leave a
+    // registration showing "Paid" but "Pending Payment" at once, with no
+    // amount, date or method, and no tickets.
     const { rows } = await pool.query(
       `UPDATE kutumb_event_registrations
-       SET bank_transferred = $1, transaction_number = $2, payment_status = $3
-       WHERE event_name = $4 AND event_year = $5 AND lower(email) = lower($6)
+       SET bank_transferred = TRUE, transaction_number = $1
+       WHERE id = $2
        RETURNING *`,
-      [!!bankTransferred, bankTransferred ? transactionNumber : null, bankTransferred ? "Paid" : "Pending", eventName, eventYear, email]
+      [txn, existing.id]
     );
-
-    if (rows.length === 0) return res.status(404).json({ message: "Registration not found" });
     const updatedEntry = rows[0];
 
-    // Only send a "payment confirmed" email once they've actually marked
-    // the bank transfer as done - marking "no, not yet" has nothing to confirm.
-    if (updatedEntry.bank_transferred) {
-      sendEventPaymentConfirmationEmail({
+    // Acknowledge receipt (once per distinct reference) — but say plainly that
+    // it isn't confirmed yet, rather than "Payment Confirmed".
+    if (existing.transaction_number !== txn) {
+      sendBankTransferReceivedEmail({
         to: updatedEntry.email,
         name: updatedEntry.name,
         eventName: updatedEntry.event_name,
-        eventDate: req.body.eventDate || null,
         registrationNumber: updatedEntry.registration_number,
         fee: Number(updatedEntry.fee),
-        transactionNumber: updatedEntry.transaction_number,
-      }).catch((err) => console.error("Payment confirmation email error:", err));
+        transactionNumber: txn,
+      }).catch((err) => console.error("Bank transfer received email error:", err));
     }
 
-    res.json({ message: "Payment details recorded" });
+    res.json({ message: "Transfer details recorded — pending verification", status: "pending_verification" });
   } catch (err) {
     console.error("RECORD PAYMENT ERROR:", err);
     res.status(500).json({ message: "Server error" });
@@ -1967,7 +1994,8 @@ app.listen(PORT, "0.0.0.0", () => {
   // loudly at startup if the setting is missing or was saved wrongly.
   getConfiguredPublicBaseUrl()
     .then((url) => {
-      if (url) console.log(`✅ Public base URL: ${url}`);
+      if (url && !isLocalUrl(url)) console.log(`✅ Public base URL: ${url}`);
+      else if (url) console.warn(`⚠️  Public base URL is ${url} - emailed payment links will only work on this computer. Set your real website address under Settings & Access → Platform (or PUBLIC_BASE_URL in .env).`);
       else console.warn("⚠️  No valid public base URL configured - set it under Settings & Access → Platform (or PUBLIC_BASE_URL in .env). Emailed payment links will fall back to the address of the request that triggered them.");
     })
     .catch((err) => console.error("Public base URL check failed:", err));

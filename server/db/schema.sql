@@ -475,3 +475,42 @@ ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS pay_token TEXT U
 -- — can never go out twice for the same registration, even if the
 -- beforeunload beacon and an explicit Close click both fire.
 ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_email_sent_at TIMESTAMPTZ;
+
+-- ============================================================
+-- Repair: registrations showing payment_status = 'Paid' while still
+-- registration_status = 'pending_payment' (a contradiction — Paid must mean
+-- confirmed). Two old code paths caused it: a registrant typing a bank
+-- transfer reference used to be marked Paid straight away, and bank-statement
+-- reconciliation flipped payment_status without confirming the registration.
+-- Both are fixed; this cleans up rows they already left behind. Idempotent —
+-- once nothing matches, it changes nothing — so safe on every start.
+--
+--  1. Self-declared transfer, never verified (no amount recorded, no bank
+--     match)  -> back to Pending. The reference and bank_transferred flag are
+--     kept, so it still shows as "claimed, awaiting verification".
+--  2. Matched to a bank credit that covers the fee -> Confirmed.
+--  3. Matched to a bank credit that falls short of the fee -> Pending (the
+--     recorded amount stays, so the shortfall is visible).
+-- Tickets for rows repaired by step 2 go out the next time an admin re-saves
+-- the registration's Payment Status (that path sends them once).
+-- ============================================================
+UPDATE kutumb_event_registrations
+   SET payment_status = 'Pending'
+ WHERE payment_status = 'Paid'
+   AND registration_status = 'pending_payment'
+   AND payment_amount IS NULL
+   AND payment_match_confidence IS NULL;
+
+UPDATE kutumb_event_registrations
+   SET registration_status = 'confirmed',
+       payment_method = COALESCE(payment_method, 'bank_transfer')
+ WHERE payment_status = 'Paid'
+   AND registration_status = 'pending_payment'
+   AND payment_amount IS NOT NULL
+   AND payment_amount >= fee;
+
+UPDATE kutumb_event_registrations
+   SET payment_status = 'Pending'
+ WHERE payment_status = 'Paid'
+   AND registration_status = 'pending_payment'
+   AND COALESCE(payment_amount, 0) < fee;
