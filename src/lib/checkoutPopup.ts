@@ -102,9 +102,13 @@ export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | 
         // rather than throwing.
       }
     };
-    // A just-opened about:blank popup doesn't always report accurate
-    // outerHeight/innerHeight on the very first tick in every browser, so
-    // give it a moment to finish painting its chrome before measuring.
+    // Try immediately (some browsers have the chrome measurements ready
+    // right away), AND after a short delay (others need a tick to finish
+    // painting the popup's chrome before outerHeight/innerHeight are
+    // accurate). This has to land on the about:blank page — once
+    // attachCheckoutPopup() below navigates to Stripe/Square's own
+    // domain, it's cross-origin and we can no longer resize/move it.
+    fixSizeAndPosition();
     window.setTimeout(fixSizeAndPosition, 50);
   }
 
