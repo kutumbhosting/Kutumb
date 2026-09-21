@@ -32,65 +32,41 @@ const BANK_DETAILS = {
 };
 
 /**
- * The "choose how to pay" section of the registration email: one row per
- * payment method the admin has switched on (Settings & Access → Payment
- * Methods). Card / PayPal / Square rows link to the pay page with that
- * method pre-selected; the bank-transfer row lists the account details
- * inline so it works straight from the inbox.
+ * The "or pay by bank transfer" section of the registration email — the
+ * ONLY other payment option ever listed in the email alongside the main
+ * "Pay Now" button.
+ *
+ * Card / PayPal / Square are deliberately NOT given their own rows/links
+ * here. They used to be (one row each, linking to `${payUrl}?method=…`),
+ * but that meant two different, divergent ways to pay by card or Square:
+ * the one true one is the in-app "Choose how to pay" panel that the main
+ * "Pay Now" button opens — the same panel used everywhere else in the app
+ * (the post-registration dialog, the standalone pay page) — which is also
+ * the only place that can open Stripe/Square in a popup sized and
+ * positioned to match it (see checkoutPopup.ts). A raw link straight to
+ * `?method=card` skipped all of that, and since it's a plain emailed
+ * `<a href>` its target URL is baked in at send time — if the site's
+ * configured Public Base URL was ever wrong (e.g. not yet set, so it
+ * fell back to the address the app happened to be running on — such as
+ * http://localhost:8080 — see getPublicBaseUrl in publicUrl.js) every
+ * copy of that link stays broken for whoever received that email, even
+ * after the setting is fixed. The single "Pay Now" button below is
+ * generated the exact same way (same payUrl, same fallback behaviour),
+ * so fixing the Public Base URL setting fixes it for both — there's just
+ * only the one link to get right instead of four. Bank transfer keeps
+ * its own inline row because its details are useful read directly from
+ * the inbox, with no click-through needed at all.
  *
  * Built from inline-styled divs and one small table per row, because that's
  * what renders reliably across Gmail, Outlook and Yahoo.
  */
 function buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMethods }) {
   const methods = paymentMethods || {};
+  if (!methods.bankTransfer) return "";
+
   const link = (method) => `${payUrl}?method=${method}`;
-
-  const row = ({ title, description, buttonLabel, href, buttonColor }) => `
-    <div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:0 0 10px;">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-        <tr>
-          <td style="vertical-align:middle;padding-right:10px;">
-            <div style="font-size:14px;font-weight:600;color:#111827;">${title}</div>
-            <div style="font-size:12px;color:#6b7280;margin-top:2px;">${description}</div>
-          </td>
-          <td style="vertical-align:middle;text-align:right;white-space:nowrap;">
-            <a href="${href}" target="_blank" rel="noopener" style="display:inline-block;background:${buttonColor};color:#ffffff;text-decoration:none;padding:9px 16px;border-radius:6px;font-weight:600;font-size:13px;">${buttonLabel}</a>
-          </td>
-        </tr>
-      </table>
-    </div>`;
-
-  const rows = [];
-  if (methods.card) {
-    rows.push(row({
-      title: "💳 Credit / debit card",
-      description: "Secure checkout powered by Stripe",
-      buttonLabel: `Pay $${fee}`,
-      href: link("card"),
-      buttonColor: "#635bff",
-    }));
-  }
-  if (methods.paypal) {
-    rows.push(row({
-      title: "PayPal",
-      description: "Pay with your PayPal account",
-      buttonLabel: `Pay $${fee}`,
-      href: link("paypal"),
-      buttonColor: "#0070ba",
-    }));
-  }
-  if (methods.square) {
-    rows.push(row({
-      title: "Square",
-      description: "Secure checkout powered by Square",
-      buttonLabel: `Pay $${fee}`,
-      href: link("square"),
-      buttonColor: "#1f2937",
-    }));
-  }
-  if (methods.bankTransfer) {
-    const reference = registrationNumber || "your name";
-    rows.push(`
+  const reference = registrationNumber || "your name";
+  const bankRow = `
     <div style="border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 14px;margin:0 0 10px;">
       <div style="font-size:14px;font-weight:600;color:#9a3412;">🏦 Bank transfer</div>
       <div style="font-size:13px;color:#111827;margin-top:6px;line-height:1.6;">
@@ -106,13 +82,11 @@ function buildPaymentOptionsHtml({ payUrl, fee, registrationNumber, paymentMetho
         Once you've transferred, <a href="${link("bank")}" target="_blank" rel="noopener" style="color:#c2410c;">let us know here</a>
         with your transaction number.
       </div>
-    </div>`);
-  }
+    </div>`;
 
-  if (rows.length === 0) return "";
   return `
-    <p style="font-size:14px;font-weight:600;margin:20px 0 8px;">Or choose how you'd like to pay:</p>
-    ${rows.join("")}`;
+    <p style="font-size:14px;font-weight:600;margin:20px 0 8px;">Prefer to pay by bank transfer instead?</p>
+    ${bankRow}`;
 }
 
 function getTransporter() {
