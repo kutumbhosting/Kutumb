@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Mail } from "lucide-react";
+import { CheckCircle2, Mail, CreditCard } from "lucide-react";
 import RegistrationCheckoutModal from "@/components/RegistrationCheckoutModal";
 import PayPalButton from "@/components/PayPalButton";
 import { openCheckoutPopup } from "@/lib/checkoutPopup";
@@ -156,6 +156,17 @@ const EventRegistrationSuccessDialog = ({
 
   if (!data) return null;
 
+  // A registration row already exists at this point (that's what makes a
+  // Stripe/Square/PayPal checkout possible at all — they need a
+  // registrationId to attach the payment to), but for a paid event it sits
+  // as "pending_payment" server-side until money actually arrives. So
+  // rather than declaring victory the moment the form was submitted, this
+  // dialog leads with the payment step for as long as something is still
+  // owed, and only shows the full "Registration Successful" confirmation
+  // once that's cleared (or immediately, for a free event where nothing
+  // was ever owed).
+  const awaitingPayment = feeOwed && !paymentRecorded;
+
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) {
       toast({ title: "Enter a coupon code", variant: "destructive" });
@@ -221,14 +232,31 @@ const EventRegistrationSuccessDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-green-700">
-            <CheckCircle2 className="w-6 h-6" />
-            Registration Successful
-          </DialogTitle>
-          <DialogDescription>
-            You're registered for <strong>{data.eventName}</strong>
-            {data.eventDate ? ` — ${data.eventDate}` : ""}.
-          </DialogDescription>
+          {awaitingPayment ? (
+            <>
+              <DialogTitle className="flex items-center gap-2 text-orange-700">
+                <CreditCard className="w-6 h-6" />
+                Complete Payment to Confirm
+              </DialogTitle>
+              <DialogDescription>
+                Your spot for <strong>{data.eventName}</strong>
+                {data.eventDate ? ` — ${data.eventDate}` : ""} is reserved as{" "}
+                <strong>{data.registrationNumber}</strong>, but it isn't confirmed yet — pay the
+                amount below to finish registering.
+              </DialogDescription>
+            </>
+          ) : (
+            <>
+              <DialogTitle className="flex items-center gap-2 text-green-700">
+                <CheckCircle2 className="w-6 h-6" />
+                Registration Successful
+              </DialogTitle>
+              <DialogDescription>
+                You're registered for <strong>{data.eventName}</strong>
+                {data.eventDate ? ` — ${data.eventDate}` : ""}.
+              </DialogDescription>
+            </>
+          )}
         </DialogHeader>
 
         <div className="rounded-lg border bg-muted/40 p-4 space-y-2 text-sm">
@@ -258,6 +286,7 @@ const EventRegistrationSuccessDialog = ({
                       {" "}(${data.perPersonFee} &times; {data.adults + 1 + data.children})
                     </span>
                   )}
+                  {awaitingPayment && <span className="text-orange-700 font-medium"> — payment required</span>}
                 </>
               ) : (
                 "Free"
@@ -268,11 +297,13 @@ const EventRegistrationSuccessDialog = ({
 
         <p className="text-sm text-muted-foreground flex items-center gap-1.5">
           <Mail className="w-3.5 h-3.5 shrink-0" />
-          A confirmation email has been sent to {data.email}.
+          {awaitingPayment
+            ? `A confirmation email with these details — including the amount still owed — has been sent to ${data.email}.`
+            : `A confirmation email has been sent to ${data.email}.`}
         </p>
 
         {/* Payment collection - only shown when a fee is owed */}
-        {feeOwed && !paymentRecorded && (
+        {awaitingPayment && (
           <div className="space-y-4 border-t pt-4">
             {!methods.card && !methods.bankTransfer && (
               <p className="text-sm text-muted-foreground">
