@@ -465,7 +465,7 @@ const UpcomingEvents = ({
                 type="submit"
                 className="w-full btn-hero text-lg py-6"
               >
-                Submit Registration
+                {totalFee !== null && totalFee > 0 ? "Continue to Payment" : "Submit Registration"}
               </Button>
 
               {submitMessage && (
