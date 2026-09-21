@@ -277,25 +277,27 @@ router.post("/:eventId/checkout", async (req, res) => {
     }
 
     const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
-    // Embedded Checkout renders inside our own page (in a modal) instead of
-    // redirecting to a Stripe-hosted page. Stripe still fully hosts the
-    // actual card fields inside an iframe for PCI compliance — only the
-    // surrounding page chrome is ours. `return_url` is where the browser
-    // is sent (a real navigation, not just the iframe) once payment
-    // completes; {CHECKOUT_SESSION_ID} is a literal placeholder Stripe
+    // Stripe-hosted Checkout (not Embedded Checkout) — the browser is sent
+    // to a page Stripe fully owns and hosts, then back to /checkout/return
+    // once payment completes. The client opens that URL in a popup sized
+    // and positioned to match the dialog it was launched from (same
+    // pattern as Card/Square on the Donate dialog — see checkoutPopup.ts),
+    // rather than this page rendering the card fields itself, and rather
+    // than Embedded Checkout's own return_url navigating the whole tab
+    // away. {CHECKOUT_SESSION_ID} is a literal placeholder Stripe
     // substitutes itself.
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      ui_mode: "embedded",
       customer_email: buyerEmail.trim(),
       line_items: lineItems,
-      return_url: `${baseUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${baseUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}&cancelled=1`,
       metadata: { orderId: String(orderId), eventId: req.params.eventId, registrationId: registrationId ? String(registrationId) : "" },
     });
     await client.query("UPDATE kutumb_orders SET stripe_session_id = $1 WHERE id = $2", [session.id, orderId]);
 
     await client.query("COMMIT");
-    res.status(201).json({ clientSecret: session.client_secret, orderId });
+    res.status(201).json({ url: session.url, orderId, sessionId: session.id });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("CHECKOUT ERROR:", err);

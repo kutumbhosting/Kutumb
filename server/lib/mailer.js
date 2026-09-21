@@ -163,10 +163,23 @@ export async function sendEventConfirmationEmail({
     : "";
 
   const feeOwed = typeof fee === "number" && fee > 0;
+  // Tickets (one QR code per attendee — you, any additional adults, any
+  // children) are a separate email, sent only once a registration is
+  // actually confirmed (see sendEventTickets) — never before payment for a
+  // paid event, so set that expectation here rather than leaving it a
+  // surprise, or worse, implying a ticket exists already.
   const paymentLine = feeOwed
     ? `<p style="font-size:14px;">Registration Fee: <strong>$${fee}</strong> &middot; Payment Status: <strong style="color:#b45309;">Pending</strong></p>
-       <p style="font-size:13px;color:#555;">You'll receive a separate confirmation email once your payment has been recorded.</p>`
-    : `<p style="font-size:14px;">Registration Fee: <strong>Free</strong></p>`;
+       <p style="font-size:13px;color:#555;">
+         You'll receive a separate confirmation email once your payment has been recorded —
+         and your ticket(s), with a QR code for each person on this registration, will be
+         generated and emailed to you at that point.
+       </p>`
+    : `<p style="font-size:14px;">Registration Fee: <strong>Free</strong></p>
+       <p style="font-size:13px;color:#555;">
+         Your ticket(s) — a QR code for each person on this registration — will follow in a
+         separate email shortly.
+       </p>`;
 
   // A paid event's registration is only a hold until payment actually
   // clears — don't tell them it's "Confirmed" in the subject line and
