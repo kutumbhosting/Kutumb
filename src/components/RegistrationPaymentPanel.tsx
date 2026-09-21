@@ -32,6 +32,13 @@ export interface RegistrationPaymentPanelData {
  *  have shown first. */
 export type PreferredPaymentMethod = "card" | "paypal" | "square" | "bank";
 
+/** What actually happened when the panel called onPaid. "confirmed" means the
+ *  money has been received and the registration is confirmed (card, PayPal,
+ *  Square, a fully-covering coupon). "pending_verification" means the person
+ *  reported a bank transfer, which stays pending until Kutumb sees it land in
+ *  the bank account — so callers must NOT tell them they're confirmed. */
+export type PaymentOutcome = "confirmed" | "pending_verification";
+
 interface RegistrationPaymentPanelProps {
   data: RegistrationPaymentPanelData;
   /** Show this method first and highlight it — used when someone clicks a
@@ -42,7 +49,7 @@ interface RegistrationPaymentPanelProps {
    *  and screen position. Omit on a plain full-page (non-dialog) host —
    *  the popup then just centers itself on the window. */
   anchorEl?: HTMLElement | null;
-  onPaid: () => void;
+  onPaid: (outcome?: PaymentOutcome) => void;
 }
 
 // Every "pay for this registration" surface — the dialog shown right after
@@ -261,6 +268,7 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          registrationId: data.id,
           eventName: data.eventName,
           eventDate: data.eventDate,
           eventYear: data.eventYear,
@@ -272,8 +280,23 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Failed to record payment");
 
-      toast({ title: "Thank You!", description: "Your payment details have been recorded." });
-      onPaid();
+      // Go by what the server actually decided, not by the fact the request
+      // succeeded: a reported transfer is only a claim until it's verified.
+      if (result.status === "none") {
+        toast({
+          title: "Nothing recorded yet",
+          description: "Pay using one of the options above, then come back and enter your transaction number.",
+        });
+      } else if (result.status === "already_paid") {
+        toast({ title: "Already paid", description: "This registration is already confirmed — nothing more to pay." });
+        onPaid("confirmed");
+      } else {
+        toast({
+          title: "Transfer details received",
+          description: "Your ticket(s) will be issued once we've verified your payment in our bank account.",
+        });
+        onPaid("pending_verification");
+      }
     } catch (err: any) {
       toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
     } finally {
@@ -391,6 +414,10 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
             <p><span className="font-medium">BSB:</span> {BANK_DETAILS.bsb}</p>
             <p><span className="font-medium">Account:</span> {BANK_DETAILS.account}</p>
             <p className="pt-1 font-medium">Amount: ${remaining.toFixed(2)}</p>
+            <p className="pt-1 text-xs text-orange-900">
+              Use your registration number as the payment reference. Tickets are issued after
+              we've verified your transfer.
+            </p>
           </div>
 
           <div>

@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import RegistrationPaymentPanel, { type PreferredPaymentMethod } from "@/components/RegistrationPaymentPanel";
-import { CheckCircle2, CreditCard } from "lucide-react";
+import RegistrationPaymentPanel, { type PreferredPaymentMethod, type PaymentOutcome } from "@/components/RegistrationPaymentPanel";
+import { CheckCircle2, Clock, Lock } from "lucide-react";
 
 interface RegistrationInfo {
   id: number;
@@ -42,6 +40,10 @@ export default function PayRegistration() {
   const [status, setStatus] = useState<"loading" | "found" | "not-found" | "already-paid">("loading");
   const [registration, setRegistration] = useState<RegistrationInfo | null>(null);
   const [paid, setPaid] = useState(false);
+  const [outcome, setOutcome] = useState<PaymentOutcome>("confirmed");
+  // The card itself: the Stripe/Square popups size and position themselves to
+  // match it, so checkout opens as a window sitting right over this one.
+  const [cardEl, setCardEl] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -61,9 +63,20 @@ export default function PayRegistration() {
   }, [token]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Navbar />
-      <main className="flex-1 container mx-auto px-4 py-16 max-w-lg">
+    // A focused checkout window rather than a full site page: the link in the
+    // payment email opens straight to this — no site menu or footer to click
+    // away into — with the amount due and the ways to pay in one compact card.
+    <div className="min-h-screen bg-muted/40 flex items-start sm:items-center justify-center p-3 sm:p-6">
+      <main
+        ref={setCardEl}
+        className="w-full max-w-md bg-background rounded-xl border shadow-lg p-5 sm:p-7"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <img src="/kutumb-logo.png" alt="Kutumb" className="h-8 w-auto" />
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <Lock className="w-3 h-3" /> Secure payment
+          </span>
+        </div>
         {status === "loading" && (
           <p className="text-center text-muted-foreground">Loading your registration...</p>
         )}
@@ -100,8 +113,7 @@ export default function PayRegistration() {
         {status === "found" && registration && !paid && (
           <div className="space-y-6">
             <div className="text-center space-y-1">
-              <CreditCard className="w-8 h-8 text-orange-600 mx-auto" />
-              <h1 className="text-xl font-bold">Complete Your Payment</h1>
+              <h1 className="text-xl font-bold">Choose how to pay</h1>
               <p className="text-muted-foreground text-sm">
                 {registration.eventName}
                 {registration.eventDate ? ` — ${registration.eventDate}` : ""}
@@ -132,13 +144,38 @@ export default function PayRegistration() {
                 adults: registration.adults,
                 children: registration.children,
               }}
+              anchorEl={cardEl}
               preferredMethod={preferredMethod}
-              onPaid={() => setPaid(true)}
+              onPaid={(result) => {
+                setOutcome(result ?? "confirmed");
+                setPaid(true);
+              }}
             />
           </div>
         )}
 
-        {status === "found" && paid && (
+        {status === "found" && paid && outcome === "pending_verification" && (
+          <div className="text-center space-y-3">
+            <Clock className="w-10 h-10 text-orange-600 mx-auto" />
+            <h1 className="text-xl font-bold">Transfer details received</h1>
+            <p className="text-muted-foreground text-sm">
+              Thank you — we've noted your bank transfer for registration{" "}
+              <strong>{registration?.registrationNumber}</strong>.
+            </p>
+            <p className="text-sm font-semibold text-orange-800">
+              Your ticket(s) will be issued after your payment has been verified.
+            </p>
+            <p className="text-muted-foreground text-sm">
+              We'll confirm it once the payment shows in our bank account (this can take a few
+              business days), then email your ticket(s) with a QR code for each person.
+            </p>
+            <Link to="/events" className="text-primary hover:underline text-sm inline-block">
+              Back to Events
+            </Link>
+          </div>
+        )}
+
+        {status === "found" && paid && outcome === "confirmed" && (
           <div className="text-center space-y-3">
             <CheckCircle2 className="w-10 h-10 text-green-600 mx-auto" />
             <h1 className="text-xl font-bold">Payment confirmed! 🎉</h1>
@@ -152,7 +189,6 @@ export default function PayRegistration() {
           </div>
         )}
       </main>
-      <Footer />
     </div>
   );
 }

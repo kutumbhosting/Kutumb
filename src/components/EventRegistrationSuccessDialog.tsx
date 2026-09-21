@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Mail, CreditCard } from "lucide-react";
-import RegistrationPaymentPanel from "@/components/RegistrationPaymentPanel";
+import RegistrationPaymentPanel, { type PaymentOutcome } from "@/components/RegistrationPaymentPanel";
 import { useEffect, useRef, useState } from "react";
 
 export interface EventRegistrationSuccessData {
@@ -41,6 +41,7 @@ const EventRegistrationSuccessDialog = ({
   // position as this dialog, instead of some arbitrary default box.
   const dialogContentRef = useRef<HTMLDivElement | null>(null);
   const [paymentRecorded, setPaymentRecorded] = useState(false);
+  const [paymentOutcome, setPaymentOutcome] = useState<PaymentOutcome>("confirmed");
 
   const feeOwed = !!data && typeof data.fee === "number" && data.fee > 0;
 
@@ -54,6 +55,9 @@ const EventRegistrationSuccessDialog = ({
   // once that's cleared (or immediately, for a free event where nothing
   // was ever owed).
   const awaitingPayment = feeOwed && !paymentRecorded;
+  // A bank transfer they've reported but Kutumb hasn't yet seen arrive: not
+  // confirmed, and not "still needs paying" either.
+  const awaitingVerification = feeOwed && paymentRecorded && paymentOutcome === "pending_verification";
   const registrationId = data?.id;
 
   // Covers the person closing the browser tab/window (or navigating away
@@ -114,6 +118,19 @@ const EventRegistrationSuccessDialog = ({
                 amount below to finish registering.
               </DialogDescription>
             </>
+          ) : awaitingVerification ? (
+            <>
+              <DialogTitle className="flex items-center gap-2 text-orange-700">
+                <CreditCard className="w-6 h-6" />
+                Transfer Details Received
+              </DialogTitle>
+              <DialogDescription>
+                Your spot for <strong>{data.eventName}</strong>
+                {data.eventDate ? ` — ${data.eventDate}` : ""} is reserved as{" "}
+                <strong>{data.registrationNumber}</strong>. Your ticket(s) will be issued after your
+                payment has been verified — we'll confirm once your bank transfer shows in our account.
+              </DialogDescription>
+            </>
           ) : (
             <>
               <DialogTitle className="flex items-center gap-2 text-green-700">
@@ -168,6 +185,8 @@ const EventRegistrationSuccessDialog = ({
           <Mail className="w-3.5 h-3.5 shrink-0" />
           {awaitingPayment
             ? `Pay below to finish now — or if you leave this page before paying, we'll email a payment link to ${data.email}.`
+            : awaitingVerification
+            ? `We've emailed ${data.email} to acknowledge your transfer. Your ticket(s) will follow once payment is confirmed.`
             : `A confirmation email has been sent to ${data.email}.`}
         </p>
 
@@ -186,14 +205,23 @@ const EventRegistrationSuccessDialog = ({
                 children: data.children,
               }}
               anchorEl={dialogContentRef.current}
-              onPaid={() => setPaymentRecorded(true)}
+              onPaid={(outcome) => {
+                setPaymentOutcome(outcome ?? "confirmed");
+                setPaymentRecorded(true);
+              }}
             />
           </div>
         )}
 
-        {feeOwed && paymentRecorded && (
+        {awaitingVerification && (
+          <p className="text-sm text-orange-700 font-medium border-t pt-4">
+            ⏳ Transfer details recorded. Your ticket(s) will be issued after your payment has been
+            verified, which can take a few business days.
+          </p>
+        )}
+        {feeOwed && paymentRecorded && !awaitingVerification && (
           <p className="text-sm text-green-700 font-medium border-t pt-4">
-            ✅ Payment details recorded. Thank you!
+            ✅ Payment confirmed. Thank you!
           </p>
         )}
 

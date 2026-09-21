@@ -70,11 +70,45 @@ export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | 
     top = Math.round(window.screenY + rect.top);
   }
 
-  return window.open(
+  const popup = window.open(
     "about:blank",
     CHECKOUT_POPUP_NAME,
     `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
   );
+
+  if (popup) {
+    // The width/height/left/top above position the popup's OUTER window —
+    // but every browser then draws its own title bar + address bar INSIDE
+    // that box, shrinking the actual page content area and pushing it
+    // down/right. That's what makes the popup look bigger than (and
+    // offset from) the dialog it's meant to match: the mismatch is exactly
+    // however tall that chrome is, which differs by browser/OS and can't
+    // be known until the popup actually exists. So: open it as above
+    // (close enough to avoid flicker), then immediately measure this
+    // popup's own outerWidth/outerHeight vs innerWidth/innerHeight to get
+    // its *real* chrome size, and nudge it with resizeTo/moveTo so the
+    // content area — not the outer window — lines up with `anchorEl`.
+    const fixSizeAndPosition = () => {
+      try {
+        const chromeWidth = Math.max(0, popup.outerWidth - popup.innerWidth);
+        const chromeHeight = Math.max(0, popup.outerHeight - popup.innerHeight);
+        if (chromeWidth || chromeHeight) {
+          popup.resizeTo(width + chromeWidth, height + chromeHeight);
+          popup.moveTo(left, Math.max(0, top - chromeHeight));
+        }
+      } catch {
+        // Some browsers refuse resizeTo/moveTo on popups in certain
+        // configurations — fall back to the original (slightly-off) size
+        // rather than throwing.
+      }
+    };
+    // A just-opened about:blank popup doesn't always report accurate
+    // outerHeight/innerHeight on the very first tick in every browser, so
+    // give it a moment to finish painting its chrome before measuring.
+    window.setTimeout(fixSizeAndPosition, 50);
+  }
+
+  return popup;
 }
 
 /**
