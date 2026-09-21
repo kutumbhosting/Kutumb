@@ -1,14 +1,16 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, Heart, Calendar, TrendingUp } from "lucide-react";
+import { Users, Heart, Calendar, TrendingUp, HeartHandshake } from "lucide-react";
 import heroImage from "@/assets/hero-community.jpg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import DonateDialog from "@/components/DonateDialog";
 import { useEffect, useState } from "react";
 
 const Home = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [donateOpen, setDonateOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/upcoming-events")
@@ -43,22 +45,38 @@ const Home = () => {
             <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto opacity-95">
               Kutumb is a registered non-profit organization dedicated to creating positive social impact through community engagement, compassion, and service.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/membership" state={{ scrollTo: "membership" }}>
-                <Button size="lg" className="btn-accent text-lg px-10 py-6">
-                  Become a Member
-                </Button>
-              </Link>
-              <Link to="/events">
+            <div className="grid grid-cols-1 sm:grid-cols-3 items-center gap-4">
+              {/* Spacer column keeps the center group truly centered on desktop */}
+              <div className="hidden sm:block" />
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center order-2 sm:order-none">
+                <Link to="/membership" state={{ scrollTo: "membership" }}>
+                  <Button size="lg" className="btn-accent text-lg px-10 py-6 w-full sm:w-auto">
+                    Become a Member
+                  </Button>
+                </Link>
+                <Link to="/events">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => window.scrollTo(0, 0)}
+                    className="text-lg px-10 py-6 w-full sm:w-auto bg-white/10 backdrop-blur-sm border-white text-white hover:bg-white hover:text-primary"
+                  >
+                    View Events
+                  </Button>
+                </Link>
+              </div>
+
+              <div className="flex justify-center sm:justify-end order-1 sm:order-none">
                 <Button
                   size="lg"
-                  variant="outline"
-                  onClick={() => window.scrollTo(0, 0)}
-                  className="text-lg px-10 py-6 bg-white/10 backdrop-blur-sm border-white text-white hover:bg-white hover:text-primary"
+                  onClick={() => setDonateOpen(true)}
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground text-lg px-10 py-6 w-full sm:w-auto"
                 >
-                  View Events
+                  <HeartHandshake className="w-5 h-5 mr-2" />
+                  Donate
                 </Button>
-              </Link>
+              </div>
             </div>
           </div>
         </section>
@@ -168,6 +186,7 @@ const Home = () => {
       </main>
 
       <Footer />
+      <DonateDialog open={donateOpen} onOpenChange={setDonateOpen} />
     </div>
   );
 };

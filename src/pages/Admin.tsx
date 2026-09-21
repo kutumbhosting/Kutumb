@@ -16,6 +16,7 @@ import FileManagement from "./admin/FileManagement";
 import PastEvents from "./admin/PastEvents";
 import TicketingManager from "./admin/TicketingManager";
 import CheckIn from "./admin/CheckIn";
+import Coupons from "./admin/Coupons";
 import PlatformConsole from "./admin/PlatformConsole";
 
 // ─── Shared utilities ────────────────────────────────────────────────────────
@@ -34,6 +35,11 @@ const Admin = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [adminName, setAdminName] = useState("");
+  // "superadmin" gets the full console; any other role ("admin") is a
+  // limited admin — see the tab filtering below and the requireSuperAdmin
+  // guards on the server for Members, Database Tables, and API Keys & Settings.
+  const [adminRole, setAdminRole] = useState<string>("admin");
+  const isSuperAdmin = adminRole === "superadmin";
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
@@ -45,6 +51,7 @@ const Admin = () => {
         if (admin) {
           setIsLoggedIn(true);
           setAdminName(admin.name);
+          setAdminRole(admin.role || "admin");
         }
       })
       .finally(() => setCheckingSession(false));
@@ -59,35 +66,36 @@ const Admin = () => {
   // ─── fetchData ─────────────────────────────────────────────────────────────
   // Loads all event files individually (safe — one bad file won't crash load)
   // then groups registrations by eventName_eventYear for the dropdown.
-  const fetchData = async () => {
+  const fetchData = async (superAdmin: boolean) => {
     try {
       const events = await safeFetch("/api/all-registrations");
 
       if (!Array.isArray(events)) {
         console.warn("[fetchData] /api/all-registrations did not return an array:", events);
         setGroupedEvents({});
-        const members = await safeFetch("/api/members");
-        setMemberData(Array.isArray(members) ? members : []);
-        return;
+      } else {
+        console.log("[fetchData] total event rows loaded:", events.length);
+
+        const grouped = events.reduce((acc: Record<string, any[]>, item: any) => {
+          if (!item?.eventName) return acc; // skip malformed rows
+          const key = `${item.eventName}_${item.eventYear || "unknown"}`;
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(item);
+          return acc;
+        }, {});
+
+        console.log("[fetchData] grouped keys:", Object.keys(grouped));
+        setGroupedEvents(grouped);
       }
 
-      console.log("[fetchData] total event rows loaded:", events.length);
-
-      const grouped = events.reduce((acc: Record<string, any[]>, item: any) => {
-        if (!item?.eventName) return acc; // skip malformed rows
-        const key = `${item.eventName}_${item.eventYear || "unknown"}`;
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(item);
-        return acc;
-      }, {});
-
-      console.log("[fetchData] grouped keys:", Object.keys(grouped));
-      setGroupedEvents(grouped);
-
-      // 4. Members are independent of events
-      const members = await safeFetch("/api/members");
-      setMemberData(Array.isArray(members) ? members : []);
-
+      // Members is Super Admin-only on the server now — a limited admin
+      // can't see the Members tab at all, so don't even ask for the data.
+      if (superAdmin) {
+        const members = await safeFetch("/api/members");
+        setMemberData(Array.isArray(members) ? members : []);
+      } else {
+        setMemberData([]);
+      }
     } catch (err) {
       // safeFetch absorbs errors, but keep this as a safety net
       console.error("[fetchData] unexpected error:", err);
@@ -97,8 +105,8 @@ const Admin = () => {
   // Refresh dashboard data whenever we become logged in - covers both a
   // fresh login and a restored session (page navigated to/from, or reloaded).
   useEffect(() => {
-    if (isLoggedIn) fetchData();
-  }, [isLoggedIn]);
+    if (isLoggedIn) fetchData(isSuperAdmin);
+  }, [isLoggedIn, isSuperAdmin]);
 
   // ─── Login handler ─────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
@@ -115,6 +123,7 @@ const Admin = () => {
       if (!res.ok) throw new Error(data.message || "Login failed");
       setIsLoggedIn(true);
       setAdminName(data.admin.name);
+      setAdminRole(data.admin.role || "admin");
       toast({ title: "Login Successful", description: `Welcome, ${data.admin.name}` });
     } catch (err: any) {
       setLoginError(err.message || "Invalid email or password");
@@ -128,6 +137,7 @@ const Admin = () => {
   const handleLogout = async () => {
     await fetch("/api/admin-auth/logout", { method: "POST" }).catch(() => {});
     setIsLoggedIn(false);
+    setAdminRole("admin");
     setLoginData({ email: "", password: "" });
     toast({ title: "Logged Out", description: "You have been logged out." });
   };
@@ -193,73 +203,104 @@ const Admin = () => {
                   Logout
                 </Button>
               </div>
-              <Tabs defaultValue="events" className="max-w-7xl mx-auto">
-
+              {/* Tab order: Members, Events Settings, Events Management, Data
+                  Management, Key Settings & Access. A limited ("admin") user
+                  only sees Events Settings, Events Management and Data
+                  Management (File Management only, no Database Tables) — the
+                  server enforces the same boundaries independently, so hiding
+                  these tabs is a UX convenience, not the actual security
+                  boundary. */}
+              <Tabs
+                defaultValue={isSuperAdmin ? "members" : "events-settings"}
+                className="max-w-7xl mx-auto"
+              >
                 <TabsList className="flex flex-wrap h-auto w-full max-w-4xl mx-auto gap-3 mb-12">
-                  <TabsTrigger value="events">Event Registrations</TabsTrigger>
-                  <TabsTrigger value="members">Members</TabsTrigger>
-                  <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
-                  <TabsTrigger value="past">Past Events</TabsTrigger>
-                  <TabsTrigger value="database-tables">Database Tables</TabsTrigger>
-                  <TabsTrigger value="files">Files Management</TabsTrigger>
-                  <TabsTrigger value="ticketing">Ticketing & Payments</TabsTrigger>
-                  <TabsTrigger value="checkin">QR Check-in</TabsTrigger>
-                  <TabsTrigger value="console">Settings & Access</TabsTrigger>
+                  {isSuperAdmin && <TabsTrigger value="members">Members</TabsTrigger>}
+                  <TabsTrigger value="events-settings">Events Settings</TabsTrigger>
+                  <TabsTrigger value="events-management">Events Management</TabsTrigger>
+                  <TabsTrigger value="data-management">Data Management</TabsTrigger>
+                  {isSuperAdmin && <TabsTrigger value="console">Key Settings & Access</TabsTrigger>}
                 </TabsList>
 
-                {/* ── Event Registrations ── */}
-                <TabsContent value="events">
-                  <EventRegistration
-                    groupedEvents={groupedEvents}
-                    onReload={fetchData}
-                  />
+                {/* ── Members (Super Admin only) ── */}
+                {isSuperAdmin && (
+                  <TabsContent value="members">
+                    <Members
+                      memberData={memberData}
+                      onReload={() => fetchData(isSuperAdmin)}
+                    />
+                  </TabsContent>
+                )}
+
+                {/* ── Events Settings: Upcoming Events / Past Events ── */}
+                <TabsContent value="events-settings">
+                  <Tabs defaultValue="upcoming">
+                    <TabsList className="flex flex-wrap h-auto gap-2 mb-8">
+                      <TabsTrigger value="upcoming">Upcoming Events</TabsTrigger>
+                      <TabsTrigger value="past">Past Events</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="upcoming">
+                      <UpcomingEvents />
+                    </TabsContent>
+                    <TabsContent value="past">
+                      <PastEvents />
+                    </TabsContent>
+                  </Tabs>
                 </TabsContent>
 
-                {/* ── Members ── */}
-                <TabsContent value="members">
-                  <Members
-                    memberData={memberData}
-                    onReload={fetchData}
-                  />
+                {/* ── Events Management: Event Registration, Ticketing &
+                     Payments, Coupons, QR Check-in ── */}
+                <TabsContent value="events-management">
+                  <Tabs defaultValue="registration">
+                    <TabsList className="flex flex-wrap h-auto gap-2 mb-8">
+                      <TabsTrigger value="registration">Event Registration</TabsTrigger>
+                      <TabsTrigger value="ticketing">Ticketing & Payments</TabsTrigger>
+                      <TabsTrigger value="coupons">Coupons</TabsTrigger>
+                      <TabsTrigger value="checkin">QR Check-in</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="registration">
+                      <EventRegistration
+                        groupedEvents={groupedEvents}
+                        onReload={() => fetchData(isSuperAdmin)}
+                      />
+                    </TabsContent>
+                    <TabsContent value="ticketing">
+                      <TicketingManager groupedEvents={groupedEvents} />
+                    </TabsContent>
+                    <TabsContent value="coupons">
+                      <Coupons groupedEvents={groupedEvents} />
+                    </TabsContent>
+                    <TabsContent value="checkin">
+                      <CheckIn groupedEvents={groupedEvents} />
+                    </TabsContent>
+                  </Tabs>
                 </TabsContent>
 
-                {/* ── Upcoming Events ── */}
-                {/* UpcomingEvents manages its own fetch internally */}
-                <TabsContent value="upcoming">
-                  <UpcomingEvents />
+                {/* ── Data Management: Database Tables (Super Admin only) /
+                     File Management ── */}
+                <TabsContent value="data-management">
+                  <Tabs defaultValue={isSuperAdmin ? "database-tables" : "files"}>
+                    <TabsList className="flex flex-wrap h-auto gap-2 mb-8">
+                      {isSuperAdmin && <TabsTrigger value="database-tables">Database Tables</TabsTrigger>}
+                      <TabsTrigger value="files">File Management</TabsTrigger>
+                    </TabsList>
+                    {isSuperAdmin && (
+                      <TabsContent value="database-tables">
+                        <DatabaseTables />
+                      </TabsContent>
+                    )}
+                    <TabsContent value="files">
+                      <FileManagement />
+                    </TabsContent>
+                  </Tabs>
                 </TabsContent>
 
-                {/* ── Past Events (placeholder) ── */}
-                <TabsContent value="past">
-                  <PastEvents />
-                </TabsContent>
-
-                {/* ── Database Tables ── */}
-                <TabsContent value="database-tables">
-                  <DatabaseTables />
-                </TabsContent>
-
-                {/* ── File Management ── */}
-                {/* FileManagement manages its own fetch internally */}
-                <TabsContent value="files">
-                  <FileManagement />
-                </TabsContent>
-
-                {/* ── Ticketing & Payments (new) ── */}
-                <TabsContent value="ticketing">
-                  <TicketingManager groupedEvents={groupedEvents} />
-                </TabsContent>
-
-                {/* ── QR Check-in (new) ── */}
-                <TabsContent value="checkin">
-                  <CheckIn groupedEvents={groupedEvents} />
-                </TabsContent>
-
-                {/* ── Settings, admin users, audit log (new) ── */}
-                <TabsContent value="console">
-                  <PlatformConsole currentAdminEmail={adminName} />
-                </TabsContent>
-
+                {/* ── Key Settings & Access (Super Admin only) ── */}
+                {isSuperAdmin && (
+                  <TabsContent value="console">
+                    <PlatformConsole currentAdminEmail={adminName} />
+                  </TabsContent>
+                )}
               </Tabs>
             </div>
           </section>

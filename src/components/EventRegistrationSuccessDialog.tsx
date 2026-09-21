@@ -13,8 +13,10 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { CheckCircle2, Mail } from "lucide-react";
 import RegistrationCheckoutModal from "@/components/RegistrationCheckoutModal";
+import PayPalButton from "@/components/PayPalButton";
 
 export interface EventRegistrationSuccessData {
+  id?: number;
   eventName: string;
   eventDate?: string;
   eventYear?: string;
@@ -54,22 +56,86 @@ const EventRegistrationSuccessDialog = ({
   const [paymentRecorded, setPaymentRecorded] = useState(false);
   const [showCardPayment, setShowCardPayment] = useState(false);
 
+  // ── Pay (or part-pay) with an event coupon ──────────────────────────────
+  const [couponCode, setCouponCode] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [couponResult, setCouponResult] = useState<{ remaining: number } | null>(null);
+
   // Which payment methods are currently offered, set by an admin under
   // Settings & Access → Payment Methods. Bank transfer is on by default so
   // the page still works before anyone visits that settings screen.
-  const [methods, setMethods] = useState({ bankTransfer: true, card: false });
+  const [methods, setMethods] = useState({ bankTransfer: true, card: false, square: false, paypal: false });
 
   useEffect(() => {
     if (!open) return;
-    fetch("/api/payment-methods")
+    fetch("/api/payment-methods", { cache: "no-store" })
       .then((res) => res.json())
-      .then((data) => setMethods({ bankTransfer: !!data.bankTransfer, card: !!data.card }))
-      .catch(() => setMethods({ bankTransfer: true, card: false }));
+      .then((data) =>
+        setMethods({
+          bankTransfer: !!data.bankTransfer,
+          card: !!data.card,
+          square: !!data.square,
+          paypal: !!data.paypal,
+        })
+      )
+      .catch(() => setMethods({ bankTransfer: true, card: false, square: false, paypal: false }));
   }, [open]);
 
-  const feeOwed = !!data && typeof data.fee === "number" && data.fee > 0;
+  // ── Square: redirect-based checkout (Square-hosted payment link) ───────
+  const [startingSquare, setStartingSquare] = useState(false);
+  const handlePaySquare = async () => {
+    if (!data.id) {
+      toast({ title: "Can't start Square checkout", description: "Missing registration reference.", variant: "destructive" });
+      return;
+    }
+    setStartingSquare(true);
+    try {
+      const res = await fetch(`/api/square/${data.id}/checkout`, { method: "POST" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || "Could not start Square checkout");
+      window.location.href = result.url;
+    } catch (err: any) {
+      toast({ title: "Square checkout failed", description: err.message, variant: "destructive" });
+      setStartingSquare(false);
+    }
+  };
+
+  const feeOwed =
+    !!data &&
+    typeof data.fee === "number" &&
+    data.fee > 0 &&
+    (couponResult ? couponResult.remaining > 0 : true);
 
   if (!data) return null;
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) {
+      toast({ title: "Enter a coupon code", variant: "destructive" });
+      return;
+    }
+    setApplyingCoupon(true);
+    try {
+      const res = await fetch("/api/events/apply-coupon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventName: data.eventName,
+          eventYear: data.eventYear,
+          email: data.email,
+          couponCode: couponCode.trim(),
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || "Could not apply that coupon");
+      setCouponResult({ remaining: Number(result.remaining) || 0 });
+      toast({ title: "Coupon applied 🎟️", description: result.message });
+      if (Number(result.remaining) <= 0) setPaymentRecorded(true);
+    } catch (err: any) {
+      toast({ title: "Coupon couldn't be applied", description: err.message, variant: "destructive" });
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
 
   const handleRecordPayment = async () => {
     if (bankTransferred === "yes" && !transactionNumber.trim()) {
@@ -166,13 +232,51 @@ const EventRegistrationSuccessDialog = ({
               </p>
             )}
 
+            {couponResult && couponResult.remaining > 0 && (
+              <p className="text-sm text-green-700 font-medium">
+                🎟️ Coupon applied — ${couponResult.remaining.toFixed(2)} still remaining.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="event-coupon-code">Have an event coupon?</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="event-coupon-code"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                  placeholder="e.g. KUT-7F3QK2"
+                />
+                <Button type="button" variant="secondary" onClick={handleApplyCoupon} disabled={applyingCoupon}>
+                  {applyingCoupon ? "Applying..." : "Apply"}
+                </Button>
+              </div>
+            </div>
+
             {methods.card && (
               <Button onClick={() => setShowCardPayment(true)} className="w-full btn-hero">
-                💳 Pay ${data.fee} by Card
+                💳 Pay ${(couponResult ? couponResult.remaining : data.fee)?.toFixed?.(2) ?? data.fee} by Card
               </Button>
             )}
 
-            {methods.card && methods.bankTransfer && (
+            {methods.square && (
+              <Button onClick={handlePaySquare} disabled={startingSquare} variant="outline" className="w-full">
+                {startingSquare ? "Redirecting to Square..." : `⬛ Pay $${(couponResult ? couponResult.remaining : data.fee)?.toFixed?.(2) ?? data.fee} with Square`}
+              </Button>
+            )}
+
+            {methods.paypal && data.id && !paymentRecorded && (
+              <PayPalButton
+                registrationId={data.id}
+                onSuccess={() => {
+                  toast({ title: "Payment confirmed 🎉", description: "Your PayPal payment was successful." });
+                  setPaymentRecorded(true);
+                }}
+                onError={(message) => toast({ title: "PayPal checkout failed", description: message, variant: "destructive" })}
+              />
+            )}
+
+            {(methods.card || methods.square || methods.paypal) && methods.bankTransfer && (
               <p className="text-center text-xs text-muted-foreground">— or pay by bank transfer instead —</p>
             )}
 
@@ -183,7 +287,9 @@ const EventRegistrationSuccessDialog = ({
                   <p><span className="font-medium">Account Name:</span> {BANK_DETAILS.accountName}</p>
                   <p><span className="font-medium">BSB:</span> {BANK_DETAILS.bsb}</p>
                   <p><span className="font-medium">Account:</span> {BANK_DETAILS.account}</p>
-                  <p className="pt-1 font-medium">Amount: ${data.fee}</p>
+                  <p className="pt-1 font-medium">
+                    Amount: ${(couponResult ? couponResult.remaining : data.fee)?.toFixed?.(2) ?? data.fee}
+                  </p>
                 </div>
 
                 <div>
@@ -242,8 +348,9 @@ const EventRegistrationSuccessDialog = ({
           eventTitle={data.eventName}
           buyerName={data.name}
           buyerEmail={data.email}
+          registrationId={data.id}
           defaultQuantity={1 + data.adults + data.children}
-          totalFee={data.fee as number}
+          totalFee={couponResult ? couponResult.remaining : (data.fee as number)}
           onClose={() => setShowCardPayment(false)}
         />
       )}

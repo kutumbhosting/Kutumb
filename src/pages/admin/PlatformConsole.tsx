@@ -97,6 +97,13 @@ function SettingsTab() {
 
   return (
     <div className="space-y-8">
+      {/* Database connection settings live here, just before Stripe, rather
+          than as their own top-level tab. */}
+      <div>
+        <h3 className="font-bold text-lg mb-3">Database</h3>
+        <DatabaseTab />
+      </div>
+
       {groups.map((group) => {
         const groupSettings = settings.filter((s) => s.group === group);
         const isPaymentMethods = group === "Payment Methods";
@@ -211,7 +218,7 @@ function SettingsTab() {
 function AdminUsersTab() {
   const { toast } = useToast();
   const [users, setUsers] = useState<any[]>([]);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "admin" });
   const load = () => api("/api/admin-console/admin-users").then(setUsers).catch(() => {});
   useEffect(() => { load(); }, []);
 
@@ -220,7 +227,7 @@ function AdminUsersTab() {
     try {
       await api("/api/admin-console/admin-users", { method: "POST", body: JSON.stringify(form) });
       toast({ title: "Admin user created" });
-      setForm({ name: "", email: "", password: "" });
+      setForm({ name: "", email: "", password: "", role: "admin" });
       load();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -243,8 +250,24 @@ function AdminUsersTab() {
         <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
         <div><Label>Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+        <div>
+          <Label>Role</Label>
+          <select
+            className="h-10 mt-0 px-3 border rounded text-sm bg-background text-foreground"
+            value={form.role}
+            onChange={(e) => setForm({ ...form, role: e.target.value })}
+          >
+            <option value="admin">Admin (limited access)</option>
+            <option value="superadmin">Super Admin (full access)</option>
+          </select>
+        </div>
         <Button onClick={create}>Add admin</Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        <strong>Admin (limited access)</strong> can manage Events Settings, Events Management and File
+        Management only — no access to Members, Database Tables, or API Keys &amp; Settings.
+        <strong className="ml-1">Super Admin</strong> has full access to everything in this console.
+      </p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead><tr className="text-left border-b"><th className="py-2">Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
@@ -389,12 +412,10 @@ export default function PlatformConsole({ currentAdminEmail }: { currentAdminEma
       <Tabs defaultValue="settings">
         <TabsList className="flex flex-wrap h-auto w-full gap-1">
           <TabsTrigger value="settings">API Keys & Settings</TabsTrigger>
-          <TabsTrigger value="database">Database</TabsTrigger>
           <TabsTrigger value="users">Admin Users</TabsTrigger>
           <TabsTrigger value="audit">Audit Log</TabsTrigger>
         </TabsList>
         <TabsContent value="settings"><SettingsTab /></TabsContent>
-        <TabsContent value="database"><DatabaseTab /></TabsContent>
         <TabsContent value="users"><AdminUsersTab /></TabsContent>
         <TabsContent value="audit"><AuditLogTab /></TabsContent>
       </Tabs>

@@ -34,6 +34,8 @@ const Events = () => {
     comments: "",
     adults: 0,
     children: 0,
+    childrenUnder5: 0,
+    children5Plus: 0,
   });
 
   // ── Shared fetch function used on load and after registration ────────────
@@ -132,6 +134,7 @@ const Events = () => {
       });
 
       setSuccessData({
+        id: data.id,
         eventName: data.eventName || formData.eventName,
         eventDate: data.eventDate || formData.eventDate,
         eventYear: data.eventYear,
@@ -161,6 +164,8 @@ const Events = () => {
         comments: "",
         adults: 0,
         children: 0,
+        childrenUnder5: 0,
+        children5Plus: 0,
       });
     } catch (error) {
       console.error("API Error:", error);

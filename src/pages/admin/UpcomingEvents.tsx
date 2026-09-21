@@ -22,6 +22,9 @@ const UpcomingEvents = () => {
     isActive: true,
     memberFee: "0",
     nonMemberFee: "0",
+    under5Free: true,
+    childMemberFee: "",
+    childNonMemberFee: "",
   });
 
   // ─── flyer preview ──────────────────────────────────────────────────────
@@ -64,6 +67,9 @@ const UpcomingEvents = () => {
                   <th className="p-2 text-left">Capacity</th>
                   <th className="p-2 text-left">Member Fee</th>
                   <th className="p-2 text-left">Non-Member Fee</th>
+                  <th className="p-2 text-left">Under-5 Free</th>
+                  <th className="p-2 text-left">Child Member Fee</th>
+                  <th className="p-2 text-left">Child Non-Member Fee</th>
                   <th className="p-2 text-left">Description</th>
                   <th className="p-2 text-left">Flyer</th>
                   <th className="p-2 text-left">Action</th>
@@ -172,6 +178,50 @@ const UpcomingEvents = () => {
                         onChange={(e) =>
                           setUpcomingEvents((prev) =>
                             prev.map((ev, i) => i === index ? { ...ev, nonMemberFee: e.target.value } : ev)
+                          )
+                        }
+                      />
+                    </td>
+
+                    {/* UNDER-5 FREE */}
+                    <td className="p-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={event.under5Free !== false}
+                        onChange={(e) =>
+                          setUpcomingEvents((prev) =>
+                            prev.map((ev, i) => i === index ? { ...ev, under5Free: e.target.checked } : ev)
+                          )
+                        }
+                        title="Children under 5 register for free"
+                      />
+                    </td>
+
+                    {/* CHILD MEMBER FEE (blank = same as Member Fee) */}
+                    <td className="p-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder={String(event.memberFee ?? 0)}
+                        value={event.childMemberFee ?? ""}
+                        onChange={(e) =>
+                          setUpcomingEvents((prev) =>
+                            prev.map((ev, i) => i === index ? { ...ev, childMemberFee: e.target.value } : ev)
+                          )
+                        }
+                      />
+                    </td>
+
+                    {/* CHILD NON-MEMBER FEE (blank = same as Non-Member Fee) */}
+                    <td className="p-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder={String(event.nonMemberFee ?? 0)}
+                        value={event.childNonMemberFee ?? ""}
+                        onChange={(e) =>
+                          setUpcomingEvents((prev) =>
+                            prev.map((ev, i) => i === index ? { ...ev, childNonMemberFee: e.target.value } : ev)
                           )
                         }
                       />
@@ -354,6 +404,46 @@ const UpcomingEvents = () => {
           </div>
         </div>
 
+        <div className="space-y-3 rounded border p-3">
+          <div className="flex items-center gap-2">
+            <input
+              id="new-event-under5free"
+              type="checkbox"
+              checked={newEvent.under5Free}
+              onChange={(e) => setNewEvent({ ...newEvent, under5Free: e.target.checked })}
+            />
+            <label htmlFor="new-event-under5free" className="text-sm font-medium">
+              Children under 5 register for free
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium block mb-1">Child Member Fee ($)</label>
+              <Input
+                type="number"
+                min="0"
+                placeholder={`Same as Member Fee (${newEvent.memberFee || 0})`}
+                value={newEvent.childMemberFee}
+                onChange={(e) => setNewEvent({ ...newEvent, childMemberFee: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium block mb-1">Child Non-Member Fee ($)</label>
+              <Input
+                type="number"
+                min="0"
+                placeholder={`Same as Non-Member Fee (${newEvent.nonMemberFee || 0})`}
+                value={newEvent.childNonMemberFee}
+                onChange={(e) => setNewEvent({ ...newEvent, childNonMemberFee: e.target.value })}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Leave a child fee blank to charge children (5 and over) the same rate as adults.
+            This only applies to children 5 and over when "free under 5" is checked above.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <label className="text-sm font-medium">Flyer Image</label>
           <input
@@ -401,6 +491,7 @@ const UpcomingEvents = () => {
                 title: "", date: "", time: "", location: "",
                 capacity: "", description: "", isActive: true,
                 memberFee: "0", nonMemberFee: "0",
+                under5Free: true, childMemberFee: "", childNonMemberFee: "",
               });
               setNewFlyer(null);
               fetchUpcomingEvents();

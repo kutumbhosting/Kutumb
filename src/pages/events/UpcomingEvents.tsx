@@ -27,6 +27,8 @@ interface FormData {
   comments: string;
   adults: number;
   children: number;
+  childrenUnder5: number;
+  children5Plus: number;
 }
 
 interface UpcomingEventsProps {
@@ -90,12 +92,30 @@ const UpcomingEvents = ({
   const perPersonFee = selectedEvent
     ? Number(isMember ? selectedEvent.memberFee : selectedEvent.nonMemberFee) || 0
     : null;
-  const totalAttendees = 1 + (Number(formData.adults) || 0) + (Number(formData.children) || 0);
-  const totalFee = perPersonFee !== null ? perPersonFee * totalAttendees : null;
+  const under5Free = selectedEvent ? selectedEvent.under5Free !== false : true;
+  const childFee = selectedEvent
+    ? Number(
+        isMember
+          ? selectedEvent.childMemberFee ?? selectedEvent.memberFee
+          : selectedEvent.childNonMemberFee ?? selectedEvent.nonMemberFee
+      ) || 0
+    : null;
+  const childrenUnder5 = Number(formData.childrenUnder5) || 0;
+  const children5Plus = Number(formData.children5Plus) || 0;
+  const totalAttendees = 1 + (Number(formData.adults) || 0) + childrenUnder5 + children5Plus;
+  const chargeableChildren = under5Free ? children5Plus : childrenUnder5 + children5Plus;
+  const totalFee =
+    perPersonFee !== null
+      ? perPersonFee * (1 + (Number(formData.adults) || 0)) + (childFee || 0) * chargeableChildren
+      : null;
 
   // ── Member pricing preview, shown to non-members to encourage sign-up ────
   const memberPerPersonFee = selectedEvent ? Number(selectedEvent.memberFee) || 0 : null;
-  const memberTotalFee = memberPerPersonFee !== null ? memberPerPersonFee * totalAttendees : null;
+  const memberChildFee = selectedEvent ? Number(selectedEvent.childMemberFee ?? selectedEvent.memberFee) || 0 : null;
+  const memberTotalFee =
+    memberPerPersonFee !== null
+      ? memberPerPersonFee * (1 + (Number(formData.adults) || 0)) + (memberChildFee || 0) * chargeableChildren
+      : null;
   const memberSavesMoney =
     !isMember &&
     memberPerPersonFee !== null &&
@@ -201,6 +221,8 @@ const UpcomingEvents = ({
                             comments: "",
                             adults: 0,
                             children: 0,
+                            childrenUnder5: 0,
+                            children5Plus: 0,
                           });
                           setRegistrationOpen(true);
                         }}
@@ -324,16 +346,39 @@ const UpcomingEvents = ({
                 </div>
 
                 <div>
-                  <Label htmlFor="children">Children (Under 12)</Label>
+                  <Label htmlFor="children5plus">Children (5 and over)</Label>
                   <Input
-                    id="children"
+                    id="children5plus"
                     type="number"
                     min="0"
-                    value={formData.children}
+                    value={formData.children5Plus}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        children: Number(e.target.value),
+                        children5Plus: Number(e.target.value),
+                        children: Number(e.target.value) + (Number(formData.childrenUnder5) || 0),
+                      })
+                    }
+                    className="mt-2"
+                  />
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="childrenunder5">
+                    Children Under 5{selectedEvent && under5Free ? " (Free)" : ""}
+                  </Label>
+                  <Input
+                    id="childrenunder5"
+                    type="number"
+                    min="0"
+                    value={formData.childrenUnder5}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        childrenUnder5: Number(e.target.value),
+                        children: Number(e.target.value) + (Number(formData.children5Plus) || 0),
                       })
                     }
                     className="mt-2"
@@ -346,11 +391,22 @@ const UpcomingEvents = ({
                 <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 text-sm space-y-1">
                   <p className="font-semibold text-orange-800">Registration Fee</p>
                   <p>
-                    {isMember ? "Member fee" : "Non-member fee"}: <strong>${perPersonFee}</strong> per person
-                    &times; {totalAttendees} {totalAttendees === 1 ? "attendee" : "attendees"}
+                    {isMember ? "Member fee" : "Non-member fee"}: <strong>${perPersonFee}</strong> per adult
+                    &times; {1 + (Number(formData.adults) || 0)}
                   </p>
+                  {(childrenUnder5 > 0 || children5Plus > 0) && (
+                    <p>
+                      Child fee: <strong>${childFee}</strong> per child &times; {chargeableChildren}{" "}
+                      {under5Free && childrenUnder5 > 0 && (
+                        <span className="text-muted-foreground">
+                          ({childrenUnder5} under-5 {childrenUnder5 === 1 ? "child is" : "children are"} free)
+                        </span>
+                      )}
+                    </p>
+                  )}
                   <p className="text-base">
-                    Total: <strong>{totalFee && totalFee > 0 ? `$${totalFee}` : "Free"}</strong>
+                    Total for {totalAttendees} {totalAttendees === 1 ? "attendee" : "attendees"}:{" "}
+                    <strong>{totalFee && totalFee > 0 ? `$${totalFee}` : "Free"}</strong>
                   </p>
 
                   {!isMember && (

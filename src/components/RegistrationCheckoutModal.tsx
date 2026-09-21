@@ -20,6 +20,11 @@ interface RegistrationCheckoutModalProps {
   eventTitle: string;
   buyerName: string;
   buyerEmail: string;
+  /** The numeric id of the kutumb_event_registrations row being paid for,
+   *  if any — passed through to checkout so the webhook/session-status
+   *  check can flip that registration's own payment status once Stripe
+   *  confirms payment, instead of only recording an unlinked ticket order. */
+  registrationId?: number;
   /** Total attendees (adults + children + the registrant) — used as the
    *  default quantity when a real ticket type is selected. */
   defaultQuantity: number;
@@ -41,6 +46,7 @@ export default function RegistrationCheckoutModal({
   eventTitle,
   buyerName,
   buyerEmail,
+  registrationId,
   defaultQuantity,
   totalFee,
   onClose,
@@ -84,7 +90,7 @@ export default function RegistrationCheckoutModal({
       const res = await fetch(`/api/ticketing/${eventId}/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ buyerName, buyerEmail, items }),
+        body: JSON.stringify({ buyerName, buyerEmail, items, registrationId }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Could not start checkout");

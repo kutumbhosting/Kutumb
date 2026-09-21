@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,6 +150,104 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
       prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
     );
 
+  // ── Select-all (respects the current search/status filter — "all" means
+  // "all currently visible rows", not every registration for the event) ───
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
+  const visibleEmails = visibleRegistrations.map((m: any) => m.email);
+  const allVisibleSelected = visibleEmails.length > 0 && visibleEmails.every((e) => selectedEventRows.includes(e));
+  const someVisibleSelected = visibleEmails.some((e) => selectedEventRows.includes(e));
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+    }
+  }, [someVisibleSelected, allVisibleSelected]);
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      // Deselect only the currently-visible ones — a selection made under a
+      // different filter (if any) is left alone.
+      setSelectedEventRows((prev) => prev.filter((e) => !visibleEmails.includes(e)));
+    } else {
+      setSelectedEventRows((prev) => Array.from(new Set([...prev, ...visibleEmails])));
+    }
+  };
+
+  // ── Excel export — sends exactly what's on screen (respecting filters),
+  // or just the checkbox-selected rows, so the download always matches
+  // what the admin is looking at. ──────────────────────────────────────────
+  const [exporting, setExporting] = useState(false);
+  const exportExcel = async (scope: "filtered" | "selected") => {
+    const rows =
+      scope === "selected"
+        ? (selectedEvent?.members || []).filter((m: any) => selectedEventRows.includes(m.email))
+        : visibleRegistrations;
+    if (!rows.length) {
+      toast({ title: "Nothing to export", description: "No registrations match this selection.", variant: "destructive" });
+      return;
+    }
+    setExporting(true);
+    try {
+      const res = await fetch("/api/events/export-excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventName: selectedEvent?.eventName,
+          eventYear: selectedEvent?.eventYear,
+          scope,
+          rows,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || "Export failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${selectedEvent?.eventName || "event"}_${selectedEvent?.eventYear || ""}_${scope}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // ── Individual attendees / QR check-in dialog ───────────────────────────
+  const [attendeesDialogOpen, setAttendeesDialogOpen] = useState(false);
+  const [attendeesFor, setAttendeesFor] = useState<any | null>(null);
+  const [attendeesList, setAttendeesList] = useState<any[]>([]);
+  const [loadingAttendees, setLoadingAttendees] = useState(false);
+
+  const openAttendeesDialog = async (registration: any) => {
+    setAttendeesFor(registration);
+    setAttendeesDialogOpen(true);
+    setLoadingAttendees(true);
+    try {
+      const data = await safeFetch(`/api/events/registration/${registration.id}/attendees`);
+      setAttendeesList(Array.isArray(data) ? data : []);
+    } finally {
+      setLoadingAttendees(false);
+    }
+  };
+
+  const manualCheckInAttendee = async (attendeeId: number) => {
+    try {
+      const res = await fetch(`/api/checkin/manual/reg:${attendeeId}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Check-in failed");
+      toast({ title: "Checked in" });
+      if (attendeesFor) openAttendeesDialog(attendeesFor);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
   // ── Bulk email ────────────────────────────────────────────────────────
   // "Selected" = checked rows, "filtered" = whatever the search/status
   // filters above currently show (e.g. set the Payment Status filter to
@@ -170,7 +268,13 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
         : emailAudience === "filtered"
         ? visibleRegistrations
         : selectedEvent?.members || [];
-    return source.map((m: any) => ({ email: m.email, name: m.name }));
+    return source.map((m: any) => ({
+      email: m.email,
+      name: m.name,
+      membershipNumber: m.membershipNumber || null,
+      fee: m.fee,
+      paymentAmount: m.paymentAmount,
+    }));
   };
 
   const openEmailDialog = () => {
@@ -374,6 +478,24 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                 >
                   Download CSV
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => exportExcel("filtered")}
+                  disabled={exporting}
+                  title="Downloads exactly the rows currently shown by your search/filter above"
+                >
+                  {exporting ? "Exporting..." : "📥 Export Filtered (Excel)"}
+                </Button>
+                {selectedEventRows.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => exportExcel("selected")}
+                    disabled={exporting}
+                    title="Downloads only the checkbox-selected rows below"
+                  >
+                    {exporting ? "Exporting..." : `📥 Export Selected (${selectedEventRows.length})`}
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -452,7 +574,15 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b">
-                    <th className="p-2"></th>
+                    <th className="p-2">
+                      <input
+                        ref={selectAllRef}
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAllVisible}
+                        title="Select all currently shown rows"
+                      />
+                    </th>
                     {[
                       { key: "registrationNumber" as const, label: "Reg. No" },
                       { key: "name" as const, label: "Name" },
@@ -480,8 +610,11 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                         </button>
                       </th>
                     ))}
+                    <th className="p-2 text-left">Registration Status</th>
+                    <th className="p-2 text-left">Payment Method</th>
                     <th className="p-2 text-left">Match Confidence</th>
                     <th className="p-2 text-left">Comments</th>
+                    <th className="p-2 text-left">Attendees / QR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -499,7 +632,14 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                       <td className="p-2">{item.email}</td>
                       <td className="p-2">{item.phone}</td>
                       <td className="p-2">{item.adults}</td>
-                      <td className="p-2">{item.children}</td>
+                      <td className="p-2">
+                        {item.children}
+                        {(item.childrenUnder5 > 0 || item.children5Plus > 0) && (
+                          <span className="text-muted-foreground text-xs block whitespace-nowrap">
+                            ({item.childrenUnder5 || 0} under 5, {item.children5Plus ?? item.children} 5+)
+                          </span>
+                        )}
+                      </td>
                       <td className="p-2">{typeof item.fee === "number" ? `$${item.fee}` : "-"}</td>
                       <td className="p-2">
                         {item.paymentStatus === "Paid" ? (
@@ -521,6 +661,28 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                       <td className="p-2 font-mono">{item.transactionNumber || "-"}</td>
                       <td className="p-2">{item.membershipNumber || "-"}</td>
                       <td className="p-2">
+                        {item.registrationStatus === "confirmed" ? (
+                          <span className="text-green-700 font-medium">Confirmed</span>
+                        ) : item.registrationStatus === "pending_payment" ? (
+                          <span className="text-orange-600 font-medium">Pending Payment</span>
+                        ) : item.registrationStatus === "payment_failed" ? (
+                          <span className="text-red-600 font-medium">Payment Failed</span>
+                        ) : item.registrationStatus === "cancelled" ? (
+                          <span className="text-muted-foreground">Cancelled</span>
+                        ) : (
+                          <span className="text-muted-foreground">{item.registrationStatus || "-"}</span>
+                        )}
+                      </td>
+                      <td className="p-2 whitespace-nowrap">
+                        {item.paymentMethod === "card"
+                          ? "💳 Card"
+                          : item.paymentMethod === "bank_transfer"
+                          ? "🏦 Bank Transfer"
+                          : item.paymentMethod === "coupon"
+                          ? `🎟️ Coupon${item.couponCode ? ` (${item.couponCode})` : ""}`
+                          : "-"}
+                      </td>
+                      <td className="p-2">
                         {item.paymentMatchConfidence ? (
                           <span
                             className={
@@ -539,11 +701,16 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                         )}
                       </td>
                       <td className="p-2">{item.comments || "-"}</td>
+                      <td className="p-2">
+                        <Button size="sm" variant="outline" onClick={() => openAttendeesDialog(item)}>
+                          🪪 Attendees
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                   {visibleRegistrations.length === 0 && (
                     <tr>
-                      <td colSpan={14} className="p-4 text-center text-muted-foreground">
+                      <td colSpan={17} className="p-4 text-center text-muted-foreground">
                         No registrations match your search/filter.
                       </td>
                     </tr>
@@ -889,6 +1056,70 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                 📊 Download Excel Report
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Individual Attendees / QR Check-in ── */}
+      <Dialog open={attendeesDialogOpen} onOpenChange={setAttendeesDialogOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-4 shrink-0">
+            <DialogTitle>Attendees — {attendeesFor?.name}</DialogTitle>
+            <DialogDescription>
+              Registration {attendeesFor?.registrationNumber} for {attendeesFor?.eventName || selectedEvent?.eventName}.
+              Each person below has their own QR code and independent check-in status.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 overflow-y-auto px-6 py-1 min-h-0">
+            {loadingAttendees && <p className="text-sm text-muted-foreground">Loading attendees...</p>}
+
+            {!loadingAttendees && attendeesList.length === 0 && (
+              <p className="text-sm text-muted-foreground">No individual attendee records yet for this registration.</p>
+            )}
+
+            {!loadingAttendees &&
+              attendeesList.map((a) => (
+                <div key={a.id} className="flex items-center gap-4 border rounded-lg p-3">
+                  <img
+                    src={a.qrCode}
+                    alt={`QR code for ${a.name}`}
+                    className="w-[72px] h-[72px] rounded border bg-white shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{a.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {a.category === "primary_adult"
+                        ? "Primary Registrant"
+                        : a.category === "adult"
+                        ? "Additional Adult"
+                        : a.category === "child_under5"
+                        ? "Child (Under 5)"
+                        : "Child (5+)"}
+                    </p>
+                    <p className="text-xs font-mono text-muted-foreground break-all mt-1">{a.qrToken}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {a.checkedInAt ? (
+                      <p className="text-xs text-green-700 font-medium whitespace-nowrap">
+                        ✅ Checked in
+                        <br />
+                        {new Date(a.checkedInAt).toLocaleString("en-AU")}
+                      </p>
+                    ) : (
+                      <Button size="sm" onClick={() => manualCheckInAttendee(a.id)}>
+                        Check in
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          <DialogFooter className="p-6 pt-4 shrink-0 border-t">
+            <Button variant="outline" onClick={() => setAttendeesDialogOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

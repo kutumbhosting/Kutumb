@@ -189,7 +189,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
           recipients: emailAudience === "selected"
             ? memberData
                 .filter((m) => selectedMemberRows.includes(rowKey(m)))
-                .map((m) => ({ email: m.email, name: m.name }))
+                .map((m) => ({ email: m.email, name: m.name, membershipNumber: m.membershipNumber }))
             : undefined,
         }),
       });
