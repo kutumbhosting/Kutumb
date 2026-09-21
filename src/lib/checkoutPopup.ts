@@ -12,6 +12,11 @@
 // opposed to some unrelated window that merely has an opener).
 export const CHECKOUT_POPUP_NAME = "kutumb-checkout";
 
+// The last popup WE opened. Used to (a) close it before opening a new one,
+// so two payment attempts never leave a stray leftover window lying around,
+// and (b) avoid ever reusing a stale window ourselves.
+let lastOpenedPopup: Window | null = null;
+
 export interface CheckoutPopupResult {
   source: "kutumb-checkout";
   status: "paid" | "error";
@@ -70,13 +75,66 @@ export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | 
     top = Math.round(window.screenY + rect.top);
   }
 
+  // A rough, before-we-even-open estimate of how much the browser's own
+  // title bar + address bar will eat into the popup's requested outer
+  // size — based on the SAME browser's overhead on the current window
+  // (window.outer* vs window.inner*). This can't be exact (a popup has
+  // less chrome than a full tabbed window — no tab strip, no bookmarks
+  // bar), but baking in even a rough estimate up front means the popup
+  // looks right on first paint instead of visibly snapping to size a
+  // moment later, in case the more precise post-open correction below is
+  // blocked (some browsers, Brave included, restrict scripted
+  // resizeTo/moveTo more aggressively than others).
+  const estChromeWidth = Math.max(0, window.outerWidth - window.innerWidth);
+  const estChromeHeight = Math.max(0, window.outerHeight - window.innerHeight);
+  const openWidth = width + estChromeWidth;
+  const openHeight = height + estChromeHeight;
+  const openLeft = left;
+  const openTop = Math.max(0, top - estChromeHeight);
+
+  // Close any popup we opened ourselves that's still hanging around from a
+  // previous attempt, and — critically — open this one under a fresh,
+  // never-used-before name every time. window.open() only honours
+  // width/height/left/top when it's creating a brand-new window; if a
+  // window with the given name already exists (e.g. the person's last
+  // checkout attempt left it open, minimized, or behind another window),
+  // the browser just hands back THAT window, completely ignoring our size
+  // and position — which is what produces a popup that looks like some
+  // unrelated leftover window instead of one matching the current dialog.
+  // A unique name every time guarantees a fresh window, so the requested
+  // geometry always actually applies.
+  try {
+    if (lastOpenedPopup && !lastOpenedPopup.closed) lastOpenedPopup.close();
+  } catch {
+    // Ignore — worst case an old popup is left open for the person to
+    // close themselves, same as before this change existed.
+  }
+  const uniqueName = `${CHECKOUT_POPUP_NAME}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   const popup = window.open(
     "about:blank",
-    CHECKOUT_POPUP_NAME,
-    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+    uniqueName,
+    `width=${openWidth},height=${openHeight},left=${openLeft},top=${openTop},resizable=yes,scrollbars=yes`
   );
+  lastOpenedPopup = popup;
 
   if (popup) {
+    // /checkout/return identifies "one of our popups" by window.name —
+    // window.open's target argument becomes the new window's .name
+    // automatically, so with a unique target above that would no longer
+    // match CHECKOUT_POPUP_NAME. window.name is one of the few properties
+    // still writable across origins, and it persists across navigation of
+    // the same window (that's exactly why it's used for this), so setting
+    // it once, right here, keeps CheckoutReturn.tsx's check working
+    // exactly as before, regardless of what name the window was opened
+    // under.
+    try {
+      popup.name = CHECKOUT_POPUP_NAME;
+    } catch {
+      // Extremely unlikely for a same-origin about:blank window, but if it
+      // fails, CheckoutReturn.tsx just falls back to treating it as an
+      // ordinary page load — not ideal, but not broken either.
+    }
     // The width/height/left/top above position the popup's OUTER window —
     // but every browser then draws its own title bar + address bar INSIDE
     // that box, shrinking the actual page content area and pushing it
