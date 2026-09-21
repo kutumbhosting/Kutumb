@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "dev-full": "concurrently \"node server/server.js\" \"npm run dev\"",
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "migrate": "node server/db/migrate.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
