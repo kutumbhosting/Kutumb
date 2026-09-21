@@ -3,14 +3,18 @@ import pg from "pg";
 import { pool } from "../db/pool.js";
 import { buildPoolConfig } from "../db/pool.js";
 import { readEnvFile, setEnvVar } from "../lib/envFile.js";
-import { requireAdmin, requireSuperAdmin, hashPassword } from "../lib/auth.js";
+import { requireSuperAdmin, hashPassword } from "../lib/auth.js";
 import { getAllSettingsForAdmin, setSetting, deleteSetting, getSetting, SETTINGS_SCHEMA } from "../lib/settings.js";
 import { logAudit } from "../lib/audit.js";
 import { importMembersDropIn } from "../lib/importMembersDropIn.js";
 import { listGroqModels } from "../lib/aiDraft.js";
 
 const router = Router();
-router.use(requireAdmin);
+// Everything in the Admin Console (API Keys & Settings, Database, Admin
+// Users, Audit Log) is Super Admin-only. Limited admins get scoped access
+// to Events Settings / Events Management / File Management instead — see
+// the route-level guards in server.js and dbTables.routes.js.
+router.use(requireSuperAdmin);
 
 /* -------- Settings (Stripe keys etc.) -------- */
 router.get("/settings", async (req, res) => {

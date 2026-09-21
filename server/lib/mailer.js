@@ -241,10 +241,19 @@ export async function sendEventPaymentConfirmationEmail({
  */
 export async function sendBulkEmail({ recipients, subject, message }) {
   // Recipients may be plain email strings (legacy callers) or
-  // { email, name } objects — normalize to the latter so every send below
-  // can address the recipient by name.
+  // { email, name, membershipNumber?, pendingAmount? } objects — normalize
+  // so every send below can address the recipient by name and mention
+  // their membership number / amount owed, when known, regardless of what
+  // the admin actually typed in the message body.
   const normalized = recipients.map((r) =>
-    typeof r === "string" ? { email: r, name: "" } : { email: r.email, name: r.name || "" }
+    typeof r === "string"
+      ? { email: r, name: "", membershipNumber: null, pendingAmount: null }
+      : {
+          email: r.email,
+          name: r.name || "",
+          membershipNumber: r.membershipNumber || null,
+          pendingAmount: r.pendingAmount != null && Number(r.pendingAmount) > 0 ? Number(r.pendingAmount) : null,
+        }
   );
 
   const results = { total: normalized.length, sent: 0, failed: 0, failures: [] };
@@ -257,16 +266,29 @@ export async function sendBulkEmail({ recipients, subject, message }) {
     .map((line) => (line.trim() ? `<p style="margin:0 0 12px;">${escapeHtml(line)}</p>` : ""))
     .join("");
 
-  for (const { email: to, name } of normalized) {
+  for (const { email: to, name, membershipNumber, pendingAmount } of normalized) {
     // Personalized "Dear <name>," greeting up top for every recipient,
     // falling back to "Dear Member," when a name isn't on file.
     const trimmedName = String(name || "").trim();
     const greeting = trimmedName ? `Dear ${escapeHtml(trimmedName)},` : "Dear Member,";
 
+    // Every email to a registered member always states their membership
+    // number, and every email about an event registration with a pending
+    // balance always states the amount owed — regardless of what the admin
+    // typed, so this can never be accidentally left out.
+    const membershipLine = membershipNumber
+      ? `<p style="margin:0 0 12px;font-size:14px;">Your Kutumb Membership Number: <strong>${escapeHtml(String(membershipNumber))}</strong></p>`
+      : "";
+    const pendingAmountLine = pendingAmount
+      ? `<p style="margin:0 0 12px;font-size:14px;color:#c2410c;font-weight:bold;">Amount Pending: $${pendingAmount.toFixed(2)}</p>`
+      : "";
+
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
         ${LOGO_HTML}
         <p style="margin:0 0 12px;">${greeting}</p>
+        ${membershipLine}
+        ${pendingAmountLine}
         ${bodyHtml}
         <p style="margin-top:24px;color:#555;font-size:13px;">
           With Best Regards, &middot; Kutumb Executive Team

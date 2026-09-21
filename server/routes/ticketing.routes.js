@@ -6,6 +6,7 @@ import { getStripe } from "../lib/stripeClient.js";
 import { getSetting } from "../lib/settings.js";
 import { logAudit } from "../lib/audit.js";
 import { slugify } from "../lib/slugify.js";
+import { findDonationPaymentByReference, markDonationPaymentPaid } from "../lib/donationPayments.js";
 
 const router = Router();
 
@@ -187,7 +188,7 @@ async function ensureGeneralTicketType(client, eventId, priceCents) {
 router.post("/:eventId/checkout", async (req, res) => {
   const client = await pool.connect();
   try {
-    const { buyerName, buyerEmail, buyerPhone, items } = req.body;
+    const { buyerName, buyerEmail, buyerPhone, items, registrationId } = req.body;
     if (!buyerName?.trim() || !buyerEmail?.trim() || !items?.length) {
       return res.status(400).json({ message: "buyerName, buyerEmail and items are required" });
     }
@@ -240,12 +241,13 @@ router.post("/:eventId/checkout", async (req, res) => {
     // Free tickets: confirm immediately inside the same transaction.
     if (subtotal === 0) {
       const orderRes = await client.query(
-        `INSERT INTO kutumb_orders (event_id, buyer_name, buyer_email, buyer_phone, status, subtotal_cents, total_cents)
-         VALUES ($1,$2,$3,$4,'paid',0,0) RETURNING id`,
-        [req.params.eventId, buyerName.trim(), buyerEmail.trim(), buyerPhone || null]
+        `INSERT INTO kutumb_orders (event_id, buyer_name, buyer_email, buyer_phone, status, subtotal_cents, total_cents, registration_id)
+         VALUES ($1,$2,$3,$4,'paid',0,0,$5) RETURNING id`,
+        [req.params.eventId, buyerName.trim(), buyerEmail.trim(), buyerPhone || null, registrationId || null]
       );
       const orderId = orderRes.rows[0].id;
       await insertItemsAndAttendees(client, orderId, req.params.eventId, orderItemsToInsert, buyerName.trim(), buyerEmail.trim());
+      await markRegistrationPaid(client, registrationId, "card", null);
       await client.query("COMMIT");
       return res.status(201).json({ free: true, orderId });
     }
@@ -255,9 +257,9 @@ router.post("/:eventId/checkout", async (req, res) => {
     // buyer abandons checkout we simply have an order stuck at "pending"
     // (visible to admin), rather than ever risking overselling.
     const orderRes = await client.query(
-      `INSERT INTO kutumb_orders (event_id, buyer_name, buyer_email, buyer_phone, status, subtotal_cents, total_cents)
-       VALUES ($1,$2,$3,$4,'pending',$5,$5) RETURNING id`,
-      [req.params.eventId, buyerName.trim(), buyerEmail.trim(), buyerPhone || null, subtotal]
+      `INSERT INTO kutumb_orders (event_id, buyer_name, buyer_email, buyer_phone, status, subtotal_cents, total_cents, registration_id)
+       VALUES ($1,$2,$3,$4,'pending',$5,$5,$6) RETURNING id`,
+      [req.params.eventId, buyerName.trim(), buyerEmail.trim(), buyerPhone || null, subtotal, registrationId || null]
     );
     const orderId = orderRes.rows[0].id;
     for (const oi of orderItemsToInsert) {
@@ -288,7 +290,7 @@ router.post("/:eventId/checkout", async (req, res) => {
       customer_email: buyerEmail.trim(),
       line_items: lineItems,
       return_url: `${baseUrl}/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
-      metadata: { orderId: String(orderId), eventId: req.params.eventId },
+      metadata: { orderId: String(orderId), eventId: req.params.eventId, registrationId: registrationId ? String(registrationId) : "" },
     });
     await client.query("UPDATE kutumb_orders SET stripe_session_id = $1 WHERE id = $2", [session.id, orderId]);
 
@@ -302,6 +304,28 @@ router.post("/:eventId/checkout", async (req, res) => {
     client.release();
   }
 });
+
+// When a Stripe (or free) checkout was started FROM the Event Registration
+// flow (i.e. registrationId was supplied), this is what actually closes the
+// loop that used to be missing: it flips that registration's own
+// payment_status/registration_status once payment is confirmed, using the
+// authoritative Stripe payment_intent status (via the webhook or
+// session-status fallback below) rather than ever trusting the browser
+// alone. A registration paid by card never shows the fee as owing again.
+async function markRegistrationPaid(client, registrationId, paymentMethod, stripePaymentIntent) {
+  if (!registrationId) return;
+  await client.query(
+    `UPDATE kutumb_event_registrations SET
+       payment_status = 'Paid',
+       registration_status = 'confirmed',
+       payment_method = $1,
+       payment_amount = fee,
+       payment_date = now(),
+       transaction_number = COALESCE(transaction_number, $2)
+     WHERE id = $3`,
+    [paymentMethod, stripePaymentIntent || null, registrationId]
+  );
+}
 
 async function insertItemsAndAttendees(client, orderId, eventId, items, buyerName, buyerEmail) {
   for (const oi of items) {
@@ -340,6 +364,7 @@ export async function stripeWebhookHandler(req, res) {
     const session = event.data.object;
     const orderId = Number(session.metadata?.orderId);
     const eventId = session.metadata?.eventId;
+    const registrationId = session.metadata?.registrationId ? Number(session.metadata.registrationId) : null;
     if (orderId) {
       const { rows } = await pool.query("SELECT * FROM kutumb_orders WHERE id = $1", [orderId]);
       const order = rows[0];
@@ -356,6 +381,19 @@ export async function stripeWebhookHandler(req, res) {
             );
           }
         }
+        // Authoritative confirmation from Stripe itself (not the browser
+        // returning to /checkout/return) — this is what actually confirms
+        // a registration's payment per the "check payment status before
+        // confirming" requirement.
+        await markRegistrationPaid(pool, registrationId || order.registration_id, "card", session.payment_intent);
+      }
+    } else if (session.metadata?.donationId) {
+      // A donation paid by card doesn't go through kutumb_orders at all —
+      // find its own payment-attempt row (recorded when the checkout
+      // session was created) and confirm it directly.
+      const donationRecord = await findDonationPaymentByReference("card", session.id);
+      if (donationRecord) {
+        await markDonationPaymentPaid(donationRecord.id, session.payment_status, session.payment_intent);
       }
     }
   }
@@ -384,6 +422,7 @@ router.get("/session-status", async (req, res) => {
         const session = await stripe.checkout.sessions.retrieve(session_id);
         if (session.payment_status === "paid") {
           await pool.query("UPDATE kutumb_orders SET status = 'paid', stripe_payment_intent = $1 WHERE id = $2", [session.payment_intent, order.id]);
+          await markRegistrationPaid(pool, order.registration_id, "card", session.payment_intent);
           order.status = "paid";
         }
       }

@@ -309,3 +309,145 @@ CREATE TABLE IF NOT EXISTS kutumb_team_profiles (
   image TEXT, -- filename under server/data/team
   sort_order INTEGER NOT NULL DEFAULT 0
 );
+
+-- ============================================================
+-- Event Registration enhancements (filtered export, per-attendee QR
+-- check-in, under-5 free children, coupons, payment-method tracking).
+-- Purely additive — every existing kutumb_event_registrations row keeps
+-- working exactly as before; new columns default to values that reproduce
+-- the old behaviour when left unset.
+-- ============================================================
+
+-- Breaks the existing `children` count into an under-5 (free, when the
+-- event allows it) and 5-and-over (charged) split. `children` itself is
+-- kept as-is (still the total) so every existing query/report that reads
+-- it keeps working unchanged.
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS children_under5 INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS children_5plus INTEGER NOT NULL DEFAULT 0;
+-- The per-child fee actually charged at registration time (kept alongside
+-- per_person_fee, which remains the per-adult rate), for accurate historical
+-- records/exports even if event pricing changes later.
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS child_fee NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+-- How this registration is being / was paid for.
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_method TEXT; -- 'bank_transfer' | 'card' | 'coupon' | NULL (free / not yet chosen)
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS coupon_code TEXT;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS coupon_amount NUMERIC(10,2);
+
+-- Explicit registration lifecycle, separate from payment_status (which the
+-- existing UI already reads/writes as 'N/A' | 'Pending' | 'Paid'). This is
+-- what makes "registered" and "confirmed" different for a paid event: a
+-- new paid registration starts at pending_payment and only becomes
+-- confirmed once payment_status flips to Paid (webhook, admin bank-transfer
+-- verification, or a fully-covering coupon).
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS registration_status TEXT NOT NULL DEFAULT 'confirmed';
+-- 'pending_payment' | 'confirmed' | 'payment_failed' | 'cancelled'
+
+-- Links a registration to the Stripe-backed order created when it's paid
+-- via RegistrationCheckoutModal, so the webhook / session-status check can
+-- flip THIS registration's payment_status once Stripe confirms payment
+-- (previously the Stripe order and the registration row were unconnected).
+ALTER TABLE kutumb_orders ADD COLUMN IF NOT EXISTS registration_id INTEGER REFERENCES kutumb_event_registrations(id) ON DELETE SET NULL;
+
+-- One row per individual attendee under a registration (the primary
+-- registrant, each additional adult, and each child) — each with its own
+-- scannable QR token and independent check-in status. This is what makes
+-- "Pramod Singh registers himself + 1 adult + 1 child" become 3 separately
+-- checkable people instead of one row for the whole registration.
+CREATE TABLE IF NOT EXISTS kutumb_registration_attendees (
+  id SERIAL PRIMARY KEY,
+  registration_id INTEGER NOT NULL REFERENCES kutumb_event_registrations(id) ON DELETE CASCADE,
+  event_name TEXT NOT NULL,
+  event_year TEXT NOT NULL,
+  name TEXT NOT NULL,               -- e.g. "Pramod Singh", "Additional Adult 1", "Child 1 (Under 5)"
+  category TEXT NOT NULL,           -- 'primary_adult' | 'adult' | 'child_under5' | 'child_5plus'
+  qr_token TEXT UNIQUE NOT NULL,    -- opaque random token — never the person's name/email
+  checked_in_at TIMESTAMPTZ,
+  checked_in_by TEXT,               -- admin email who scanned/checked them in
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_regattendees_registration ON kutumb_registration_attendees(registration_id);
+CREATE INDEX IF NOT EXISTS idx_kutumb_regattendees_qr ON kutumb_registration_attendees(qr_token);
+CREATE INDEX IF NOT EXISTS idx_kutumb_regattendees_event ON kutumb_registration_attendees(event_name, event_year);
+
+-- Under-5-free configuration + separate child pricing per event. NULL for
+-- child_member_fee/child_non_member_fee means "no special child price
+-- configured — fall back to the adult member/non-member fee", so existing
+-- events with no configuration keep charging children the same as adults,
+-- exactly as before.
+ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS under5_free BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS child_member_fee NUMERIC(10,2);
+ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS child_non_member_fee NUMERIC(10,2);
+
+-- Event-specific coupons. Single-use by default (redeemed_by_registration_id
+-- is set the moment it's applied, and the application layer refuses to
+-- apply an already-redeemed/void/expired coupon again) — a coupon cannot
+-- be reused once it has been used on a registration.
+CREATE TABLE IF NOT EXISTS kutumb_event_coupons (
+  id SERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  event_name TEXT NOT NULL,
+  event_year TEXT NOT NULL,
+  amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  qr_code TEXT,                       -- base64 data URL, generated at creation
+  recipient_name TEXT,
+  recipient_email TEXT,
+  notes TEXT,                         -- applicable conditions / validity notes, free text
+  valid_from TIMESTAMPTZ,
+  valid_until TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'active', -- 'active' | 'used' | 'void'
+  redeemed_by_registration_id INTEGER REFERENCES kutumb_event_registrations(id) ON DELETE SET NULL,
+  redeemed_at TIMESTAMPTZ,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_coupons_event ON kutumb_event_coupons(event_name, event_year);
+
+-- ============================================================
+-- Square / PayPal payment tracking for the Event Registration flow.
+-- Deliberately separate from kutumb_orders (which is entangled with the
+-- ticket-types/order-items ticketing system) — this is a lightweight
+-- "pay this registration's remaining balance via provider X" record, one
+-- row per checkout attempt, so a webhook or a return-page poll can find
+-- the right registration and mark it paid idempotently.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS kutumb_registration_payments (
+  id SERIAL PRIMARY KEY,
+  registration_id INTEGER NOT NULL REFERENCES kutumb_event_registrations(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,              -- 'square' | 'paypal'
+  provider_reference TEXT NOT NULL,    -- Square order_id, or PayPal order id
+  amount NUMERIC(10,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'failed'
+  raw_status TEXT,                     -- the provider's own status string, for troubleshooting
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_regpayments_registration ON kutumb_registration_payments(registration_id);
+CREATE INDEX IF NOT EXISTS idx_kutumb_regpayments_reference ON kutumb_registration_payments(provider, provider_reference);
+
+-- ============================================================
+-- Donations: same "Card / Square / PayPal / Bank Transfer" payment options
+-- as event registrations. Bank transfer keeps working exactly as before
+-- (self-reported by the donor); the new columns/table below only come into
+-- play when a donor pays online instead.
+-- ============================================================
+ALTER TABLE kutumb_donations ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'Pending';
+ALTER TABLE kutumb_donations ADD COLUMN IF NOT EXISTS payment_method TEXT;
+-- Backfill: a donation already marked bank_transferred (the only "done"
+-- signal that existed before this change) is treated as already Paid.
+UPDATE kutumb_donations SET payment_status = 'Paid', payment_method = COALESCE(payment_method, 'bank_transfer')
+  WHERE bank_transferred = TRUE AND payment_status = 'Pending';
+
+CREATE TABLE IF NOT EXISTS kutumb_donation_payments (
+  id SERIAL PRIMARY KEY,
+  donation_id INTEGER NOT NULL REFERENCES kutumb_donations(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,              -- 'card' (Stripe) | 'square' | 'paypal'
+  provider_reference TEXT NOT NULL,    -- Stripe session id, Square order_id, or PayPal order id
+  amount NUMERIC(10,2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'failed'
+  raw_status TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_donpayments_donation ON kutumb_donation_payments(donation_id);
+CREATE INDEX IF NOT EXISTS idx_kutumb_donpayments_reference ON kutumb_donation_payments(provider, provider_reference);

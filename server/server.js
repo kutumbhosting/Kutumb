@@ -22,16 +22,29 @@ import {
 } from "./lib/mailer.js";
 import { sendWhatsAppDocument } from "./lib/whatsapp.js";
 import { parseEventEndDate, sortPastEventsDescending } from "./lib/eventDates.js";
-import { requireAdmin } from "./lib/auth.js";
-import { getPaymentMethodSettings } from "./lib/settings.js";
+import { requireAdmin, requireSuperAdmin } from "./lib/auth.js";
+import { getPaymentMethodSettings, getSetting } from "./lib/settings.js";
+import { getStripe } from "./lib/stripeClient.js";
+import {
+  recordDonationPaymentAttempt,
+  findDonationPaymentByReference,
+  getDonationPayment,
+  markDonationPaymentPaid,
+  markDonationPaymentFailed,
+} from "./lib/donationPayments.js";
 import { pool } from "./db/pool.js";
 import adminAuthRoutes from "./routes/adminAuth.routes.js";
 import adminConsoleRoutes from "./routes/adminConsole.routes.js";
 import dbTablesRoutes from "./routes/dbTables.routes.js";
 import ticketingRoutes, { stripeWebhookHandler } from "./routes/ticketing.routes.js";
+import squareRoutes, { squareWebhookHandler } from "./routes/square.routes.js";
+import paypalRoutes from "./routes/paypal.routes.js";
 import checkinRoutes from "./routes/checkin.routes.js";
 import mediaRoutes from "./routes/media.routes.js";
 import reconciliationRoutes from "./routes/reconciliation.routes.js";
+import couponsRoutes from "./routes/coupons.routes.js";
+import registrationExtrasRoutes from "./routes/registrationExtras.routes.js";
+import { syncRegistrationAttendees } from "./lib/attendees.js";
 import { slugify } from "./lib/slugify.js";
 import { DATA_ROOT } from "./lib/dataRoot.js";
 import { importMembersDropIn } from "./lib/importMembersDropIn.js";
@@ -44,6 +57,7 @@ app.use(cors());
 // Stripe webhook needs the RAW body to verify its signature, so it must be
 // registered before express.json() parses the body for every other route.
 app.post("/api/ticketing/webhook", express.raw({ type: "application/json" }), stripeWebhookHandler);
+app.post("/api/square/webhook", express.raw({ type: "application/json" }), squareWebhookHandler);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -58,6 +72,10 @@ app.use("/api/db-tables", dbTablesRoutes);
 app.use("/api/ticketing", ticketingRoutes);
 app.use("/api/checkin", checkinRoutes);
 app.use("/api/events/reconcile", reconciliationRoutes);
+app.use("/api/coupons", couponsRoutes);
+app.use("/api/events", registrationExtrasRoutes);
+app.use("/api/square", squareRoutes);
+app.use("/api/paypal", paypalRoutes);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -205,11 +223,22 @@ app.get("/ping", (req, res) => {
    ✅ REGISTER EVENT
 ------------------------------ */
 app.post("/api/events", async (req, res) => {
-  const { eventName, eventDate, name, email, phone, adults, children, comments } = req.body;
+  const {
+    eventName, eventDate, name, email, phone, comments,
+    adults,
+    // New: split children into under-5 (free, when the event allows it) and
+    // 5-and-over (charged). Older/unmigrated clients that still only send
+    // `children` are treated as all-5-plus, i.e. exactly the old behaviour.
+    children, childrenUnder5, children5Plus,
+  } = req.body;
 
   if (!eventName || !name || !email || !phone) {
     return res.status(400).json({ message: "Name, email and phone are required" });
   }
+
+  const numChildrenUnder5 = Number(childrenUnder5) || 0;
+  const numChildren5Plus = children5Plus !== undefined ? Number(children5Plus) || 0 : Number(children) || 0;
+  const numChildrenTotal = numChildrenUnder5 + numChildren5Plus;
 
   let eventYear = year(eventDate);
 
@@ -224,6 +253,7 @@ app.post("/api/events", async (req, res) => {
   let newRegistration = null;
   let applicableFee = 0;
   let perPersonFee = 0;
+  let childFeeApplied = 0;
   let matchedMember = null;
 
   try {
@@ -248,13 +278,19 @@ app.post("/api/events", async (req, res) => {
       const capacity = Number(eventMeta?.capacity || 0);
       const memberFee = Number(eventMeta?.member_fee || 0);
       const nonMemberFee = Number(eventMeta?.non_member_fee || 0);
+      // Under-5-free + separate child pricing (falls back to the adult
+      // rate when an event hasn't configured its own child price, so an
+      // event nobody has touched charges children exactly as before).
+      const under5Free = eventMeta?.under5_free !== false;
+      const childMemberFee = eventMeta?.child_member_fee != null ? Number(eventMeta.child_member_fee) : memberFee;
+      const childNonMemberFee = eventMeta?.child_non_member_fee != null ? Number(eventMeta.child_non_member_fee) : nonMemberFee;
 
       const { rows: existingRegs } = await client.query(
         "SELECT adults, children, registration_number FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2",
         [eventName, eventYear]
       );
       const used = existingRegs.reduce((sum, r) => sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0), 0);
-      const requested = (Number(adults) || 0) + (Number(children) || 0);
+      const requested = (Number(adults) || 0) + numChildrenTotal;
 
       if (capacity > 0 && used + requested > capacity) {
         lockError = { status: 400, message: "Not enough spots available" };
@@ -264,26 +300,41 @@ app.post("/api/events", async (req, res) => {
           [email]
         );
         matchedMember = memberRows[0] || null;
+        const isMember = !!matchedMember?.membership_number;
 
         const registrationNumber = getNextRegistrationNumber(
           existingRegs.map((r) => ({ registrationNumber: r.registration_number }))
         );
-        perPersonFee = matchedMember?.membership_number ? memberFee : nonMemberFee;
-        const totalAttendees = 1 + (Number(adults) || 0) + (Number(children) || 0);
-        applicableFee = perPersonFee * totalAttendees;
+        perPersonFee = isMember ? memberFee : nonMemberFee;
+        childFeeApplied = isMember ? childMemberFee : childNonMemberFee;
+        const totalAdults = 1 + (Number(adults) || 0);
+        // Under-5 children are free when the event allows it; everyone else
+        // (5+ children always, or every child if the event has under-5-free
+        // turned off) is charged the child rate.
+        const chargeableChildren = under5Free ? numChildren5Plus : numChildrenTotal;
+        applicableFee = perPersonFee * totalAdults + childFeeApplied * chargeableChildren;
+
+        // Paid registrations start life as "pending_payment" and only become
+        // "confirmed" once payment actually clears (bank-transfer admin
+        // verification, a fully-covering coupon, or Stripe's own webhook /
+        // session-status confirmation) — a submitted form is no longer, by
+        // itself, a confirmed registration for a paid event.
+        const registrationStatus = applicableFee > 0 ? "pending_payment" : "confirmed";
 
         const { rows: inserted } = await client.query(
           `INSERT INTO kutumb_event_registrations
-             (event_name, event_year, name, email, phone, adults, children, comments, registration_number,
-              is_member, membership_number, fee, per_person_fee, bank_transferred, transaction_number, payment_status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,FALSE,NULL,$14) RETURNING *`,
+             (event_name, event_year, name, email, phone, adults, children, children_under5, children_5plus, child_fee,
+              comments, registration_number, is_member, membership_number, fee, per_person_fee,
+              bank_transferred, transaction_number, payment_status, registration_status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,NULL,$17,$18) RETURNING *`,
           [
-            eventName, eventYear, name, email, phone, Number(adults) || 0, Number(children) || 0, comments || null,
-            registrationNumber, !!matchedMember?.membership_number, matchedMember?.membership_number || null,
-            applicableFee, perPersonFee, applicableFee > 0 ? "Pending" : "N/A",
+            eventName, eventYear, name, email, phone, Number(adults) || 0, numChildrenTotal, numChildrenUnder5, numChildren5Plus, childFeeApplied,
+            comments || null, registrationNumber, isMember, matchedMember?.membership_number || null,
+            applicableFee, perPersonFee, applicableFee > 0 ? "Pending" : "N/A", registrationStatus,
           ]
         );
         newRegistration = inserted[0];
+        await syncRegistrationAttendees(client, newRegistration);
       }
     }
 
@@ -332,14 +383,19 @@ app.post("/api/events", async (req, res) => {
 
   res.status(201).json({
     message: "Registration successful",
+    id: newRegistration.id,
     registrationNumber: newRegistration.registration_number,
+    registrationStatus: newRegistration.registration_status,
     isMember: !!matchedMember,
     membershipNumber: matchedMember?.membership_number || null,
     qrCode: matchedMember?.qr_code || null,
     fee: applicableFee,
     perPersonFee,
+    childFee: childFeeApplied,
     adults: Number(adults) || 0,
-    children: Number(children) || 0,
+    children: numChildrenTotal,
+    childrenUnder5: numChildrenUnder5,
+    children5Plus: numChildren5Plus,
     name,
     email,
     phone,
@@ -480,7 +536,7 @@ app.get("/api/members/:membershipNumber/card.pdf", async (req, res) => {
 /* -----------------------------
    📲 SEND MEMBERSHIP CARD VIA WHATSAPP
 ------------------------------ */
-app.post("/api/members/send-whatsapp", requireAdmin, async (req, res) => {
+app.post("/api/members/send-whatsapp", requireSuperAdmin, async (req, res) => {
   try {
     const { membershipNumber, whatsappNumber } = req.body;
     if (!membershipNumber || !whatsappNumber) {
@@ -521,6 +577,7 @@ app.get("/api/all-registrations", requireAdmin, async (req, res) => {
     const { rows } = await pool.query("SELECT * FROM kutumb_event_registrations ORDER BY created_at DESC");
     res.json(
       rows.map((r) => ({
+        id: r.id,
         eventName: r.event_name,
         eventYear: r.event_year,
         name: r.name,
@@ -528,6 +585,9 @@ app.get("/api/all-registrations", requireAdmin, async (req, res) => {
         phone: r.phone,
         adults: r.adults,
         children: r.children,
+        childrenUnder5: r.children_under5,
+        children5Plus: r.children_5plus,
+        childFee: r.child_fee !== null ? Number(r.child_fee) : 0,
         comments: r.comments,
         registrationNumber: r.registration_number,
         isMember: r.is_member,
@@ -537,6 +597,10 @@ app.get("/api/all-registrations", requireAdmin, async (req, res) => {
         bankTransferred: r.bank_transferred,
         transactionNumber: r.transaction_number,
         paymentStatus: r.payment_status,
+        registrationStatus: r.registration_status,
+        paymentMethod: r.payment_method,
+        couponCode: r.coupon_code,
+        couponAmount: r.coupon_amount !== null ? Number(r.coupon_amount) : null,
         paymentAmount: r.payment_amount !== null ? Number(r.payment_amount) : null,
         paymentDate: r.payment_date,
         paymentMatchConfidence: r.payment_match_confidence,
@@ -623,15 +687,35 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
     const amountProvided = updatedData?.paymentAmount !== undefined;
     const dateProvided = updatedData?.paymentDate !== undefined;
 
+    // The admin edit panel always sends childrenUnder5 + children5Plus
+    // together whenever the headcount is touched, so `children` (the total)
+    // is recomputed here rather than trusted separately — the two can
+    // never drift apart.
+    const childrenUnder5Provided = updatedData?.childrenUnder5 !== undefined;
+    const children5PlusProvided = updatedData?.children5Plus !== undefined;
+    const childrenSplitProvided = childrenUnder5Provided || children5PlusProvided;
+    const childrenUnder5Value = childrenUnder5Provided ? Number(updatedData.childrenUnder5) || 0 : 0;
+    const children5PlusValue = children5PlusProvided ? Number(updatedData.children5Plus) || 0 : 0;
+
+    const paymentMethodProvided = updatedData?.paymentMethod !== undefined;
+
     const { rows } = await pool.query(
       `UPDATE kutumb_event_registrations SET
          name = COALESCE($1, name),
          phone = COALESCE($2, phone),
          adults = COALESCE($3, adults),
-         children = COALESCE($4, children),
+         children = CASE WHEN $17 THEN $18 ELSE COALESCE($4, children) END,
+         children_under5 = CASE WHEN $19 THEN $20 ELSE children_under5 END,
+         children_5plus = CASE WHEN $21 THEN $22 ELSE children_5plus END,
          comments = COALESCE($5, comments),
          fee = COALESCE($6, fee),
          payment_status = COALESCE($7, payment_status),
+         payment_method = CASE WHEN $23 THEN $24 ELSE payment_method END,
+         registration_status = CASE
+           WHEN $7 = 'Paid' THEN 'confirmed'
+           WHEN $7 IS NOT NULL AND $7 <> 'Paid' AND registration_status = 'confirmed' AND COALESCE($6, fee) > 0 THEN 'pending_payment'
+           ELSE registration_status
+         END,
          transaction_number = CASE WHEN $8 THEN NULLIF($9, '') ELSE transaction_number END,
          bank_transferred = CASE WHEN $8 THEN ($9 <> '') ELSE bank_transferred END,
          payment_amount = CASE WHEN $13 THEN $14 ELSE payment_amount END,
@@ -648,10 +732,22 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
         eventName, eventYear, email,
         amountProvided, amountProvided ? Number(updatedData.paymentAmount) || null : null,
         dateProvided, dateProvided ? (updatedData.paymentDate || null) : null,
+        childrenSplitProvided, childrenUnder5Value + children5PlusValue,
+        childrenUnder5Provided, childrenUnder5Value,
+        children5PlusProvided, children5PlusValue,
+        paymentMethodProvided, updatedData?.paymentMethod || null,
       ]
     );
 
     if (rows.length === 0) return res.status(404).json({ message: "Registration not found" });
+
+    // Keep the individual per-attendee QR list in sync whenever the
+    // headcount changed (already-checked-in attendees are never removed).
+    if (updatedData?.adults !== undefined || childrenSplitProvided) {
+      await syncRegistrationAttendees(pool, rows[0]).catch((err) =>
+        console.error("Attendee sync after admin edit failed:", err)
+      );
+    }
     res.json({ message: "Event registration updated successfully" });
   } catch (err) {
     console.error("EVENT UPDATE ERROR:", err);
@@ -703,19 +799,30 @@ app.post("/api/events/send-bulk-email", requireAdmin, async (req, res) => {
       return res.status(400).json({ message: "Subject and message are required" });
     }
 
+    // Every event email always states the recipient's Kutumb membership
+    // number (if they're a registered member) and, if this event still has
+    // a payment pending for them, the exact amount owed — regardless of
+    // what the admin typed in the message, so it's never accidentally left
+    // out of a payment-reminder email.
+    const withPendingAmount = (r) => {
+      const fee = Number(r.fee) || 0;
+      const paid = Number(r.paymentAmount) || 0;
+      return { email: r.email, name: r.name || "", membershipNumber: r.membershipNumber || null, pendingAmount: Math.max(fee - paid, 0) };
+    };
+
     let recipients;
     if (Array.isArray(recipientsInput) && recipientsInput.length > 0) {
-      recipients = recipientsInput
-        .filter((r) => r?.email)
-        .map((r) => ({ email: r.email, name: r.name || "" }));
+      recipients = recipientsInput.filter((r) => r?.email).map(withPendingAmount);
     } else if (paymentStatus) {
       // e.g. paymentStatus: "Pending" — email everyone still owing for this event.
       const { rows } = await pool.query(
-        `SELECT name, email FROM kutumb_event_registrations
+        `SELECT name, email, membership_number, fee, payment_amount FROM kutumb_event_registrations
          WHERE event_name = $1 AND event_year = $2 AND payment_status = $3`,
         [eventName, eventYear, paymentStatus]
       );
-      recipients = rows.filter((r) => r.email).map((r) => ({ email: r.email, name: r.name || "" }));
+      recipients = rows
+        .filter((r) => r.email)
+        .map((r) => withPendingAmount({ email: r.email, name: r.name, membershipNumber: r.membership_number, fee: r.fee, paymentAmount: r.payment_amount }));
     } else {
       return res.status(400).json({ message: "No recipients selected" });
     }
@@ -764,6 +871,11 @@ app.get("/api/events/:eventName/:eventYear", requireAdmin, async (req, res) => {
 ------------------------------ */
 app.get("/api/payment-methods", async (req, res) => {
   try {
+    // Never let a browser, proxy, or CDN cache this — it reflects a toggle
+    // an admin can flip at any time, and a stale cached response is exactly
+    // what would make a newly-enabled payment method look like it's "not
+    // coming" on the donate/registration forms.
+    res.set("Cache-Control", "no-store");
     res.json(await getPaymentMethodSettings());
   } catch (err) {
     console.error("PAYMENT METHODS ERROR:", err);
@@ -801,7 +913,7 @@ app.get("/api/members/lookup", async (req, res) => {
 /* -----------------------------
    👥 GET ALL MEMBERS
 ------------------------------ */
-app.get("/api/members", requireAdmin, async (req, res) => {
+app.get("/api/members", requireSuperAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM kutumb_members ORDER BY created_at DESC");
     res.json(
@@ -825,7 +937,7 @@ app.get("/api/members", requireAdmin, async (req, res) => {
 /* -----------------------------
    ✅ DELETE MEMBER
 ------------------------------ */
-app.post("/api/members/delete", requireAdmin, async (req, res) => {
+app.post("/api/members/delete", requireSuperAdmin, async (req, res) => {
   try {
     const { membershipNumbers } = req.body;
     if (!membershipNumbers || !Array.isArray(membershipNumbers) || !membershipNumbers.length) {
@@ -846,7 +958,7 @@ app.post("/api/members/delete", requireAdmin, async (req, res) => {
 /* -----------------------------
    ✅ UPDATE MEMBER
 ------------------------------ */
-app.post("/api/members/update", requireAdmin, async (req, res) => {
+app.post("/api/members/update", requireSuperAdmin, async (req, res) => {
   try {
     const { membershipNumber, updatedData } = req.body;
     if (!membershipNumber) return res.status(400).json({ message: "Membership number required" });
@@ -927,6 +1039,9 @@ app.get("/api/upcoming-events", async (req, res) => {
           capacity,
           memberFee: Number(event.member_fee) || 0,
           nonMemberFee: Number(event.non_member_fee) || 0,
+          under5Free: event.under5_free !== false,
+          childMemberFee: event.child_member_fee !== null ? Number(event.child_member_fee) : null,
+          childNonMemberFee: event.child_non_member_fee !== null ? Number(event.child_non_member_fee) : null,
           description: event.description,
           isActive: event.is_active,
           published: event.published,
@@ -965,23 +1080,34 @@ app.post("/api/upcoming-events/update", requireAdmin, async (req, res) => {
            member_fee = COALESCE($5, member_fee), non_member_fee = COALESCE($6, non_member_fee),
            description = COALESCE($7, description), is_active = COALESCE($8, is_active),
            published = COALESCE($9, published), flyer_image = COALESCE($10, flyer_image),
+           under5_free = COALESCE($12, under5_free),
+           child_member_fee = CASE WHEN $13 THEN $14 ELSE child_member_fee END,
+           child_non_member_fee = CASE WHEN $15 THEN $16 ELSE child_non_member_fee END,
            updated_at = now()
          WHERE title = $11`,
         [
           e.date, e.time, e.location, e.capacity !== undefined ? Number(e.capacity) : null,
           e.memberFee !== undefined ? Number(e.memberFee) : null, e.nonMemberFee !== undefined ? Number(e.nonMemberFee) : null,
           e.description, e.isActive, e.published, e.flyerImage || existing.rows[0].flyer_image, e.title,
+          e.under5Free !== undefined ? !!e.under5Free : null,
+          e.childMemberFee !== undefined, e.childMemberFee !== undefined ? (e.childMemberFee === "" || e.childMemberFee === null ? null : Number(e.childMemberFee)) : null,
+          e.childNonMemberFee !== undefined, e.childNonMemberFee !== undefined ? (e.childNonMemberFee === "" || e.childNonMemberFee === null ? null : Number(e.childNonMemberFee)) : null,
         ]
       );
       res.json({ message: "Event updated" });
     } else {
       await pool.query(
-        `INSERT INTO kutumb_upcoming_events (title, date_text, time_text, location, capacity, member_fee, non_member_fee, description, is_active, published, flyer_image)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        `INSERT INTO kutumb_upcoming_events
+           (title, date_text, time_text, location, capacity, member_fee, non_member_fee, description, is_active, published, flyer_image,
+            under5_free, child_member_fee, child_non_member_fee)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [
           e.title, e.date || null, e.time || null, e.location || null, Number(e.capacity) || 0,
           Number(e.memberFee) || 0, Number(e.nonMemberFee) || 0, e.description || null,
           !!e.isActive, e.published ?? true, e.flyerImage || null,
+          e.under5Free !== undefined ? !!e.under5Free : true,
+          e.childMemberFee !== undefined && e.childMemberFee !== "" ? Number(e.childMemberFee) : null,
+          e.childNonMemberFee !== undefined && e.childNonMemberFee !== "" ? Number(e.childNonMemberFee) : null,
         ]
       );
       res.json({ message: "Event added" });
@@ -1169,7 +1295,7 @@ app.post("/api/email/test-send", requireAdmin, async (req, res) => {
    time), so a bad address for one member never blocks the rest, and the
    admin gets back a clear sent/failed count instead of a single flag.
 ------------------------------ */
-app.post("/api/members/send-bulk-email", requireAdmin, async (req, res) => {
+app.post("/api/members/send-bulk-email", requireSuperAdmin, async (req, res) => {
   try {
     const { subject, message, emails, recipients: recipientsInput, sendToAll } = req.body;
 
@@ -1179,21 +1305,33 @@ app.post("/api/members/send-bulk-email", requireAdmin, async (req, res) => {
 
     let recipients;
     if (sendToAll) {
-      // Pull name alongside email so every member gets a "Dear <name>,"
-      // greeting instead of a generic one.
-      const { rows } = await pool.query("SELECT name, email FROM kutumb_members");
+      // Pull name + membership number alongside email so every member
+      // gets a "Dear <name>," greeting and their own membership number
+      // stated in the email, not just a generic one.
+      const { rows } = await pool.query("SELECT name, email, membership_number FROM kutumb_members");
       recipients = rows
         .filter((r) => r.email)
-        .map((r) => ({ email: r.email, name: r.name || "" }));
+        .map((r) => ({ email: r.email, name: r.name || "", membershipNumber: r.membership_number || null }));
     } else if (Array.isArray(recipientsInput) && recipientsInput.length > 0) {
-      // Preferred shape: [{ email, name }, ...] from the admin console, so
-      // the greeting can be personalized for hand-picked recipients too.
+      // Preferred shape: [{ email, name, membershipNumber }, ...] from the
+      // admin console, so the greeting AND membership number can be
+      // personalized for hand-picked recipients too.
       recipients = recipientsInput
         .filter((r) => r?.email)
-        .map((r) => ({ email: r.email, name: r.name || "" }));
+        .map((r) => ({ email: r.email, name: r.name || "", membershipNumber: r.membershipNumber || null }));
     } else if (Array.isArray(emails) && emails.length > 0) {
-      // Legacy shape: a bare list of email addresses, no name available.
-      recipients = emails.filter(Boolean).map((email) => ({ email, name: "" }));
+      // Legacy shape: a bare list of email addresses, no name on the
+      // request itself - look membership numbers up by email so this path
+      // still states them, same as every other bulk email.
+      const lowerEmails = emails.filter(Boolean).map((e) => String(e).toLowerCase());
+      const { rows: memberRows } = await pool.query(
+        "SELECT email, membership_number FROM kutumb_members WHERE lower(email) = ANY($1)",
+        [lowerEmails]
+      );
+      const membershipByEmail = new Map(memberRows.map((r) => [r.email.toLowerCase(), r.membership_number]));
+      recipients = emails
+        .filter(Boolean)
+        .map((email) => ({ email, name: "", membershipNumber: membershipByEmail.get(String(email).toLowerCase()) || null }));
     } else {
       return res.status(400).json({ message: "No recipients selected" });
     }
@@ -1228,7 +1366,7 @@ app.post("/api/members/send-bulk-email", requireAdmin, async (req, res) => {
    and returns a subject + body the admin can review and edit in the Send
    Email dialog before anything is sent. Never sends anything itself.
 ------------------------------ */
-app.post("/api/members/generate-email-draft", requireAdmin, async (req, res) => {
+app.post("/api/members/generate-email-draft", requireSuperAdmin, async (req, res) => {
   try {
     const { topic } = req.body;
     const draft = await generateEmailDraft({ topic });
@@ -1277,9 +1415,15 @@ app.post("/api/donations", async (req, res) => {
     const matchedMember = memberRows[0] || null;
 
     const { rows } = await pool.query(
-      `INSERT INTO kutumb_donations (name, email, membership_number, amount, bank_transferred, transaction_number)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [name, email, matchedMember?.membership_number || null, Number(amount), !!bankTransferred, bankTransferred ? transactionNumber : null]
+      `INSERT INTO kutumb_donations
+         (name, email, membership_number, amount, bank_transferred, transaction_number, payment_status, payment_method)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [
+        name, email, matchedMember?.membership_number || null, Number(amount), !!bankTransferred,
+        bankTransferred ? transactionNumber : null,
+        bankTransferred ? "Paid" : "Pending",
+        bankTransferred ? "bank_transfer" : null,
+      ]
     );
     const donation = rows[0];
 
@@ -1292,7 +1436,10 @@ app.post("/api/donations", async (req, res) => {
       transactionNumber: donation.transaction_number,
     }).catch((err) => console.error("Donation email error:", err));
 
-    res.status(201).json({ message: "Thank you for your donation", donation });
+    res.status(201).json({
+      message: "Thank you for your donation",
+      donation: { ...donation, id: donation.id, paymentStatus: donation.payment_status },
+    });
   } catch (err) {
     console.error("DONATION ERROR:", err);
     res.status(500).json({ message: "Server error" });
@@ -1304,18 +1451,104 @@ app.get("/api/donations", requireAdmin, async (req, res) => {
     const { rows } = await pool.query("SELECT * FROM kutumb_donations ORDER BY created_at DESC");
     res.json(
       rows.map((d) => ({
+        id: d.id,
         name: d.name,
         email: d.email,
         membershipNumber: d.membership_number,
         amount: Number(d.amount),
         bankTransferred: d.bank_transferred,
         transactionNumber: d.transaction_number,
+        paymentStatus: d.payment_status,
+        paymentMethod: d.payment_method,
         createdAt: d.created_at,
       }))
     );
   } catch (err) {
     console.error("GET DONATIONS ERROR:", err);
     res.status(500).json([]);
+  }
+});
+
+/* -----------------------------
+   💳 DONATION PAYMENT — CARD (Stripe hosted checkout)
+   A plain Stripe Checkout Session (hosted page, not embedded) for the
+   donation's fixed amount — simpler than the ticketing system's embedded
+   flow, and donations don't need ticket types/attendees at all. Confirmed
+   via the same Stripe webhook used for ticketing/registrations
+   (checkout.session.completed, matched here by session id).
+------------------------------ */
+app.post("/api/donations/:id/checkout-card", async (req, res) => {
+  try {
+    const donationId = Number(req.params.id);
+    const { rows } = await pool.query("SELECT * FROM kutumb_donations WHERE id = $1", [donationId]);
+    const donation = rows[0];
+    if (!donation) return res.status(404).json({ message: "Donation not found" });
+    if (donation.payment_status === "Paid") {
+      return res.status(400).json({ message: "This donation has already been paid" });
+    }
+
+    const stripe = await getStripe();
+    if (!stripe) {
+      return res.status(503).json({ message: "Card payments aren't configured yet. Ask the admin to add a Stripe secret key in the Admin Console." });
+    }
+
+    const baseUrl = (await getSetting("public_base_url")) || process.env.PUBLIC_BASE_URL || "http://localhost:8080";
+    const amount = Number(donation.amount);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: donation.email,
+      line_items: [
+        {
+          price_data: {
+            currency: "aud",
+            product_data: { name: `Kutumb donation — ${donation.name}` },
+            unit_amount: Math.round(amount * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${baseUrl}/checkout/return?provider=stripe-donation&donationId=${donationId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/checkout/return?provider=stripe-donation&donationId=${donationId}&cancelled=1`,
+      metadata: { donationId: String(donationId) },
+    });
+
+    await recordDonationPaymentAttempt(donationId, "card", session.id, amount);
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error("DONATION CARD CHECKOUT ERROR:", err);
+    res.status(500).json({ message: "Could not start card checkout" });
+  }
+});
+
+app.get("/api/donations/:id/status", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM kutumb_donation_payments WHERE donation_id = $1 AND provider = 'card' ORDER BY created_at DESC LIMIT 1",
+      [req.params.id]
+    );
+    const payment = rows[0];
+    if (!payment) return res.status(404).json({ message: "No card payment found for this donation" });
+
+    if (payment.status === "pending") {
+      const stripe = await getStripe();
+      if (stripe) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(payment.provider_reference);
+          if (session.payment_status === "paid") {
+            await markDonationPaymentPaid(payment.id, session.payment_status, session.payment_intent);
+          }
+        } catch (err) {
+          console.error("DONATION STRIPE STATUS CHECK ERROR:", err);
+        }
+      }
+    }
+
+    const refreshed = await getDonationPayment(payment.id);
+    res.json({ status: refreshed?.status || payment.status, donationId: payment.donation_id });
+  } catch (err) {
+    console.error("DONATION STATUS ERROR:", err);
+    res.status(500).json({ message: "Could not check payment status" });
   }
 });
 

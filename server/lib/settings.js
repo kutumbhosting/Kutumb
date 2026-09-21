@@ -37,6 +37,22 @@ export const SETTINGS_SCHEMA = [
   // in and an admin deliberately switches it on.
   { group: "Payment Methods", key: "payment_method_bank_transfer", label: "Bank Transfer", type: "boolean", default: "true" },
   { group: "Payment Methods", key: "payment_method_card", label: "Pay by Card (Stripe)", type: "boolean", default: "false" },
+  { group: "Payment Methods", key: "payment_method_square", label: "Pay by Square", type: "boolean", default: "false" },
+  { group: "Payment Methods", key: "payment_method_paypal", label: "Pay by PayPal", type: "boolean", default: "false" },
+  // Square: a Square "Payment Link" (hosted checkout page) is created per
+  // registration, so no client-side Square SDK is needed. The access token
+  // is an Application access token from the Square Developer Dashboard;
+  // Location ID identifies which of the business's Square locations the
+  // payment is recorded against.
+  { group: "Square", key: "square_access_token", label: "Square Access Token", secret: true },
+  { group: "Square", key: "square_location_id", label: "Square Location ID", secret: false },
+  { group: "Square", key: "square_environment", label: "Square Environment (sandbox or production)", secret: false, default: "sandbox" },
+  { group: "Square", key: "square_webhook_signature_key", label: "Square Webhook Signature Key", secret: true },
+  // PayPal: Client ID/Secret from a PayPal REST API app (developer.paypal.com).
+  { group: "PayPal", key: "paypal_client_id", label: "PayPal Client ID", secret: false },
+  { group: "PayPal", key: "paypal_client_secret", label: "PayPal Client Secret", secret: true },
+  { group: "PayPal", key: "paypal_environment", label: "PayPal Environment (sandbox or live)", secret: false, default: "sandbox" },
+  { group: "PayPal", key: "paypal_webhook_id", label: "PayPal Webhook ID (optional, for signature verification)", secret: false },
   // Powers the "Generate with AI" draft button on the Members → Send Email
   // dialog. Optional — without it, admins can still write emails by hand.
   // No hardcoded default for groq_model: Groq's model lineup changes often,
@@ -75,15 +91,23 @@ export async function getAllSettingsForAdmin() {
 // by the registration success page to decide which payment options to show
 // a registrant. Deliberately doesn't expose anything else in the schema.
 export async function getPaymentMethodSettings() {
-  const bankDef = SETTINGS_SCHEMA.find((s) => s.key === "payment_method_bank_transfer");
-  const cardDef = SETTINGS_SCHEMA.find((s) => s.key === "payment_method_card");
-  const [bankRaw, cardRaw] = await Promise.all([
+  const defs = {
+    bankTransfer: SETTINGS_SCHEMA.find((s) => s.key === "payment_method_bank_transfer"),
+    card: SETTINGS_SCHEMA.find((s) => s.key === "payment_method_card"),
+    square: SETTINGS_SCHEMA.find((s) => s.key === "payment_method_square"),
+    paypal: SETTINGS_SCHEMA.find((s) => s.key === "payment_method_paypal"),
+  };
+  const [bankRaw, cardRaw, squareRaw, paypalRaw] = await Promise.all([
     getSetting("payment_method_bank_transfer"),
     getSetting("payment_method_card"),
+    getSetting("payment_method_square"),
+    getSetting("payment_method_paypal"),
   ]);
   return {
-    bankTransfer: (bankRaw ?? bankDef.default) === "true",
-    card: (cardRaw ?? cardDef.default) === "true",
+    bankTransfer: (bankRaw ?? defs.bankTransfer.default) === "true",
+    card: (cardRaw ?? defs.card.default) === "true",
+    square: (squareRaw ?? defs.square.default) === "true",
+    paypal: (paypalRaw ?? defs.paypal.default) === "true",
   };
 }
 
