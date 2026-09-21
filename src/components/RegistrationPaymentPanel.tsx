@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
-import RegistrationCheckoutModal from "@/components/RegistrationCheckoutModal";
 import PayPalButton from "@/components/PayPalButton";
 import { openBlankCheckoutPopup, attachCheckoutPopup } from "@/lib/checkoutPopup";
 
@@ -47,7 +46,6 @@ export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: Reg
   const [bankTransferred, setBankTransferred] = useState<"yes" | "no">("no");
   const [transactionNumber, setTransactionNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [showCardPayment, setShowCardPayment] = useState(false);
 
   // ── Pay (or part-pay) with an event coupon ──────────────────────────────
   const [couponCode, setCouponCode] = useState("");
@@ -136,6 +134,81 @@ export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: Reg
       popup?.close();
       toast({ title: "Square checkout failed", description: err.message, variant: "destructive" });
       setStartingSquare(false);
+    }
+  };
+
+  // ── Card: popup-based checkout, a dedicated Stripe session for exactly
+  // what's owed on this registration (not the old ticket-type-selection
+  // screen — that routed through the ticketing system's shared per-event
+  // "General" ticket type, priced once and shared across every
+  // registrant, which is how $20 owed ended up charging $60). Mirrors
+  // handlePaySquare above almost exactly. ─────────────────────────────────
+  const [startingCard, setStartingCard] = useState(false);
+  const [waitingOnCardPopup, setWaitingOnCardPopup] = useState(false);
+  const handlePayCard = async () => {
+    if (!data.id) {
+      toast({ title: "Can't start card checkout", description: "Missing registration reference.", variant: "destructive" });
+      return;
+    }
+    // Opened blank, synchronously, right here — before any `await` — so
+    // the browser still counts it as triggered by this click and doesn't
+    // silently block it.
+    const popup = openBlankCheckoutPopup(anchorEl);
+
+    setStartingCard(true);
+    try {
+      const res = await fetch(`/api/events/registration/${data.id}/checkout-card`, { method: "POST" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || "Could not start card checkout");
+
+      setWaitingOnCardPopup(true);
+      attachCheckoutPopup(popup, result.url, {
+        onResult: (popupResult) => {
+          setWaitingOnCardPopup(false);
+          setStartingCard(false);
+          if (popupResult.status === "paid") {
+            toast({ title: "Payment confirmed 🎉", description: "Your card payment was successful." });
+            onPaid();
+          } else {
+            toast({
+              title: "Payment not completed",
+              description: "The checkout window was cancelled or the payment didn't go through.",
+              variant: "destructive",
+            });
+          }
+        },
+        onBlocked: () => {
+          setWaitingOnCardPopup(false);
+          window.location.href = result.url;
+        },
+        onClosedWithoutResult: () => {
+          setWaitingOnCardPopup(false);
+          setStartingCard(false);
+          fetch(`/api/events/registration/${data.id}/card-status`)
+            .then((r) => r.json())
+            .then((statusData) => {
+              if (statusData.status === "paid") {
+                toast({ title: "Payment confirmed 🎉", description: "Your card payment was successful." });
+                onPaid();
+              } else {
+                toast({
+                  title: "Checkout window closed",
+                  description: "We didn't receive confirmation of payment. If you completed the payment, it may still be processing.",
+                });
+              }
+            })
+            .catch(() => {
+              toast({
+                title: "Checkout window closed",
+                description: "We couldn't confirm whether the payment went through. Check your email, or contact us if you were charged.",
+              });
+            });
+        },
+      });
+    } catch (err: any) {
+      popup?.close();
+      toast({ title: "Card checkout failed", description: err.message, variant: "destructive" });
+      setStartingCard(false);
     }
   };
 
@@ -232,8 +305,12 @@ export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: Reg
       </div>
 
       {methods.card && (
-        <Button onClick={() => setShowCardPayment(true)} className="w-full btn-hero">
-          💳 Pay ${remaining.toFixed(2)} by Card
+        <Button onClick={handlePayCard} disabled={startingCard} className="w-full btn-hero">
+          {waitingOnCardPopup
+            ? "Waiting for payment in popup..."
+            : startingCard
+            ? "Opening card checkout..."
+            : `💳 Pay $${remaining.toFixed(2)} by Card`}
         </Button>
       )}
 
@@ -308,23 +385,6 @@ export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: Reg
             {submitting ? "Submitting…" : "Confirm Payment Details"}
           </Button>
         </>
-      )}
-
-      {showCardPayment && methods.card && (
-        <RegistrationCheckoutModal
-          eventTitle={data.eventName}
-          buyerName={data.name}
-          buyerEmail={data.email}
-          registrationId={data.id}
-          defaultQuantity={1 + data.adults + data.children}
-          totalFee={remaining}
-          onClose={() => setShowCardPayment(false)}
-          onSuccess={() => {
-            setShowCardPayment(false);
-            toast({ title: "Payment confirmed 🎉", description: "Your card payment was successful." });
-            onPaid();
-          }}
-        />
       )}
     </div>
   );

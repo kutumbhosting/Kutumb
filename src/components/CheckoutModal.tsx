@@ -124,8 +124,9 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
   };
 
   return (
-    // z-[60], not z-50 — see the matching note in RegistrationCheckoutModal.tsx:
-    // keeps this above any Radix Dialog that might still be open behind it.
+    // z-[60], not z-50: keeps this above any Radix Dialog that might still
+    // be open behind it (Radix portals its dialogs to the end of <body>,
+    // which paints on top of an equal z-index element mounted earlier).
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
         ref={contentRef}

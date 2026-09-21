@@ -103,6 +103,14 @@ export default function CheckoutReturn() {
       return;
     }
 
+    if (provider === "registration-card" && registrationId) {
+      fetch(`/api/events/registration/${registrationId}/card-status`)
+        .then((r) => r.json())
+        .then((data) => setStatus(data.status === "paid" ? "paid" : data.status === "failed" ? "error" : "pending"))
+        .catch(() => setStatus("error"));
+      return;
+    }
+
     if (!sessionId) {
       setStatus("error");
       return;

@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Mail, CreditCard } from "lucide-react";
 import RegistrationPaymentPanel from "@/components/RegistrationPaymentPanel";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface EventRegistrationSuccessData {
   id?: number;
@@ -44,8 +44,6 @@ const EventRegistrationSuccessDialog = ({
 
   const feeOwed = !!data && typeof data.fee === "number" && data.fee > 0;
 
-  if (!data) return null;
-
   // A registration row already exists at this point (that's what makes a
   // Stripe/Square/PayPal checkout possible at all — they need a
   // registrationId to attach the payment to), but for a paid event it sits
@@ -56,9 +54,51 @@ const EventRegistrationSuccessDialog = ({
   // once that's cleared (or immediately, for a free event where nothing
   // was ever owed).
   const awaitingPayment = feeOwed && !paymentRecorded;
+  const registrationId = data?.id;
+
+  // Covers the person closing the browser tab/window (or navigating away
+  // entirely) while still on the payment step, without ever clicking
+  // Close — sendBeacon fires reliably during unload in a way a normal
+  // fetch() often doesn't. Only armed while there's actually something
+  // unpaid to remind them about. Declared before the `if (!data)` early
+  // return below, along with every other hook, since hooks can't be
+  // called conditionally.
+  useEffect(() => {
+    if (!open || !awaitingPayment || !registrationId) return;
+    const handleUnload = () => {
+      navigator.sendBeacon?.(
+        `/api/events/registration/${registrationId}/send-payment-reminder`,
+        new Blob([], { type: "application/json" })
+      );
+    };
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, [open, awaitingPayment, registrationId]);
+
+  if (!data) return null;
+
+  // Fire-and-forget: tells the server to send the "payment required" email
+  // (with its Pay Now link) for this registration. Only ever actually
+  // sends anything the first time it's called while the registration is
+  // still unpaid — see the endpoint itself — so it's safe to call this
+  // speculatively from more than one place below without checking state
+  // first.
+  const sendPaymentReminder = () => {
+    if (!registrationId) return;
+    fetch(`/api/events/registration/${registrationId}/send-payment-reminder`, { method: "POST" }).catch(() => {});
+  };
+
+  // Wraps whatever dismisses the dialog — the Close button below, but also
+  // Escape and clicking the overlay, both of which call this same prop —
+  // so leaving unpaid always triggers the reminder email, however they
+  // leave.
+  const handleOpenChange = (next: boolean) => {
+    if (!next && awaitingPayment) sendPaymentReminder();
+    onOpenChange(next);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent ref={dialogContentRef} className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           {awaitingPayment ? (
@@ -127,7 +167,7 @@ const EventRegistrationSuccessDialog = ({
         <p className="text-sm text-muted-foreground flex items-center gap-1.5">
           <Mail className="w-3.5 h-3.5 shrink-0" />
           {awaitingPayment
-            ? `A confirmation email with these details — including the amount still owed and a payment link — has been sent to ${data.email}.`
+            ? `Pay below to finish now — or if you leave this page before paying, we'll email a payment link to ${data.email}.`
             : `A confirmation email has been sent to ${data.email}.`}
         </p>
 
@@ -157,7 +197,7 @@ const EventRegistrationSuccessDialog = ({
           </p>
         )}
 
-        <Button onClick={() => onOpenChange(false)} variant="outline" className="w-full">
+        <Button onClick={() => handleOpenChange(false)} variant="outline" className="w-full">
           Close
         </Button>
       </DialogContent>

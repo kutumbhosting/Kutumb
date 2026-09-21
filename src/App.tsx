@@ -16,6 +16,7 @@ import Admin from "./pages/Admin"; // 👈 ADD THIS
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import EventTerms from "./pages/EventTerms";
 import CheckoutReturn from "./pages/CheckoutReturn";
+import PayRegistration from "./pages/PayRegistration";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/event-terms" element={<EventTerms />} />
         <Route path="/checkout/return" element={<CheckoutReturn />} />
+        <Route path="/pay/:token" element={<PayRegistration />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>
