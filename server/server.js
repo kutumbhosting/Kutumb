@@ -248,6 +248,19 @@ app.post("/api/events", async (req, res) => {
   );
   const eventMeta = eventMetaRows[0] || null;
 
+  // If the event this registration is for can't be found — the title sent
+  // by the browser doesn't match any row in kutumb_upcoming_events, e.g.
+  // it was renamed or unpublished after the person loaded the page — we
+  // must NOT silently fall through: every fee/capacity value below
+  // defaults to 0 when eventMeta is null, which would register the person
+  // for free with no capacity limit at all. Reject instead, so they can
+  // refresh and register against the current event.
+  if (!eventMeta) {
+    return res.status(404).json({
+      message: "We couldn't find that event — it may have been updated. Please refresh the page and try registering again.",
+    });
+  }
+
   const client = await pool.connect();
   let lockError = null;
   let newRegistration = null;
