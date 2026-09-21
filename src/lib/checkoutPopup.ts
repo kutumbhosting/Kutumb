@@ -21,20 +21,10 @@ export interface CheckoutPopupResult {
   orderId?: number | null;
 }
 
-interface OpenCheckoutPopupOptions {
-  /** The provider-hosted checkout URL to open (Stripe session URL, Square payment link, etc). */
-  url: string;
-  /**
-   * The dialog (or any element) the popup should match in size and screen
-   * position — pass the Donate/Registration dialog's own DOM node so the
-   * checkout popup opens as the same size, right on top of it, instead of
-   * an arbitrary default box. Falls back to a sensible default size,
-   * centered on the current window, when omitted or not yet mounted.
-   */
-  anchorEl?: HTMLElement | null;
+interface AttachCheckoutPopupOptions {
   /** Called once /checkout/return inside the popup reports a definite outcome. */
   onResult: (result: CheckoutPopupResult) => void;
-  /** Called if the browser's popup blocker prevented the window from opening at all. */
+  /** Called if the popup couldn't be navigated to the checkout URL (it was closed, or blocked outright). */
   onBlocked: () => void;
   /**
    * Called if the person closes the popup themselves before any result
@@ -46,14 +36,21 @@ interface OpenCheckoutPopupOptions {
 }
 
 /**
- * Opens a checkout URL in a popup window sized and positioned to match
- * `anchorEl` (typically the dialog the "Pay" button was clicked from), and
- * resolves via callback once the popup's /checkout/return page posts back
- * a result. Falls back to `onBlocked` if the popup couldn't be opened
- * (pop-up blockers, etc.) so the caller can fall back to a full-page
- * redirect.
+ * Opens a blank popup window, sized and positioned to match `anchorEl`
+ * (typically the dialog the "Pay" button lives in). Call this FIRST,
+ * synchronously, directly inside the click handler — before any `await` —
+ * and only fetch the real checkout URL afterwards, then hand both to
+ * attachCheckoutPopup(). This two-step dance (open blank now, navigate it
+ * later) is the standard workaround for popup blockers: a `window.open`
+ * called after an `await` is no longer considered part of the original
+ * click by most browsers (Safari in particular, but Chrome too in many
+ * cases) and gets silently blocked — not with an error, it just quietly
+ * doesn't work, which is exactly what "the popup never opens" looks like
+ * from the outside. Opened with no URL yet (about:blank) the window.open
+ * call itself still happens synchronously in the click, so it's exempt
+ * from that block; we only fill in where it navigates once we know.
  */
-export function openCheckoutPopup({ url, anchorEl, onResult, onBlocked, onClosedWithoutResult }: OpenCheckoutPopupOptions) {
+export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | null {
   // Default size/position: centered on the current browser window. Used
   // whenever we don't have a real dialog element to match (or its
   // measurements come back as 0, e.g. it isn't actually mounted/visible).
@@ -73,15 +70,34 @@ export function openCheckoutPopup({ url, anchorEl, onResult, onBlocked, onClosed
     top = Math.round(window.screenY + rect.top);
   }
 
-  const popup = window.open(
-    url,
+  return window.open(
+    "about:blank",
     CHECKOUT_POPUP_NAME,
     `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
   );
+}
 
-  // Some blockers return a window that is immediately closed, others
-  // return null outright — check for both.
+/**
+ * Navigates an already-open popup (from openBlankCheckoutPopup) to the
+ * real checkout URL once it's known, and resolves via callback once the
+ * popup's /checkout/return page posts back a result. Calls `onBlocked` if
+ * `popup` is null/closed (the initial open was blocked, or the person
+ * closed the blank window before this was called) or if navigating it
+ * throws, so the caller can fall back to a full-page redirect.
+ */
+export function attachCheckoutPopup(
+  popup: Window | null,
+  url: string,
+  { onResult, onBlocked, onClosedWithoutResult }: AttachCheckoutPopupOptions
+) {
   if (!popup || popup.closed) {
+    onBlocked();
+    return;
+  }
+
+  try {
+    popup.location.href = url;
+  } catch (err) {
     onBlocked();
     return;
   }

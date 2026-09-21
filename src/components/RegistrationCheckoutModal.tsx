@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { openCheckoutPopup } from "@/lib/checkoutPopup";
+import { openBlankCheckoutPopup, attachCheckoutPopup } from "@/lib/checkoutPopup";
 
 const slugify = (t: string) => t?.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^\w-]+/g, "");
 
@@ -90,6 +90,12 @@ export default function RegistrationCheckoutModal({
     if (!usingGeneral && !selectedId) return setError("Please select a ticket type.");
     if (effectiveQuantity < 1) return setError("Quantity must be at least 1.");
 
+    // Opened blank, synchronously, right here — before any `await` — so
+    // the browser still counts it as triggered by this click and doesn't
+    // silently block it (see the matching note in DonateDialog.tsx). We
+    // navigate it to the real Stripe checkout URL once we have it below.
+    const popup = openBlankCheckoutPopup(contentRef.current);
+
     setSubmitting(true);
     try {
       const items = usingGeneral
@@ -105,15 +111,14 @@ export default function RegistrationCheckoutModal({
       if (!res.ok) throw new Error(data.message || "Could not start checkout");
 
       if (data.free) {
+        popup?.close();
         setSubmitting(false);
         onSuccess();
         return;
       }
 
       setWaitingOnPopup(true);
-      openCheckoutPopup({
-        url: data.url,
-        anchorEl: contentRef.current,
+      attachCheckoutPopup(popup, data.url, {
         onResult: (result) => {
           setWaitingOnPopup(false);
           setSubmitting(false);
@@ -148,6 +153,7 @@ export default function RegistrationCheckoutModal({
         },
       });
     } catch (err: any) {
+      popup?.close();
       setError(err.message || "Something went wrong");
       setSubmitting(false);
     }

@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
-import { openCheckoutPopup } from "@/lib/checkoutPopup";
+import { openBlankCheckoutPopup, attachCheckoutPopup } from "@/lib/checkoutPopup";
 
 const slugify = (t: string) => t?.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^\w-]+/g, "");
 
@@ -56,6 +56,14 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
     if (items.length === 0) return setError("Select at least one ticket.");
     if (!buyerName.trim() || !buyerEmail.trim()) return setError("Name and email are required.");
 
+    // Opened blank, synchronously, right here — before any `await` — so
+    // the browser still counts it as triggered by this click and doesn't
+    // silently block it (see the matching note in DonateDialog.tsx). We
+    // navigate it to the real Stripe checkout URL once we have it below.
+    // A free order never needs it, but we don't know that yet — closed
+    // straight back down below if so.
+    const popup = openBlankCheckoutPopup(contentRef.current);
+
     setSubmitting(true);
     try {
       const res = await fetch(`/api/ticketing/${eventId}/checkout`, {
@@ -67,15 +75,14 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
       if (!res.ok) throw new Error(data.message || "Could not start checkout");
 
       if (data.free) {
+        popup?.close();
         setFreeConfirmed(data.orderId);
         setSubmitting(false);
         return;
       }
 
       setWaitingOnPopup(true);
-      openCheckoutPopup({
-        url: data.url,
-        anchorEl: contentRef.current,
+      attachCheckoutPopup(popup, data.url, {
         onResult: (result) => {
           setWaitingOnPopup(false);
           setSubmitting(false);
@@ -110,6 +117,7 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
         },
       });
     } catch (err: any) {
+      popup?.close();
       setError(err.message || "Something went wrong");
       setSubmitting(false);
     }

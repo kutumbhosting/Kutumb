@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { HeartHandshake } from "lucide-react";
 import PayPalButton from "@/components/PayPalButton";
-import { openCheckoutPopup } from "@/lib/checkoutPopup";
+import { openBlankCheckoutPopup, attachCheckoutPopup } from "@/lib/checkoutPopup";
 
 interface DonateDialogProps {
   open: boolean;
@@ -148,6 +148,18 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
       return;
     }
 
+    // Card/Square open a popup — window.open() only counts as triggered by
+    // this click if it happens synchronously, with no `await` in between.
+    // Everything below has at least one network round trip before we know
+    // the real checkout URL, so the popup is opened blank right here, this
+    // instant, and only navigated to the real URL once we have it (see
+    // attachProviderPopup). Opening it after an await, even a fast one, is
+    // exactly what silently gets it blocked by Safari and (often) Chrome —
+    // not with an error, it just never appears, which is what "pressing
+    // pay does nothing" looks like from the outside.
+    const needsPopup = paymentMethod === "card" || paymentMethod === "square";
+    const popup = needsPopup ? openBlankCheckoutPopup(dialogContentRef.current) : null;
+
     setSubmitting(true);
     try {
       const isBankDone = paymentMethod === "bank" && bankTransferred === "yes";
@@ -184,14 +196,14 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
         const cardRes = await fetch(`/api/donations/${newDonationId}/checkout-card`, { method: "POST" });
         const cardResult = await cardRes.json();
         if (!cardRes.ok) throw new Error(cardResult.message || "Could not start card checkout");
-        openProviderPopup(cardResult.url, "card", newDonationId);
+        attachProviderPopup(popup, cardResult.url, "card", newDonationId);
         return;
       }
       if (paymentMethod === "square") {
         const squareRes = await fetch(`/api/square/donations/${newDonationId}/checkout`, { method: "POST" });
         const squareResult = await squareRes.json();
         if (!squareRes.ok) throw new Error(squareResult.message || "Could not start Square checkout");
-        openProviderPopup(squareResult.url, "square", newDonationId);
+        attachProviderPopup(popup, squareResult.url, "square", newDonationId);
         return;
       }
       if (paymentMethod === "paypal") {
@@ -199,19 +211,18 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
         setSubmitting(false);
       }
     } catch (err: any) {
+      popup?.close();
       toast({ title: "Something went wrong", description: err.message, variant: "destructive" });
       setSubmitting(false);
     }
   };
 
-  // Opens the Stripe/Square hosted checkout page in a popup instead of
-  // navigating away from the donation dialog, and reacts once
-  // /checkout/return (inside that popup) reports the outcome.
-  const openProviderPopup = (url: string, provider: "card" | "square", forDonationId: number) => {
+  // Navigates the already-open popup (from openBlankCheckoutPopup, called
+  // synchronously back in handleSubmit) to the real checkout URL, and
+  // reacts once /checkout/return (inside that popup) reports the outcome.
+  const attachProviderPopup = (popup: Window | null, url: string, provider: "card" | "square", forDonationId: number) => {
     setWaitingOnPopup(true);
-    openCheckoutPopup({
-      url,
-      anchorEl: dialogContentRef.current,
+    attachCheckoutPopup(popup, url, {
       onResult: (result) => {
         setWaitingOnPopup(false);
         setSubmitting(false);
