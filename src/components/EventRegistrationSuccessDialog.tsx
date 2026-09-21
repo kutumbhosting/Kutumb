@@ -439,6 +439,11 @@ const EventRegistrationSuccessDialog = ({
           defaultQuantity={1 + data.adults + data.children}
           totalFee={couponResult ? couponResult.remaining : (data.fee as number)}
           onClose={() => setShowCardPayment(false)}
+          onSuccess={() => {
+            setShowCardPayment(false);
+            setPaymentRecorded(true);
+            toast({ title: "Payment confirmed 🎉", description: "Your card payment was successful." });
+          }}
         />
       )}
     </Dialog>

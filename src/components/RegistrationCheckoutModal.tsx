@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { getStripePromise } from "@/lib/stripe";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
+import { openCheckoutPopup } from "@/lib/checkoutPopup";
 
 const slugify = (t: string) => t?.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^\w-]+/g, "");
 
@@ -33,6 +32,11 @@ interface RegistrationCheckoutModalProps {
    *  "General" fallback when no admin-configured ticket types exist. */
   totalFee: number;
   onClose: () => void;
+  /** Called once Stripe actually confirms the payment — lets the caller
+   *  (the registration success dialog) flip straight to "Registration
+   *  Successful" instead of the person having to notice and close this
+   *  modal themselves. */
+  onSuccess: () => void;
 }
 
 // Triggered automatically from the registration success flow whenever a
@@ -50,15 +54,20 @@ export default function RegistrationCheckoutModal({
   defaultQuantity,
   totalFee,
   onClose,
+  onSuccess,
 }: RegistrationCheckoutModalProps) {
   const eventId = slugify(eventTitle);
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string>("");
   const [quantity, setQuantity] = useState(defaultQuantity);
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Set while the Stripe popup is open and we're waiting to hear back from
+  // it, so the modal can show "Waiting for payment..." instead of the old
+  // embedded card form.
+  const [waitingOnPopup, setWaitingOnPopup] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetch(`/api/ticketing/${eventId}/ticket-types`)
@@ -94,10 +103,52 @@ export default function RegistrationCheckoutModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Could not start checkout");
-      setClientSecret(data.clientSecret);
+
+      if (data.free) {
+        setSubmitting(false);
+        onSuccess();
+        return;
+      }
+
+      setWaitingOnPopup(true);
+      openCheckoutPopup({
+        url: data.url,
+        anchorEl: contentRef.current,
+        onResult: (result) => {
+          setWaitingOnPopup(false);
+          setSubmitting(false);
+          if (result.status === "paid") {
+            onSuccess();
+          } else {
+            setError("The checkout window was cancelled or the payment didn't go through.");
+          }
+        },
+        onBlocked: () => {
+          // Pop-up blocked — fall back to the old full-page redirect so
+          // the payment can still go through.
+          setWaitingOnPopup(false);
+          window.location.href = data.url;
+        },
+        onClosedWithoutResult: () => {
+          setWaitingOnPopup(false);
+          setSubmitting(false);
+          if (!data.sessionId) return;
+          fetch(`/api/ticketing/session-status?session_id=${encodeURIComponent(data.sessionId)}`)
+            .then((r) => r.json())
+            .then((statusData) => {
+              if (statusData.status === "paid") {
+                onSuccess();
+              } else {
+                setError("We didn't receive confirmation of payment. If you completed the payment, it may still be processing.");
+              }
+            })
+            .catch(() => {
+              setError("We couldn't confirm whether the payment went through. Check your email, or contact us if you were charged.");
+            });
+        },
+      });
     } catch (err: any) {
       setError(err.message || "Something went wrong");
-    } finally {
       setSubmitting(false);
     }
   };
@@ -111,6 +162,7 @@ export default function RegistrationCheckoutModal({
     // "Pay by Card" button would look broken with no visible error.
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
+        ref={contentRef}
         className="bg-background rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto relative"
         onClick={(e) => e.stopPropagation()}
       >
@@ -122,10 +174,13 @@ export default function RegistrationCheckoutModal({
           <h2 className="text-xl font-bold mb-1">Pay by Card</h2>
           <p className="text-sm text-muted-foreground mb-4">{eventTitle}</p>
 
-          {clientSecret ? (
-            <EmbeddedCheckoutProvider stripe={getStripePromise()} options={{ clientSecret }}>
-              <EmbeddedCheckout />
-            </EmbeddedCheckoutProvider>
+          {waitingOnPopup ? (
+            <div className="text-center py-8 space-y-2">
+              <p className="text-2xl">💳</p>
+              <p className="font-semibold">Complete your payment in the popup window</p>
+              <p className="text-sm text-muted-foreground">This will update automatically once payment is confirmed.</p>
+              <Button variant="outline" onClick={onClose} className="mt-2">Cancel</Button>
+            </div>
           ) : loading ? (
             <p className="text-muted-foreground text-sm">Loading...</p>
           ) : (

@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { getStripePromise } from "@/lib/stripe";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { X } from "lucide-react";
+import { openCheckoutPopup } from "@/lib/checkoutPopup";
 
 const slugify = (t: string) => t?.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^\w-]+/g, "");
 
@@ -32,10 +31,15 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
   const [qty, setQty] = useState<Record<number, number>>({});
   const [buyerName, setBuyerName] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
-  const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [freeConfirmed, setFreeConfirmed] = useState<number | null>(null);
+  const [paidConfirmed, setPaidConfirmed] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Set while the Stripe popup is open and we're waiting to hear back from
+  // it, so the modal can show "Waiting for payment..." instead of the old
+  // embedded card form.
+  const [waitingOnPopup, setWaitingOnPopup] = useState(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     fetch(`/api/ticketing/${eventId}/ticket-types`)
@@ -64,12 +68,49 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
 
       if (data.free) {
         setFreeConfirmed(data.orderId);
-      } else {
-        setClientSecret(data.clientSecret);
+        setSubmitting(false);
+        return;
       }
+
+      setWaitingOnPopup(true);
+      openCheckoutPopup({
+        url: data.url,
+        anchorEl: contentRef.current,
+        onResult: (result) => {
+          setWaitingOnPopup(false);
+          setSubmitting(false);
+          if (result.status === "paid") {
+            setPaidConfirmed(data.orderId);
+          } else {
+            setError("The checkout window was cancelled or the payment didn't go through.");
+          }
+        },
+        onBlocked: () => {
+          // Pop-up blocked — fall back to the old full-page redirect so
+          // the payment can still go through.
+          setWaitingOnPopup(false);
+          window.location.href = data.url;
+        },
+        onClosedWithoutResult: () => {
+          setWaitingOnPopup(false);
+          setSubmitting(false);
+          if (!data.sessionId) return;
+          fetch(`/api/ticketing/session-status?session_id=${encodeURIComponent(data.sessionId)}`)
+            .then((r) => r.json())
+            .then((statusData) => {
+              if (statusData.status === "paid") {
+                setPaidConfirmed(data.orderId);
+              } else {
+                setError("We didn't receive confirmation of payment. If you completed the payment, it may still be processing.");
+              }
+            })
+            .catch(() => {
+              setError("We couldn't confirm whether the payment went through. Check your email, or contact us if you were charged.");
+            });
+        },
+      });
     } catch (err: any) {
       setError(err.message || "Something went wrong");
-    } finally {
       setSubmitting(false);
     }
   };
@@ -79,6 +120,7 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
     // keeps this above any Radix Dialog that might still be open behind it.
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
+        ref={contentRef}
         className="bg-background rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto relative"
         onClick={(e) => e.stopPropagation()}
       >
@@ -96,10 +138,20 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
               <p className="text-muted-foreground text-sm">Order #{freeConfirmed} — a confirmation has been recorded.</p>
               <Button onClick={onClose} className="mt-4">Close</Button>
             </div>
-          ) : clientSecret ? (
-            <EmbeddedCheckoutProvider stripe={getStripePromise()} options={{ clientSecret }}>
-              <EmbeddedCheckout />
-            </EmbeddedCheckoutProvider>
+          ) : paidConfirmed ? (
+            <div className="text-center py-8 space-y-2">
+              <p className="text-2xl">🎉</p>
+              <p className="font-semibold">Payment confirmed!</p>
+              <p className="text-muted-foreground text-sm">Order #{paidConfirmed} — a confirmation has been recorded.</p>
+              <Button onClick={onClose} className="mt-4">Close</Button>
+            </div>
+          ) : waitingOnPopup ? (
+            <div className="text-center py-8 space-y-2">
+              <p className="text-2xl">💳</p>
+              <p className="font-semibold">Complete your payment in the popup window</p>
+              <p className="text-sm text-muted-foreground">This will update automatically once payment is confirmed.</p>
+              <Button variant="outline" onClick={onClose} className="mt-2">Cancel</Button>
+            </div>
           ) : loading ? (
             <p className="text-muted-foreground text-sm">Loading ticket options...</p>
           ) : ticketTypes.length === 0 ? (
