@@ -21,6 +21,7 @@ const Events = () => {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const location = useLocation();
   const [submitMessage, setSubmitMessage] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
   const [donateOpen, setDonateOpen] = useState(false);
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
@@ -108,6 +109,10 @@ const Events = () => {
       return;
     }
 
+    // Give the button an immediate, visible reaction to the click — it was
+    // previously indistinguishable from doing nothing while the request
+    // (membership lookup + fee calc) was in flight.
+    setSubmitting(true);
     try {
       const res = await fetch("/api/events", {
         method: "POST",
@@ -118,8 +123,19 @@ const Events = () => {
       const data = await res.json();
 
       if (res.status === 409) {
+        const description =
+          data?.message || "You're already registered for this event — check your email for your confirmation.";
         setSubmitMessage("You are already registered for this event.");
         setTimeout(() => setSubmitMessage(""), 5000);
+        // The inline message alone is easy to miss (it renders below the
+        // button, off-screen in a scrolled dialog), which is what made
+        // this look like the click did nothing. Surface it as a toast too,
+        // same as every other outcome here.
+        toast({
+          title: "Already Registered",
+          description,
+          variant: "destructive",
+        });
         return;
       }
 
@@ -202,6 +218,8 @@ const Events = () => {
         description,
         variant: "destructive",
       });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -246,6 +264,7 @@ const Events = () => {
                 setFormData={setFormData}
                 submitMessage={submitMessage}
                 handleSubmit={handleSubmit}
+                submitting={submitting}
                 registrationOpen={registrationOpen}
                 setRegistrationOpen={setRegistrationOpen}
               />

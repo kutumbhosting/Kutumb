@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import RegistrationPaymentPanel from "@/components/RegistrationPaymentPanel";
+import RegistrationPaymentPanel, { type PreferredPaymentMethod } from "@/components/RegistrationPaymentPanel";
 import { CheckCircle2, CreditCard } from "lucide-react";
 
 interface RegistrationInfo {
@@ -28,8 +28,17 @@ interface RegistrationInfo {
 // GET /api/events/registration/by-token/:token), not a guessable numeric
 // id, so the link works with no login but can't be used to browse to
 // anyone else's registration.
+const PREFERRED_METHODS: PreferredPaymentMethod[] = ["card", "paypal", "square", "bank"];
+
 export default function PayRegistration() {
   const { token } = useParams<{ token: string }>();
+  // The registration email links each payment option to /pay/:token?method=…
+  // so the one the person clicked is shown first. Anything else is ignored.
+  const [searchParams] = useSearchParams();
+  const methodParam = searchParams.get("method");
+  const preferredMethod = PREFERRED_METHODS.includes(methodParam as PreferredPaymentMethod)
+    ? (methodParam as PreferredPaymentMethod)
+    : null;
   const [status, setStatus] = useState<"loading" | "found" | "not-found" | "already-paid">("loading");
   const [registration, setRegistration] = useState<RegistrationInfo | null>(null);
   const [paid, setPaid] = useState(false);
@@ -123,6 +132,7 @@ export default function PayRegistration() {
                 adults: registration.adults,
                 children: registration.children,
               }}
+              preferredMethod={preferredMethod}
               onPaid={() => setPaid(true)}
             />
           </div>

@@ -28,8 +28,16 @@ export interface RegistrationPaymentPanelData {
   children: number;
 }
 
+/** A payment method a link (e.g. one in the registration email) can ask to
+ *  have shown first. */
+export type PreferredPaymentMethod = "card" | "paypal" | "square" | "bank";
+
 interface RegistrationPaymentPanelProps {
   data: RegistrationPaymentPanelData;
+  /** Show this method first and highlight it — used when someone clicks a
+   *  specific payment option in the registration email. Every other enabled
+   *  method is still available below it. */
+  preferredMethod?: PreferredPaymentMethod | null;
   /** The dialog/page element the Stripe/Square popup should match in size
    *  and screen position. Omit on a plain full-page (non-dialog) host —
    *  the popup then just centers itself on the window. */
@@ -41,7 +49,7 @@ interface RegistrationPaymentPanelProps {
 // submitting the registration form, and the standalone page a "Pay Now"
 // email link lands on — renders this same panel, so a fix or a new
 // payment method only ever needs to happen in one place.
-export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: RegistrationPaymentPanelProps) {
+export default function RegistrationPaymentPanel({ data, anchorEl, preferredMethod, onPaid }: RegistrationPaymentPanelProps) {
   const { toast } = useToast();
   const [bankTransferred, setBankTransferred] = useState<"yes" | "no">("no");
   const [transactionNumber, setTransactionNumber] = useState("");
@@ -275,21 +283,44 @@ export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: Reg
 
   const remaining = couponResult ? couponResult.remaining : data.fee;
 
-  return (
-    <div className="space-y-4">
-      {!methods.card && !methods.square && !methods.paypal && !methods.bankTransfer && (
+  // The coupon field always stays on top; among the payment methods, the
+  // preferred one (if any) is moved to the front and given a highlight ring.
+  const methodOrder = (m: PreferredPaymentMethod) => ({ order: preferredMethod === m ? 0 : 1 });
+  const methodRing = (m: PreferredPaymentMethod) =>
+    preferredMethod === m ? "rounded-lg ring-2 ring-orange-400 ring-offset-2" : "";
+
+  // Mirrors DonateDialog: once a Stripe/Square popup is actually open and
+  // we're waiting to hear back, replace the whole panel with a single
+  // "waiting" screen instead of leaving the coupon field and other payment
+  // buttons visible and clickable underneath — same behaviour, same look,
+  // for donations and event payments alike.
+  if (waitingOnCardPopup || waitingOnSquarePopup) {
+    return (
+      <div className="text-center py-6 space-y-2">
+        <p className="text-2xl">💳</p>
+        <p className="font-semibold">Complete your payment in the popup window</p>
         <p className="text-sm text-muted-foreground">
+          This will update automatically once payment is confirmed.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {!methods.card && !methods.square && !methods.paypal && !methods.bankTransfer && (
+        <p className="text-sm text-muted-foreground" style={{ order: -3 }}>
           Payment options aren't available right now — we'll be in touch about how to pay.
         </p>
       )}
 
       {couponResult && couponResult.remaining > 0 && (
-        <p className="text-sm text-green-700 font-medium">
+        <p className="text-sm text-green-700 font-medium" style={{ order: -2 }}>
           🎟️ Coupon applied — ${couponResult.remaining.toFixed(2)} still remaining.
         </p>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-2" style={{ order: -1 }}>
         <Label htmlFor="event-coupon-code">Have an event coupon?</Label>
         <div className="flex gap-2">
           <Input
@@ -305,42 +336,55 @@ export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: Reg
       </div>
 
       {methods.card && (
-        <Button onClick={handlePayCard} disabled={startingCard} className="w-full btn-hero">
-          {waitingOnCardPopup
-            ? "Waiting for payment in popup..."
-            : startingCard
-            ? "Opening card checkout..."
-            : `💳 Pay $${remaining.toFixed(2)} by Card`}
-        </Button>
+        <div style={methodOrder("card")} className={methodRing("card")}>
+          <Button onClick={handlePayCard} disabled={startingCard} className="w-full btn-hero">
+            {waitingOnCardPopup
+              ? "Waiting for payment in popup..."
+              : startingCard
+              ? "Opening card checkout..."
+              : `💳 Pay $${remaining.toFixed(2)} by Card`}
+          </Button>
+        </div>
       )}
 
       {methods.square && (
-        <Button onClick={handlePaySquare} disabled={startingSquare} variant="outline" className="w-full">
-          {waitingOnSquarePopup
-            ? "Waiting for payment in popup..."
-            : startingSquare
-            ? "Opening Square checkout..."
-            : `⬛ Pay $${remaining.toFixed(2)} with Square`}
-        </Button>
+        <div style={methodOrder("square")} className={methodRing("square")}>
+          <Button onClick={handlePaySquare} disabled={startingSquare} variant="outline" className="w-full">
+            {waitingOnSquarePopup
+              ? "Waiting for payment in popup..."
+              : startingSquare
+              ? "Opening Square checkout..."
+              : `⬛ Pay $${remaining.toFixed(2)} with Square`}
+          </Button>
+        </div>
       )}
 
       {methods.paypal && data.id && (
-        <PayPalButton
-          registrationId={data.id}
-          onSuccess={() => {
-            toast({ title: "Payment confirmed 🎉", description: "Your PayPal payment was successful." });
-            onPaid();
-          }}
-          onError={(message) => toast({ title: "PayPal checkout failed", description: message, variant: "destructive" })}
-        />
+        <div style={methodOrder("paypal")} className={methodRing("paypal")}>
+          <PayPalButton
+            registrationId={data.id}
+            onSuccess={() => {
+              toast({ title: "Payment confirmed 🎉", description: "Your PayPal payment was successful." });
+              onPaid();
+            }}
+            onError={(message) => toast({ title: "PayPal checkout failed", description: message, variant: "destructive" })}
+          />
+        </div>
       )}
 
-      {(methods.card || methods.square || methods.paypal) && methods.bankTransfer && (
-        <p className="text-center text-xs text-muted-foreground">— or pay by bank transfer instead —</p>
+      {/* The divider only makes sense in the default order (bank transfer
+          last); with a preferred method the order is custom. */}
+      {!preferredMethod && (methods.card || methods.square || methods.paypal) && methods.bankTransfer && (
+        <p className="text-center text-xs text-muted-foreground" style={{ order: 1 }}>
+          — or pay by bank transfer instead —
+        </p>
       )}
 
       {methods.bankTransfer && (
-        <>
+        <div
+          style={methodOrder("bank")}
+          className={`space-y-4 ${preferredMethod === "bank" ? "rounded-lg ring-2 ring-orange-400 ring-offset-2 p-3" : ""}`}
+        >
           <div className="rounded-lg border-2 border-orange-200 bg-orange-50 px-4 py-3 space-y-1 text-sm">
             <p className="font-semibold text-orange-800 mb-1">Kutumb Bank Details</p>
             <p><span className="font-medium">Account Name:</span> {BANK_DETAILS.accountName}</p>
@@ -384,7 +428,7 @@ export default function RegistrationPaymentPanel({ data, anchorEl, onPaid }: Reg
           >
             {submitting ? "Submitting…" : "Confirm Payment Details"}
           </Button>
-        </>
+        </div>
       )}
     </div>
   );

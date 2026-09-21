@@ -37,6 +37,11 @@ interface UpcomingEventsProps {
   setFormData: React.Dispatch<React.SetStateAction<FormData>>;
   submitMessage: string;
   handleSubmit: (e: React.FormEvent) => Promise<void>;
+  /** True from the moment "Continue to Payment"/"Submit Registration" is
+   *  clicked until the request resolves — lets the button react instantly
+   *  instead of sitting there looking unclicked while the server round-trip
+   *  (membership lookup + fee calc) is in flight. */
+  submitting?: boolean;
   /** Controls the "Register for This Event" popup, lifted up to Events.tsx
       so it can also be opened from "Register Now" links elsewhere on the
       site and reopened automatically after returning from Membership. */
@@ -50,6 +55,7 @@ const UpcomingEvents = ({
   setFormData,
   submitMessage,
   handleSubmit,
+  submitting = false,
   registrationOpen,
   setRegistrationOpen,
 }: UpcomingEventsProps) => {
@@ -463,9 +469,14 @@ const UpcomingEvents = ({
 
               <Button
                 type="submit"
+                disabled={submitting}
                 className="w-full btn-hero text-lg py-6"
               >
-                {totalFee !== null && totalFee > 0 ? "Continue to Payment" : "Submit Registration"}
+                {submitting
+                  ? "Submitting…"
+                  : totalFee !== null && totalFee > 0
+                  ? "Continue to Payment"
+                  : "Submit Registration"}
               </Button>
 
               {submitMessage && (
