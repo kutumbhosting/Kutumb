@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,9 @@ const EventRegistrationSuccessDialog = ({
   data,
 }: EventRegistrationSuccessDialogProps) => {
   const { toast } = useToast();
+  // So the Square popup can be opened at the same size and screen position
+  // as this dialog, instead of some arbitrary default box.
+  const dialogContentRef = useRef<HTMLDivElement | null>(null);
 
   const [bankTransferred, setBankTransferred] = useState<"yes" | "no">("no");
   const [transactionNumber, setTransactionNumber] = useState("");
@@ -99,6 +102,7 @@ const EventRegistrationSuccessDialog = ({
       setWaitingOnSquarePopup(true);
       openCheckoutPopup({
         url: result.url,
+        anchorEl: dialogContentRef.current,
         onResult: (popupResult) => {
           setWaitingOnSquarePopup(false);
           setStartingSquare(false);
@@ -230,7 +234,7 @@ const EventRegistrationSuccessDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent ref={dialogContentRef} className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           {awaitingPayment ? (
             <>

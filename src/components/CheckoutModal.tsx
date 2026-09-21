@@ -75,7 +75,9 @@ export default function CheckoutModal({ eventTitle, onClose }: CheckoutModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    // z-[60], not z-50 — see the matching note in RegistrationCheckoutModal.tsx:
+    // keeps this above any Radix Dialog that might still be open behind it.
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
         className="bg-background rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto relative"
         onClick={(e) => e.stopPropagation()}

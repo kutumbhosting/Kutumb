@@ -85,6 +85,16 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
       toast({ title: "Checked in" });
       load(eventId);
     } catch (err: any) {
+      // 409 here means someone else (another admin, or this same click
+      // firing twice) already checked this person in a moment ago — the
+      // list was just stale. Refresh it so the row reflects reality
+      // instead of leaving a "Check in" button visible for someone who's
+      // already through the door.
+      if (err.canOverride || /already checked in/i.test(err.message || "")) {
+        toast({ title: "Already checked in", description: err.message });
+        load(eventId);
+        return;
+      }
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
   };

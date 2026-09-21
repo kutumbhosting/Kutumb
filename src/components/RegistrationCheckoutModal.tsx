@@ -103,7 +103,13 @@ export default function RegistrationCheckoutModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    // z-[60], not z-50: this modal is opened from inside
+    // EventRegistrationSuccessDialog, a Radix Dialog that stays mounted
+    // (and portaled to the end of <body>) behind it. Radix's portal is
+    // appended to the DOM after this element, so at matching z-index it
+    // would paint on top and silently swallow every click here — the
+    // "Pay by Card" button would look broken with no visible error.
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div
         className="bg-background rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto relative"
         onClick={(e) => e.stopPropagation()}

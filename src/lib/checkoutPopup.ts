@@ -24,6 +24,14 @@ export interface CheckoutPopupResult {
 interface OpenCheckoutPopupOptions {
   /** The provider-hosted checkout URL to open (Stripe session URL, Square payment link, etc). */
   url: string;
+  /**
+   * The dialog (or any element) the popup should match in size and screen
+   * position — pass the Donate/Registration dialog's own DOM node so the
+   * checkout popup opens as the same size, right on top of it, instead of
+   * an arbitrary default box. Falls back to a sensible default size,
+   * centered on the current window, when omitted or not yet mounted.
+   */
+  anchorEl?: HTMLElement | null;
   /** Called once /checkout/return inside the popup reports a definite outcome. */
   onResult: (result: CheckoutPopupResult) => void;
   /** Called if the browser's popup blocker prevented the window from opening at all. */
@@ -38,21 +46,37 @@ interface OpenCheckoutPopupOptions {
 }
 
 /**
- * Opens a checkout URL in a small, centered popup window and resolves via
- * callback once the popup's /checkout/return page posts back a result.
- * Falls back to `onBlocked` if the popup couldn't be opened (pop-up
- * blockers, etc.) so the caller can fall back to a full-page redirect.
+ * Opens a checkout URL in a popup window sized and positioned to match
+ * `anchorEl` (typically the dialog the "Pay" button was clicked from), and
+ * resolves via callback once the popup's /checkout/return page posts back
+ * a result. Falls back to `onBlocked` if the popup couldn't be opened
+ * (pop-up blockers, etc.) so the caller can fall back to a full-page
+ * redirect.
  */
-export function openCheckoutPopup({ url, onResult, onBlocked, onClosedWithoutResult }: OpenCheckoutPopupOptions) {
-  const width = 480;
-  const height = 720;
-  const left = Math.round(window.screenX + Math.max(0, (window.outerWidth - width) / 2));
-  const top = Math.round(window.screenY + Math.max(0, (window.outerHeight - height) / 2));
+export function openCheckoutPopup({ url, anchorEl, onResult, onBlocked, onClosedWithoutResult }: OpenCheckoutPopupOptions) {
+  // Default size/position: centered on the current browser window. Used
+  // whenever we don't have a real dialog element to match (or its
+  // measurements come back as 0, e.g. it isn't actually mounted/visible).
+  let width = 480;
+  let height = 720;
+  let left = Math.round(window.screenX + Math.max(0, (window.outerWidth - width) / 2));
+  let top = Math.round(window.screenY + Math.max(0, (window.outerHeight - height) / 2));
+
+  const rect = anchorEl?.getBoundingClientRect();
+  if (rect && rect.width > 0 && rect.height > 0) {
+    width = Math.round(rect.width);
+    height = Math.round(rect.height);
+    // rect.left/top are relative to the browser's viewport; add the
+    // window's own screen position to convert to absolute screen
+    // coordinates, which is what window.open's left/top expect.
+    left = Math.round(window.screenX + rect.left);
+    top = Math.round(window.screenY + rect.top);
+  }
 
   const popup = window.open(
     url,
     CHECKOUT_POPUP_NAME,
-    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,noopener=no`
+    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
   );
 
   // Some blockers return a window that is immediately closed, others

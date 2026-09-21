@@ -473,6 +473,8 @@ const UpcomingEvents = ({
                   className={`mt-4 text-center text-sm ${
                     submitMessage === "Registration successful!"
                       ? "text-green-600"
+                      : submitMessage.startsWith("Registration received")
+                      ? "text-orange-600"
                       : "text-red-600"
                   }`}
                 >

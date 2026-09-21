@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,9 @@ type PaymentMethod = "bank" | "card" | "square" | "paypal";
 
 const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
   const { toast } = useToast();
+  // So the Stripe/Square popup can be opened at the same size and screen
+  // position as this dialog, instead of some arbitrary default box.
+  const dialogContentRef = useRef<HTMLDivElement | null>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -208,6 +211,7 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
     setWaitingOnPopup(true);
     openCheckoutPopup({
       url,
+      anchorEl: dialogContentRef.current,
       onResult: (result) => {
         setWaitingOnPopup(false);
         setSubmitting(false);
@@ -264,7 +268,7 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent ref={dialogContentRef} className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <HeartHandshake className="w-5 h-5 text-orange-600" />

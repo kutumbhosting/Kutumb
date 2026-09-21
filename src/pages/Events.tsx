@@ -125,13 +125,30 @@ const Events = () => {
 
       if (!res.ok) throw new Error(data.message || "Server error");
 
-      setSubmitMessage("Registration successful!");
+      // A row now exists server-side, but for a paid event it's only a
+      // hold — "pending_payment" — until the person actually pays. Don't
+      // tell them the registration is done when it isn't: that's exactly
+      // what led to the success dialog (which correctly asks for payment
+      // first) being contradicted by a "Registration Successful!" toast
+      // that had already popped up moments earlier.
+      const feeOwed = typeof data.fee === "number" && data.fee > 0;
+
+      setSubmitMessage(
+        feeOwed ? "Registration received — payment required to confirm your spot." : "Registration successful!"
+      );
       setTimeout(() => setSubmitMessage(""), 5000);
 
-      toast({
-        title: "Registration Successful!",
-        description: "We've received your registration.",
-      });
+      toast(
+        feeOwed
+          ? {
+              title: "Payment Required to Confirm",
+              description: "We've reserved your spot — complete payment to finish registering.",
+            }
+          : {
+              title: "Registration Successful!",
+              description: "We've received your registration.",
+            }
+      );
 
       setSuccessData({
         id: data.id,
