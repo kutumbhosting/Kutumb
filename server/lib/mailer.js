@@ -202,7 +202,7 @@ export async function sendEventConfirmationEmail({
   const paymentLine = feeOwed
     ? `<p style="font-size:14px;">Registration Fee: <strong>$${fee}</strong> &middot; Payment Status: <strong style="color:#b45309;">Pending</strong></p>
        ${payButton}
-       <p style="font-size:13px;color:#555;">
+       <p style="font-size:13px;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin:16px 0 0;font-weight:600;">
          Once your payment has been recorded, you'll receive a separate confirmation email —
          and your ticket(s), with a QR code for each person on this registration, will be
          generated and emailed to you at that point.

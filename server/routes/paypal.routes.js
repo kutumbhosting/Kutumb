@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { paypalFetch } from "../lib/paypalClient.js";
 import { getSetting } from "../lib/settings.js";
+import { getPublicBaseUrl } from "../lib/publicUrl.js";
 import {
   recordPaymentAttempt,
   findPaymentByReference,
@@ -39,9 +40,16 @@ async function getRegistrationOrFail(registrationId, res) {
 
 /* ============================================================
    PUBLIC: create a PayPal order for a registration's remaining balance.
-   The PayPal JS SDK on the client renders the Smart Buttons for this
-   order id; approval itself doesn't move any money — only the server-side
-   capture below does that, and only the capture response is trusted.
+   Returns the order's own "approve" link (PayPal's hosted approval page)
+   rather than relying on the PayPal JS SDK's Smart Buttons to manage their
+   own popup — that SDK opens and sizes its popup entirely on its own, with
+   no way for us to control it, which is why the client instead opens this
+   approveUrl itself via the same sized/centered popup used for Stripe and
+   Square (see checkoutPopup.ts). application_context.return_url/cancel_url
+   is what sends the approval page back to OUR site once the buyer approves
+   or cancels, landing back in that same popup. Approval itself doesn't
+   move any money — only the server-side capture below does that, and only
+   the capture response is trusted.
    ============================================================ */
 router.post("/:registrationId/create-order", async (req, res) => {
   try {
@@ -54,6 +62,7 @@ router.post("/:registrationId/create-order", async (req, res) => {
     const remaining = Math.max(fee - alreadyPaid, 0);
     if (remaining <= 0) return res.status(400).json({ message: "This registration has no remaining balance to pay" });
 
+    const baseUrl = await getPublicBaseUrl(req);
     const order = await paypalFetch("/v2/checkout/orders", {
       method: "POST",
       body: JSON.stringify({
@@ -65,11 +74,19 @@ router.post("/:registrationId/create-order", async (req, res) => {
             amount: { currency_code: "AUD", value: remaining.toFixed(2) },
           },
         ],
+        application_context: {
+          brand_name: "Kutumb",
+          shipping_preference: "NO_SHIPPING",
+          user_action: "PAY_NOW",
+          return_url: `${baseUrl}/checkout/return?provider=paypal&registrationId=${registrationId}`,
+          cancel_url: `${baseUrl}/checkout/return?provider=paypal&registrationId=${registrationId}&cancelled=1`,
+        },
       }),
     });
 
     await recordPaymentAttempt(registrationId, "paypal", order.id, remaining);
-    res.json({ orderId: order.id });
+    const approveUrl = order.links?.find((l) => l.rel === "approve")?.href || null;
+    res.json({ orderId: order.id, approveUrl });
   } catch (err) {
     console.error("PAYPAL CREATE ORDER ERROR:", err);
     res.status(err.notConfigured ? 503 : 500).json({ message: err.message || "Could not start PayPal checkout" });
@@ -90,6 +107,7 @@ router.post("/donations/:donationId/create-order", async (req, res) => {
       return res.status(400).json({ message: "This donation has already been paid" });
     }
 
+    const baseUrl = await getPublicBaseUrl(req);
     const amount = Number(donation.amount);
     const order = await paypalFetch("/v2/checkout/orders", {
       method: "POST",
@@ -102,11 +120,19 @@ router.post("/donations/:donationId/create-order", async (req, res) => {
             amount: { currency_code: "AUD", value: amount.toFixed(2) },
           },
         ],
+        application_context: {
+          brand_name: "Kutumb",
+          shipping_preference: "NO_SHIPPING",
+          user_action: "PAY_NOW",
+          return_url: `${baseUrl}/checkout/return?provider=paypal-donation&donationId=${donationId}`,
+          cancel_url: `${baseUrl}/checkout/return?provider=paypal-donation&donationId=${donationId}&cancelled=1`,
+        },
       }),
     });
 
     await recordDonationPaymentAttempt(donationId, "paypal", order.id, amount);
-    res.json({ orderId: order.id });
+    const approveUrl = order.links?.find((l) => l.rel === "approve")?.href || null;
+    res.json({ orderId: order.id, approveUrl });
   } catch (err) {
     console.error("PAYPAL DONATION CREATE ORDER ERROR:", err);
     res.status(err.notConfigured ? 503 : 500).json({ message: err.message || "Could not start PayPal checkout" });
@@ -126,7 +152,22 @@ router.post("/orders/:orderId/capture", async (req, res) => {
     const record = registrationRecord || donationRecord;
     if (!record) return res.status(404).json({ message: "No matching PayPal payment attempt found" });
 
-    const capture = await paypalFetch(`/v2/checkout/orders/${req.params.orderId}/capture`, { method: "POST" });
+    let capture;
+    try {
+      capture = await paypalFetch(`/v2/checkout/orders/${req.params.orderId}/capture`, { method: "POST" });
+    } catch (captureErr) {
+      // If this order was already captured (e.g. the webhook beat this
+      // call to it, or the popup's return page ran this twice), PayPal
+      // rejects a second capture attempt outright rather than just
+      // repeating the first result. Treat that specific case as success —
+      // look up the order's current (already-captured) state instead of
+      // failing a payment that actually went through.
+      const alreadyCaptured = captureErr.paypalResponse?.details?.some(
+        (d) => d.issue === "ORDER_ALREADY_CAPTURED"
+      );
+      if (!alreadyCaptured) throw captureErr;
+      capture = await paypalFetch(`/v2/checkout/orders/${req.params.orderId}`, { method: "GET" });
+    }
     const status = capture.status; // 'COMPLETED' | 'VOIDED' | ...
     const captureId = capture.purchase_units?.[0]?.payments?.captures?.[0]?.id;
 

@@ -1309,6 +1309,7 @@ app.get("/api/upcoming-events", async (req, res) => {
 
         return {
           title: event.title,
+          eventYear,
           date: event.date_text,
           time: event.time_text,
           location: event.location,
