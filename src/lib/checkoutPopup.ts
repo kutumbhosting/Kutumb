@@ -1,11 +1,11 @@
-// Shared by DonateDialog and EventRegistrationSuccessDialog for any
-// Stripe/Square checkout that works by redirecting to a provider-hosted
-// page (Stripe Checkout, Square Payment Links) rather than embedding a
-// form in place. Instead of navigating the whole site away with
-// `window.location.href`, we open that URL in a small popup window; the
-// popup eventually lands on /checkout/return (see CheckoutReturn.tsx),
-// which posts the outcome back to us via window.postMessage and then
-// closes itself.
+// Shared by DonateDialog, EventRegistrationSuccessDialog, RegistrationPaymentPanel
+// and PayPalButton for any Stripe/Square/PayPal checkout that works by
+// redirecting to a provider-hosted page (Stripe Checkout, Square Payment
+// Links, PayPal's approval page) rather than embedding a form in place.
+// Instead of navigating the whole site away with `window.location.href`,
+// we open that URL in a small popup window; the popup eventually lands on
+// /checkout/return (see CheckoutReturn.tsx), which posts the outcome back
+// to us via window.postMessage and then closes itself.
 
 // Must match CHECKOUT_POPUP_NAME in CheckoutReturn.tsx — that's how the
 // return page recognizes it's running inside one of *our* popups (as
@@ -40,57 +40,42 @@ interface AttachCheckoutPopupOptions {
   onClosedWithoutResult?: () => void;
 }
 
+// Fixed popup size for every Stripe/Square checkout: a comfortable width
+// for a hosted card-payment page, and a height matching what "Complete
+// Payment to Confirm" naturally renders at. Deliberately no longer
+// computed from the calling dialog's own on-screen size — trying to mirror
+// an arbitrary dialog's exact box ran straight into a hard browser limit:
+// the popup's title bar + address bar are drawn by the browser itself,
+// take up real space inside whatever outer size is requested, and browsers
+// (Brave in particular) block scripts from measuring/trimming that space
+// back out afterwards, so the popup always ended up a bit taller than
+// intended no matter how it was requested. A fixed, centered size
+// sidesteps that — there's no dialog geometry to chase, so there's nothing
+// for browser chrome to throw off.
+const POPUP_WIDTH = 480;
+const POPUP_HEIGHT = 807;
+
 /**
- * Opens a blank popup window, sized and positioned to match `anchorEl`
- * (typically the dialog the "Pay" button lives in). Call this FIRST,
- * synchronously, directly inside the click handler — before any `await` —
- * and only fetch the real checkout URL afterwards, then hand both to
- * attachCheckoutPopup(). This two-step dance (open blank now, navigate it
- * later) is the standard workaround for popup blockers: a `window.open`
- * called after an `await` is no longer considered part of the original
- * click by most browsers (Safari in particular, but Chrome too in many
- * cases) and gets silently blocked — not with an error, it just quietly
- * doesn't work, which is exactly what "the popup never opens" looks like
- * from the outside. Opened with no URL yet (about:blank) the window.open
- * call itself still happens synchronously in the click, so it's exempt
- * from that block; we only fill in where it navigates once we know.
+ * Opens a blank popup window, fixed at POPUP_WIDTH x POPUP_HEIGHT and
+ * centered on the screen. Call this FIRST, synchronously, directly inside
+ * the click handler — before any `await` — and only fetch the real
+ * checkout URL afterwards, then hand both to attachCheckoutPopup(). This
+ * two-step dance (open blank now, navigate it later) is the standard
+ * workaround for popup blockers: a `window.open` called after an `await`
+ * is no longer considered part of the original click by most browsers
+ * (Safari in particular, but Chrome too in many cases) and gets silently
+ * blocked — not with an error, it just quietly doesn't work, which is
+ * exactly what "the popup never opens" looks like from the outside. Opened
+ * with no URL yet (about:blank) the window.open call itself still happens
+ * synchronously in the click, so it's exempt from that block; we only fill
+ * in where it navigates once we know.
+ *
+ * `anchorEl` is accepted but no longer used for sizing — kept only so
+ * existing call sites don't need to change.
  */
-export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | null {
-  // Default size/position: centered on the current browser window. Used
-  // whenever we don't have a real dialog element to match (or its
-  // measurements come back as 0, e.g. it isn't actually mounted/visible).
-  let width = 480;
-  let height = 720;
-  let left = Math.round(window.screenX + Math.max(0, (window.outerWidth - width) / 2));
-  let top = Math.round(window.screenY + Math.max(0, (window.outerHeight - height) / 2));
-
-  const rect = anchorEl?.getBoundingClientRect();
-  if (rect && rect.width > 0 && rect.height > 0) {
-    width = Math.round(rect.width);
-    height = Math.round(rect.height);
-    // rect.left/top are relative to the browser's viewport; add the
-    // window's own screen position to convert to absolute screen
-    // coordinates, which is what window.open's left/top expect.
-    left = Math.round(window.screenX + rect.left);
-    top = Math.round(window.screenY + rect.top);
-  }
-
-  // A rough, before-we-even-open estimate of how much the browser's own
-  // title bar + address bar will eat into the popup's requested outer
-  // size — based on the SAME browser's overhead on the current window
-  // (window.outer* vs window.inner*). This can't be exact (a popup has
-  // less chrome than a full tabbed window — no tab strip, no bookmarks
-  // bar), but baking in even a rough estimate up front means the popup
-  // looks right on first paint instead of visibly snapping to size a
-  // moment later, in case the more precise post-open correction below is
-  // blocked (some browsers, Brave included, restrict scripted
-  // resizeTo/moveTo more aggressively than others).
-  const estChromeWidth = Math.max(0, window.outerWidth - window.innerWidth);
-  const estChromeHeight = Math.max(0, window.outerHeight - window.innerHeight);
-  const openWidth = width + estChromeWidth;
-  const openHeight = height + estChromeHeight;
-  const openLeft = left;
-  const openTop = Math.max(0, top - estChromeHeight);
+export function openBlankCheckoutPopup(_anchorEl?: HTMLElement | null): Window | null {
+  const left = Math.round(window.screenX + Math.max(0, (window.outerWidth - POPUP_WIDTH) / 2));
+  const top = Math.round(window.screenY + Math.max(0, (window.outerHeight - POPUP_HEIGHT) / 2));
 
   // Close any popup we opened ourselves that's still hanging around from a
   // previous attempt, and — critically — open this one under a fresh,
@@ -99,10 +84,9 @@ export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | 
   // window with the given name already exists (e.g. the person's last
   // checkout attempt left it open, minimized, or behind another window),
   // the browser just hands back THAT window, completely ignoring our size
-  // and position — which is what produces a popup that looks like some
-  // unrelated leftover window instead of one matching the current dialog.
-  // A unique name every time guarantees a fresh window, so the requested
-  // geometry always actually applies.
+  // and position — which is what a stray leftover window from an earlier
+  // attempt looks like. A unique name every time guarantees a fresh
+  // window, so the requested size/position always actually applies.
   try {
     if (lastOpenedPopup && !lastOpenedPopup.closed) lastOpenedPopup.close();
   } catch {
@@ -114,7 +98,7 @@ export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | 
   const popup = window.open(
     "about:blank",
     uniqueName,
-    `width=${openWidth},height=${openHeight},left=${openLeft},top=${openTop},resizable=yes,scrollbars=yes`
+    `width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top},resizable=yes,scrollbars=yes`
   );
   lastOpenedPopup = popup;
 
@@ -135,39 +119,6 @@ export function openBlankCheckoutPopup(anchorEl?: HTMLElement | null): Window | 
       // fails, CheckoutReturn.tsx just falls back to treating it as an
       // ordinary page load — not ideal, but not broken either.
     }
-    // The width/height/left/top above position the popup's OUTER window —
-    // but every browser then draws its own title bar + address bar INSIDE
-    // that box, shrinking the actual page content area and pushing it
-    // down/right. That's what makes the popup look bigger than (and
-    // offset from) the dialog it's meant to match: the mismatch is exactly
-    // however tall that chrome is, which differs by browser/OS and can't
-    // be known until the popup actually exists. So: open it as above
-    // (close enough to avoid flicker), then immediately measure this
-    // popup's own outerWidth/outerHeight vs innerWidth/innerHeight to get
-    // its *real* chrome size, and nudge it with resizeTo/moveTo so the
-    // content area — not the outer window — lines up with `anchorEl`.
-    const fixSizeAndPosition = () => {
-      try {
-        const chromeWidth = Math.max(0, popup.outerWidth - popup.innerWidth);
-        const chromeHeight = Math.max(0, popup.outerHeight - popup.innerHeight);
-        if (chromeWidth || chromeHeight) {
-          popup.resizeTo(width + chromeWidth, height + chromeHeight);
-          popup.moveTo(left, Math.max(0, top - chromeHeight));
-        }
-      } catch {
-        // Some browsers refuse resizeTo/moveTo on popups in certain
-        // configurations — fall back to the original (slightly-off) size
-        // rather than throwing.
-      }
-    };
-    // Try immediately (some browsers have the chrome measurements ready
-    // right away), AND after a short delay (others need a tick to finish
-    // painting the popup's chrome before outerHeight/innerHeight are
-    // accurate). This has to land on the about:blank page — once
-    // attachCheckoutPopup() below navigates to Stripe/Square's own
-    // domain, it's cross-origin and we can no longer resize/move it.
-    fixSizeAndPosition();
-    window.setTimeout(fixSizeAndPosition, 50);
   }
 
   return popup;

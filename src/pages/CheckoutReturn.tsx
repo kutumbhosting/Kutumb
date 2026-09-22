@@ -26,6 +26,12 @@ export default function CheckoutReturn() {
   const [orderId, setOrderId] = useState<number | null>(null);
 
   const donationId = params.get("donationId");
+  // PayPal appends its own order id to whatever return_url we gave it as
+  // `token` (its terminology, not ours — it's the same id create-order
+  // returned as orderId) — that's how we know which order to capture.
+  // `cancelled` is our own flag, added to the cancel_url we pass PayPal.
+  const paypalOrderToken = params.get("token");
+  const cancelled = params.get("cancelled") === "1";
 
   // Only treat this as "running inside our popup" when it really is one:
   // has an opener, isn't the top-level window some other way, and was
@@ -111,6 +117,25 @@ export default function CheckoutReturn() {
       return;
     }
 
+    // PayPal's own redirect flow (opened in our own sized/centered popup —
+    // see checkoutPopup.ts and PayPalButton.tsx) rather than the JS SDK's
+    // Smart Buttons, which managed their own uncontrollable popup. If the
+    // buyer cancelled on PayPal's page, or PayPal somehow didn't hand back
+    // its order token, there's nothing approved to capture — call it an
+    // error without bothering PayPal, exactly like a cancelled Stripe/
+    // Square checkout ends up "not paid" without a special-cased message.
+    if ((provider === "paypal" || provider === "paypal-donation") && paypalOrderToken) {
+      if (cancelled) {
+        setStatus("error");
+        return;
+      }
+      fetch(`/api/paypal/orders/${paypalOrderToken}/capture`, { method: "POST" })
+        .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => setStatus(ok && data.status === "COMPLETED" ? "paid" : "error"))
+        .catch(() => setStatus("error"));
+      return;
+    }
+
     if (!sessionId) {
       setStatus("error");
       return;
@@ -122,7 +147,7 @@ export default function CheckoutReturn() {
         setStatus(data.status === "paid" ? "paid" : "pending");
       })
       .catch(() => setStatus("error"));
-  }, [sessionId, provider, registrationId, donationId]);
+  }, [sessionId, provider, registrationId, donationId, paypalOrderToken, cancelled]);
 
   // Inside our popup, skip the site chrome entirely — it's a small window
   // whose only job is to show the outcome for a few seconds and disappear.

@@ -70,23 +70,49 @@ const Admin = () => {
     try {
       const events = await safeFetch("/api/all-registrations");
 
+      let grouped: Record<string, any[]> = {};
       if (!Array.isArray(events)) {
         console.warn("[fetchData] /api/all-registrations did not return an array:", events);
-        setGroupedEvents({});
       } else {
         console.log("[fetchData] total event rows loaded:", events.length);
 
-        const grouped = events.reduce((acc: Record<string, any[]>, item: any) => {
+        grouped = events.reduce((acc: Record<string, any[]>, item: any) => {
           if (!item?.eventName) return acc; // skip malformed rows
           const key = `${item.eventName}_${item.eventYear || "unknown"}`;
           if (!acc[key]) acc[key] = [];
           acc[key].push(item);
           return acc;
         }, {});
-
-        console.log("[fetchData] grouped keys:", Object.keys(grouped));
-        setGroupedEvents(grouped);
       }
+
+      // groupedEvents above only ever contains events that already HAVE at
+      // least one registration — it's built purely from registration rows,
+      // so a brand-new event with zero sign-ups so far had no key at all,
+      // and every dropdown built from groupedEvents (here, Coupons,
+      // TicketingManager, CheckIn) simply couldn't offer it. Fill in the
+      // gap: for every currently active/upcoming event that doesn't
+      // already have a key, add one holding a single placeholder row —
+      // just enough for those dropdowns (which all read eventName/eventYear
+      // off `rows[0]`) to list it. It's marked __placeholder so screens
+      // that total up real registrants (EventRegistration's selected-event
+      // summary) can filter it back out rather than counting it as an
+      // actual attendee.
+      const upcoming = await safeFetch("/api/upcoming-events");
+      if (Array.isArray(upcoming)) {
+        for (const event of upcoming) {
+          if (!event?.title) continue;
+          const eventYear = event.eventYear || "unknown";
+          const key = `${event.title}_${eventYear}`;
+          if (!grouped[key]) {
+            grouped[key] = [{ eventName: event.title, eventYear, adults: 0, children: 0, fee: 0, __placeholder: true }];
+          }
+        }
+      } else {
+        console.warn("[fetchData] /api/upcoming-events did not return an array:", upcoming);
+      }
+
+      console.log("[fetchData] grouped keys:", Object.keys(grouped));
+      setGroupedEvents(grouped);
 
       // Members is Super Admin-only on the server now — a limited admin
       // can't see the Members tab at all, so don't even ask for the data.

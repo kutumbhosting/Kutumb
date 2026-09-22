@@ -84,6 +84,7 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
   // ── Square: popup-based checkout (Square-hosted payment link) ──────────
   const [startingSquare, setStartingSquare] = useState(false);
   const [waitingOnSquarePopup, setWaitingOnSquarePopup] = useState(false);
+  const [waitingOnPaypalPopup, setWaitingOnPaypalPopup] = useState(false);
   const handlePaySquare = async () => {
     if (!data.id) {
       toast({ title: "Can't start Square checkout", description: "Missing registration reference.", variant: "destructive" });
@@ -312,12 +313,12 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
   const methodRing = (m: PreferredPaymentMethod) =>
     preferredMethod === m ? "rounded-lg ring-2 ring-orange-400 ring-offset-2" : "";
 
-  // Mirrors DonateDialog: once a Stripe/Square popup is actually open and
-  // we're waiting to hear back, replace the whole panel with a single
-  // "waiting" screen instead of leaving the coupon field and other payment
-  // buttons visible and clickable underneath — same behaviour, same look,
-  // for donations and event payments alike.
-  if (waitingOnCardPopup || waitingOnSquarePopup) {
+  // Mirrors DonateDialog: once a Stripe/Square/PayPal popup is actually
+  // open and we're waiting to hear back, replace the whole panel with a
+  // single "waiting" screen instead of leaving the coupon field and other
+  // payment buttons visible and clickable underneath — same behaviour,
+  // same look, for donations and event payments alike.
+  if (waitingOnCardPopup || waitingOnSquarePopup || waitingOnPaypalPopup) {
     return (
       <div className="text-center py-6 space-y-2">
         <p className="text-2xl">💳</p>
@@ -386,6 +387,7 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
         <div style={methodOrder("paypal")} className={methodRing("paypal")}>
           <PayPalButton
             registrationId={data.id}
+            onWaitingChange={setWaitingOnPaypalPopup}
             onSuccess={() => {
               toast({ title: "Payment confirmed 🎉", description: "Your PayPal payment was successful." });
               onPaid();

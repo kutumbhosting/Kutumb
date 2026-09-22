@@ -105,22 +105,29 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
   };
 
   // ─── derived: selected event ─────────────────────────────────────────────
+  // groupedEvents[key] holds one placeholder row (see Admin.tsx's fetchData)
+  // for an active event that has zero real registrations so far, purely so
+  // it still has a key to show up in the dropdown below. It's not an actual
+  // attendee, so it's filtered out here before counting/summing anything —
+  // selecting such an event correctly shows "0 registrations" rather than 1.
+  const selectedEventAllRows = selectedEventKey ? groupedEvents[selectedEventKey] || [] : [];
+  const selectedEventRealRows = selectedEventAllRows.filter((m: any) => !m.__placeholder);
   const selectedEvent =
-    selectedEventKey && groupedEvents[selectedEventKey]?.length
+    selectedEventKey && selectedEventAllRows.length
       ? {
-          members: groupedEvents[selectedEventKey],
-          eventName: groupedEvents[selectedEventKey][0]?.eventName,
-          eventYear: groupedEvents[selectedEventKey][0]?.eventYear,
-          adults: groupedEvents[selectedEventKey].reduce(
+          members: selectedEventRealRows,
+          eventName: selectedEventAllRows[0]?.eventName,
+          eventYear: selectedEventAllRows[0]?.eventYear,
+          adults: selectedEventRealRows.reduce(
             (sum: number, m: any) => sum + 1 + Number(m.adults || 0), 0
           ),
-          children: groupedEvents[selectedEventKey].reduce(
+          children: selectedEventRealRows.reduce(
             (sum: number, m: any) => sum + Number(m.children || 0), 0
           ),
-          totalPeople: groupedEvents[selectedEventKey].reduce(
+          totalPeople: selectedEventRealRows.reduce(
             (sum: number, m: any) => sum + 1 + Number(m.adults || 0) + Number(m.children || 0), 0
           ),
-          totalFees: groupedEvents[selectedEventKey].reduce(
+          totalFees: selectedEventRealRows.reduce(
             (sum: number, m: any) => sum + Number(m.fee || 0), 0
           ),
         }
