@@ -40,24 +40,22 @@ interface AttachCheckoutPopupOptions {
   onClosedWithoutResult?: () => void;
 }
 
-// Fixed popup size for every Stripe/Square checkout: a comfortable width
-// for a hosted card-payment page, and a height matching what "Complete
-// Payment to Confirm" naturally renders at. Deliberately no longer
-// computed from the calling dialog's own on-screen size — trying to mirror
-// an arbitrary dialog's exact box ran straight into a hard browser limit:
-// the popup's title bar + address bar are drawn by the browser itself,
-// take up real space inside whatever outer size is requested, and browsers
+// Fixed popup size for every Stripe/Square/PayPal checkout: a comfortable
+// width for a hosted card-payment page, and a TOTAL window height of 807px
+// — title bar, address/URL bar and all — matching what "Complete Payment
+// to Confirm" naturally renders at. Deliberately no longer computed from
+// the calling dialog's own on-screen size — trying to mirror an arbitrary
+// dialog's exact box ran straight into a hard browser limit: the popup's
+// title bar + address bar are drawn by the browser itself and browsers
 // (Brave in particular) block scripts from measuring/trimming that space
-// back out afterwards, so the popup always ended up a bit taller than
-// intended no matter how it was requested. A fixed, centered size
-// sidesteps that — there's no dialog geometry to chase, so there's nothing
-// for browser chrome to throw off.
+// back out afterwards. A fixed, centered size sidesteps that.
 const POPUP_WIDTH = 480;
-const POPUP_HEIGHT = 807;
+const POPUP_TOTAL_HEIGHT = 807;
 
 /**
- * Opens a blank popup window, fixed at POPUP_WIDTH x POPUP_HEIGHT and
- * centered on the screen. Call this FIRST, synchronously, directly inside
+ * Opens a blank popup window at a fixed total size of POPUP_WIDTH x
+ * POPUP_TOTAL_HEIGHT (title bar and address bar included), centered on the
+ * screen. Call this FIRST, synchronously, directly inside
  * the click handler — before any `await` — and only fetch the real
  * checkout URL afterwards, then hand both to attachCheckoutPopup(). This
  * two-step dance (open blank now, navigate it later) is the standard
@@ -74,8 +72,20 @@ const POPUP_HEIGHT = 807;
  * existing call sites don't need to change.
  */
 export function openBlankCheckoutPopup(_anchorEl?: HTMLElement | null): Window | null {
+  // window.open's `height` feature sets the CONTENT area height only —
+  // every browser then draws its title bar + address bar ABOVE that,
+  // adding to the total window height rather than eating into the number
+  // requested. So to land on a total (title bar + address bar + content)
+  // of POPUP_TOTAL_HEIGHT, subtract an estimate of that chrome first. The
+  // best estimate available before the popup exists is this SAME browser's
+  // own overhead on the current window (outerHeight - innerHeight) — not
+  // perfect (a popup's chrome can be a little slimmer, no tab strip or
+  // bookmarks bar), but far closer than not accounting for it at all.
+  const estimatedChromeHeight = Math.max(0, window.outerHeight - window.innerHeight);
+  const requestedContentHeight = Math.max(300, POPUP_TOTAL_HEIGHT - estimatedChromeHeight);
+
   const left = Math.round(window.screenX + Math.max(0, (window.outerWidth - POPUP_WIDTH) / 2));
-  const top = Math.round(window.screenY + Math.max(0, (window.outerHeight - POPUP_HEIGHT) / 2));
+  const top = Math.round(window.screenY + Math.max(0, (window.outerHeight - POPUP_TOTAL_HEIGHT) / 2));
 
   // Close any popup we opened ourselves that's still hanging around from a
   // previous attempt, and — critically — open this one under a fresh,
@@ -98,7 +108,7 @@ export function openBlankCheckoutPopup(_anchorEl?: HTMLElement | null): Window |
   const popup = window.open(
     "about:blank",
     uniqueName,
-    `width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top},resizable=yes,scrollbars=yes`
+    `width=${POPUP_WIDTH},height=${requestedContentHeight},left=${left},top=${top},resizable=yes,scrollbars=yes`
   );
   lastOpenedPopup = popup;
 
