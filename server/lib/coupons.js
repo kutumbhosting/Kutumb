@@ -13,6 +13,21 @@ export async function buildCouponQrDataUrl(code) {
 }
 
 /**
+ * A coupon's valid_until is stored as a plain date ("2026-09-22"), which
+ * JavaScript parses as midnight UTC at the very START of that day — so
+ * comparing it against `now` directly made a coupon "valid until Sept 22"
+ * expire at the first moment of Sept 22, not the end of it, cutting off
+ * almost an entire day early (all of the date it was supposed to still
+ * work for). "Valid until <date>" means usable through the end of that
+ * date, so treat it as expiring at the end of that day (23:59:59.999 UTC)
+ * instead of the start of it.
+ */
+function couponExpiresAt(validUntil) {
+  const d = new Date(validUntil);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+}
+
+/**
  * Validates a coupon for a given event without redeeming it — used to show
  * the registrant what it's worth before they commit. Returns
  * { ok: true, coupon } or { ok: false, message }.
@@ -34,7 +49,7 @@ export async function findValidCoupon(code, eventName, eventYear) {
   if (coupon.valid_from && new Date(coupon.valid_from) > now) {
     return { ok: false, message: "This coupon isn't valid yet" };
   }
-  if (coupon.valid_until && new Date(coupon.valid_until) < now) {
+  if (coupon.valid_until && couponExpiresAt(coupon.valid_until) < now) {
     return { ok: false, message: "This coupon has expired" };
   }
   return { ok: true, coupon };
@@ -61,7 +76,7 @@ export async function redeemCouponForRegistration(client, code, eventName, event
   }
   const now = new Date();
   if (coupon.valid_from && new Date(coupon.valid_from) > now) return { ok: false, message: "This coupon isn't valid yet" };
-  if (coupon.valid_until && new Date(coupon.valid_until) < now) return { ok: false, message: "This coupon has expired" };
+  if (coupon.valid_until && couponExpiresAt(coupon.valid_until) < now) return { ok: false, message: "This coupon has expired" };
 
   const { rows: updated } = await client.query(
     `UPDATE kutumb_event_coupons
