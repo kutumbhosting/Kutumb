@@ -377,8 +377,8 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
             {waitingOnSquarePopup
               ? "Waiting for payment in popup..."
               : startingSquare
-              ? "Opening Square checkout..."
-              : `⬛ Pay $${remaining.toFixed(2)} with Square`}
+              ? "Opening Card (Square) checkout..."
+              : `⬛ Pay $${remaining.toFixed(2)} by Card (Square)`}
           </Button>
         </div>
       )}

@@ -374,7 +374,7 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
                 {methods.square && (
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="square" id="pay-square" />
-                    <label htmlFor="pay-square" className="text-sm cursor-pointer">⬛ Square</label>
+                    <label htmlFor="pay-square" className="text-sm cursor-pointer">⬛ Pay by Card (Square)</label>
                   </div>
                 )}
                 {methods.paypal && (
@@ -430,7 +430,7 @@ const DonateDialog = ({ open, onOpenChange }: DonateDialogProps) => {
               ? "Submitting…"
               : paymentMethod === "bank"
               ? "Confirm Donation"
-              : `Continue to ${paymentMethod === "card" ? "Card" : paymentMethod === "square" ? "Square" : "PayPal"} Payment`}
+              : `Continue to ${paymentMethod === "card" ? "Card" : paymentMethod === "square" ? "Card (Square)" : "PayPal"} Payment`}
           </Button>
         </form>
         )}
