@@ -37,7 +37,7 @@ export const SETTINGS_SCHEMA = [
   // in and an admin deliberately switches it on.
   { group: "Payment Methods", key: "payment_method_bank_transfer", label: "Bank Transfer", type: "boolean", default: "true" },
   { group: "Payment Methods", key: "payment_method_card", label: "Pay by Card (Stripe)", type: "boolean", default: "false" },
-  { group: "Payment Methods", key: "payment_method_square", label: "Pay by Card", type: "boolean", default: "false" },
+  { group: "Payment Methods", key: "payment_method_square", label: "Pay by Card (Square)", type: "boolean", default: "false" },
   { group: "Payment Methods", key: "payment_method_paypal", label: "Pay by PayPal", type: "boolean", default: "false" },
   // Square: a Square "Payment Link" (hosted checkout page) is created per
   // registration, so no client-side Square SDK is needed. The access token
