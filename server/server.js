@@ -235,15 +235,32 @@ app.post("/api/events", async (req, res) => {
     // 5-and-over (charged). Older/unmigrated clients that still only send
     // `children` are treated as all-5-plus, i.e. exactly the old behaviour.
     children, childrenUnder5, children5Plus,
+    // The actual name of each additional adult / child, positionally
+    // matched to the counts above — e.g. adultNames[0] is the first
+    // additional adult's name. Sanitized to plain, trimmed strings here so
+    // nothing unexpected (wrong type, excess length) reaches the database
+    // or a ticket PDF; any missing/blank entry is just an empty string,
+    // and syncRegistrationAttendees falls back to a generic label for it.
+    adultNames, childrenUnder5Names, children5PlusNames,
   } = req.body;
 
   if (!eventName || !name || !email || !phone) {
     return res.status(400).json({ message: "Name, email and phone are required" });
   }
 
+  const sanitizeNames = (arr, count) =>
+    Array.from({ length: count }, (_, i) =>
+      typeof arr?.[i] === "string" ? arr[i].trim().slice(0, 200) : ""
+    );
+
   const numChildrenUnder5 = Number(childrenUnder5) || 0;
   const numChildren5Plus = children5Plus !== undefined ? Number(children5Plus) || 0 : Number(children) || 0;
   const numChildrenTotal = numChildrenUnder5 + numChildren5Plus;
+  const numAdults = Number(adults) || 0;
+
+  const sanitizedAdultNames = sanitizeNames(adultNames, numAdults);
+  const sanitizedChildrenUnder5Names = sanitizeNames(childrenUnder5Names, numChildrenUnder5);
+  const sanitizedChildren5PlusNames = sanitizeNames(children5PlusNames, numChildren5Plus);
 
   let eventYear = year(eventDate);
 
@@ -344,12 +361,14 @@ app.post("/api/events", async (req, res) => {
           `INSERT INTO kutumb_event_registrations
              (event_name, event_year, name, email, phone, adults, children, children_under5, children_5plus, child_fee,
               comments, registration_number, is_member, membership_number, fee, per_person_fee,
-              bank_transferred, transaction_number, payment_status, registration_status, pay_token)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,NULL,$17,$18,$19) RETURNING *`,
+              bank_transferred, transaction_number, payment_status, registration_status, pay_token,
+              adult_names, children_under5_names, children_5plus_names)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,NULL,$17,$18,$19,$20,$21,$22) RETURNING *`,
           [
-            eventName, eventYear, name, email, phone, Number(adults) || 0, numChildrenTotal, numChildrenUnder5, numChildren5Plus, childFeeApplied,
+            eventName, eventYear, name, email, phone, numAdults, numChildrenTotal, numChildrenUnder5, numChildren5Plus, childFeeApplied,
             comments || null, registrationNumber, isMember, matchedMember?.membership_number || null,
             applicableFee, perPersonFee, applicableFee > 0 ? "Pending" : "N/A", registrationStatus, payToken,
+            JSON.stringify(sanitizedAdultNames), JSON.stringify(sanitizedChildrenUnder5Names), JSON.stringify(sanitizedChildren5PlusNames),
           ]
         );
         newRegistration = inserted[0];

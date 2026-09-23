@@ -23,6 +23,9 @@ export async function syncRegistrationAttendees(client, registration) {
     adults,
     children_under5: childrenUnder5,
     children_5plus: children5Plus,
+    adult_names: adultNames,
+    children_under5_names: childrenUnder5Names,
+    children_5plus_names: children5PlusNames,
   } = registration;
 
   const { rows: existing } = await client.query(
@@ -35,16 +38,40 @@ export async function syncRegistrationAttendees(client, registration) {
     (byCategory[row.category] || byCategory.adult).push(row);
   }
 
+  // adult_names / children_*_names come back from Postgres as parsed JSON
+  // arrays already (jsonb), but guard against a stringified or missing
+  // value too — older rows created before these columns existed will have
+  // none of this, and should fall back to the old generic labels exactly
+  // as before.
+  const asNameArray = (v) => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === "string") {
+      try {
+        const parsed = JSON.parse(v);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+  const adultNameList = asNameArray(adultNames);
+  const childrenUnder5NameList = asNameArray(childrenUnder5Names);
+  const children5PlusNameList = asNameArray(children5PlusNames);
+
   const desired = [];
   desired.push({ category: "primary_adult", name: name || "Primary Registrant" });
   for (let i = 1; i <= Number(adults || 0); i++) {
-    desired.push({ category: "adult", name: `Additional Adult ${i}` });
+    const givenName = adultNameList[i - 1]?.trim();
+    desired.push({ category: "adult", name: givenName || `Additional Adult ${i}` });
   }
   for (let i = 1; i <= Number(childrenUnder5 || 0); i++) {
-    desired.push({ category: "child_under5", name: `Child ${i} (Under 5)` });
+    const givenName = childrenUnder5NameList[i - 1]?.trim();
+    desired.push({ category: "child_under5", name: givenName || `Child ${i} (Under 5)` });
   }
   for (let i = 1; i <= Number(children5Plus || 0); i++) {
-    desired.push({ category: "child_5plus", name: `Child ${i} (5+)` });
+    const givenName = children5PlusNameList[i - 1]?.trim();
+    desired.push({ category: "child_5plus", name: givenName || `Child ${i} (5+)` });
   }
 
   const keepIds = new Set();

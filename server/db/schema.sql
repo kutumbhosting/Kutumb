@@ -476,6 +476,17 @@ ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS pay_token TEXT U
 -- beforeunload beacon and an explicit Close click both fire.
 ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_email_sent_at TIMESTAMPTZ;
 
+-- The actual name of each additional adult / child on a registration, so
+-- tickets can be issued in each individual's own name rather than a
+-- generic "Additional Adult 1" / "Child 1 (Under 5)" placeholder. Each is
+-- a JSON array of strings, positionally matched to the adults /
+-- children_under5 / children_5plus counts (see syncRegistrationAttendees
+-- in server/lib/attendees.js, which falls back to the old generic naming
+-- for any position left blank or for registrations created before this).
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS adult_names JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS children_under5_names JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS children_5plus_names JSONB NOT NULL DEFAULT '[]'::jsonb;
+
 -- ============================================================
 -- Repair: registrations showing payment_status = 'Paid' while still
 -- registration_status = 'pending_payment' (a contradiction — Paid must mean
