@@ -1677,6 +1677,7 @@ app.get("/api/whatsapp/status", (req, res) => {
 ------------------------------ */
 
 app.post("/api/donations", async (req, res) => {
+  console.log("🔔 DONATION HANDLER REACHED", req.body);
   try {
     const { name, email, amount, bankTransferred, transactionNumber } = req.body;
 
