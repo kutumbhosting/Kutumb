@@ -1543,11 +1543,6 @@ app.post("/api/activity-register", async (req, res) => {
   }
 });
 
-/* -----------------------------
-   🔌 FILE MANAGER ROUTES
------------------------------- */
-app.use("/api", fileManagerRoutes);
-
 app.get("/api/email/status", async (req, res) => {
   const status = await checkEmailConfig();
   res.json(status);
@@ -1677,7 +1672,6 @@ app.get("/api/whatsapp/status", (req, res) => {
 ------------------------------ */
 
 app.post("/api/donations", async (req, res) => {
-  console.log("🔔 DONATION HANDLER REACHED", req.body);
   try {
     const { name, email, amount, bankTransferred, transactionNumber } = req.body;
 
@@ -1936,6 +1930,16 @@ app.post("/api/pastevents/delete-media", requireAdmin, async (req, res) => {
 /* ----------------------------- 
 🚀 START SERVER + FRONTEND 
 ------------------------------*/
+/* -----------------------------
+   🔌 FILE MANAGER ROUTES (admin-only)
+   Mounted last, deliberately: this router's own router.use(requireAdmin)
+   would otherwise shadow every /api/* route defined below it in this file
+   (it matches on the bare "/api" prefix). Placing it here means every other
+   /api/* route above always gets first chance to match, and this admin
+   gate only ever catches genuinely unmatched paths like /api/folders.
+------------------------------ */
+app.use("/api", fileManagerRoutes);
+
 app.use(express.static(path.join(__dirname, "../dist")));
 
 // -----------------------------
