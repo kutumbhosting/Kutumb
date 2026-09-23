@@ -502,6 +502,18 @@ export async function sendDonationThankYouEmail({
   name,
   amount,
   membershipNumber, // optional
+  // `paid` is the one that actually decides which message this email shows.
+  // It's true for EVERY call site that reaches this function — the
+  // immediate bank-transfer-with-transaction-number path in server.js, and
+  // the webhook-confirmed card/Square/PayPal path in donationPayments.js —
+  // because both only ever call this once a donation is genuinely paid.
+  // `bankTransferred` on its own does NOT mean "unpaid": it only describes
+  // *which* payment method was used, so it must never be the sole thing
+  // this template branches on (that was the bug — a real, already-paid
+  // Square/card donation was showing "please do a bank transfer" because
+  // the webhook path correctly passes bankTransferred: false for a card
+  // payment, which the old code misread as "not yet paid").
+  paid = false,
   bankTransferred,
   transactionNumber,
 }) {
@@ -509,7 +521,7 @@ export async function sendDonationThankYouEmail({
     ? `<p style="font-size:14px;">Kutumb Membership Number: <strong>${membershipNumber}</strong></p>`
     : "";
 
-  const transferLine = bankTransferred
+  const transferLine = paid
     ? `<p style="font-size:14px;">Payment Status: <strong style="color:#15803d;">Paid</strong> &middot; Transaction Reference: <strong>${transactionNumber || "(not provided)"}</strong></p>`
     : `<p style="font-size:14px;">Payment Status: <strong style="color:#b45309;">Pending</strong> - please complete your bank transfer using the details below when ready.</p>
        <div style="border:2px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:12px 16px;margin:12px 0;font-size:14px;">

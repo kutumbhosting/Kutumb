@@ -71,6 +71,7 @@ export async function markDonationPaymentPaid(paymentId, rawStatus, transactionR
         name: donation.name,
         amount: Number(donation.amount),
         membershipNumber: donation.membership_number,
+        paid: true,
         bankTransferred: false,
         transactionNumber: transactionRef || `${payment.provider} payment`,
       }).catch((err) => console.error("Donation payment confirmation email error:", err));
