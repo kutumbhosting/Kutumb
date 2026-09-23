@@ -1673,7 +1673,12 @@ app.get("/api/whatsapp/status", (req, res) => {
 
 app.post("/api/donations", async (req, res) => {
   try {
-    const { name, email, amount, bankTransferred, transactionNumber } = req.body;
+    console.log("DONATION REQUEST:", {
+      contentType: req.headers["content-type"],
+      contentLength: req.headers["content-length"],
+      body: req.body,
+    });
+    const { name, email, amount, bankTransferred, transactionNumber } = req.body || {};
 
     if (!name?.trim() || !email?.trim() || !amount) {
       return res.status(400).json({ message: "Name, email and amount are required" });
@@ -2023,3 +2028,4 @@ app.listen(PORT, "0.0.0.0", () => {
     })
     .catch((err) => console.error("Startup members drop-in check failed:", err));
 });
+
