@@ -29,7 +29,19 @@ interface FormData {
   children: number;
   childrenUnder5: number;
   children5Plus: number;
+  adultNames: string[];
+  childrenUnder5Names: string[];
+  children5PlusNames: string[];
 }
+
+// Resizes a names array to match a new count, keeping any names already
+// typed in and padding new slots with "" — used every time an adult/child
+// count field changes, so the name inputs rendered below always match.
+const resizeNames = (names: string[], count: number): string[] => {
+  const next = names.slice(0, count);
+  while (next.length < count) next.push("");
+  return next;
+};
 
 interface UpcomingEventsProps {
   upcomingEvents: any[];
@@ -229,6 +241,9 @@ const UpcomingEvents = ({
                             children: 0,
                             childrenUnder5: 0,
                             children5Plus: 0,
+                            adultNames: [],
+                            childrenUnder5Names: [],
+                            children5PlusNames: [],
                           });
                           setRegistrationOpen(true);
                         }}
@@ -335,18 +350,25 @@ const UpcomingEvents = ({
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="adults">Number of Additional Adults *</Label>
+                  <Label htmlFor="adults">No of Adults (including you) *</Label>
                   <Input
                     id="adults"
                     type="number"
-                    min="0"
-                    value={formData.adults}
-                    onChange={(e) =>
+                    min="1"
+                    value={Number(formData.adults) + 1}
+                    onChange={(e) => {
+                      // Shown/entered value includes the registrant; stored
+                      // `adults` stays "additional adults beyond the
+                      // registrant" so fee calculations and ticket
+                      // generation elsewhere don't need to change.
+                      const totalIncludingYou = Math.max(1, Number(e.target.value) || 1);
+                      const additionalAdults = totalIncludingYou - 1;
                       setFormData({
                         ...formData,
-                        adults: Number(e.target.value),
-                      })
-                    }
+                        adults: additionalAdults,
+                        adultNames: resizeNames(formData.adultNames, additionalAdults),
+                      });
+                    }}
                     className="mt-2"
                   />
                 </div>
@@ -358,13 +380,15 @@ const UpcomingEvents = ({
                     type="number"
                     min="0"
                     value={formData.children5Plus}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const count = Math.max(0, Number(e.target.value) || 0);
                       setFormData({
                         ...formData,
-                        children5Plus: Number(e.target.value),
-                        children: Number(e.target.value) + (Number(formData.childrenUnder5) || 0),
-                      })
-                    }
+                        children5Plus: count,
+                        children: count + (Number(formData.childrenUnder5) || 0),
+                        children5PlusNames: resizeNames(formData.children5PlusNames, count),
+                      });
+                    }}
                     className="mt-2"
                   />
                 </div>
@@ -380,17 +404,80 @@ const UpcomingEvents = ({
                     type="number"
                     min="0"
                     value={formData.childrenUnder5}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const count = Math.max(0, Number(e.target.value) || 0);
                       setFormData({
                         ...formData,
-                        childrenUnder5: Number(e.target.value),
-                        children: Number(e.target.value) + (Number(formData.children5Plus) || 0),
-                      })
-                    }
+                        childrenUnder5: count,
+                        children: count + (Number(formData.children5Plus) || 0),
+                        childrenUnder5Names: resizeNames(formData.childrenUnder5Names, count),
+                      });
+                    }}
                     className="mt-2"
                   />
                 </div>
               </div>
+
+              {/* Names of each additional adult / child, so tickets can be
+                  issued in each individual's own name. Only shown once the
+                  relevant count is above zero. */}
+              {Number(formData.adults) > 0 && (
+                <div className="space-y-2">
+                  <Label>Additional Adult Name{Number(formData.adults) > 1 ? "s" : ""} *</Label>
+                  {Array.from({ length: Number(formData.adults) }).map((_, i) => (
+                    <Input
+                      key={`adult-name-${i}`}
+                      placeholder={`Adult ${i + 2} full name`}
+                      value={formData.adultNames[i] || ""}
+                      onChange={(e) => {
+                        const next = [...formData.adultNames];
+                        next[i] = e.target.value;
+                        setFormData({ ...formData, adultNames: next });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {Number(formData.children5Plus) > 0 && (
+                <div className="space-y-2">
+                  <Label>
+                    Child Name{Number(formData.children5Plus) > 1 ? "s" : ""} (5 and over) *
+                  </Label>
+                  {Array.from({ length: Number(formData.children5Plus) }).map((_, i) => (
+                    <Input
+                      key={`child5plus-name-${i}`}
+                      placeholder={`Child ${i + 1} full name`}
+                      value={formData.children5PlusNames[i] || ""}
+                      onChange={(e) => {
+                        const next = [...formData.children5PlusNames];
+                        next[i] = e.target.value;
+                        setFormData({ ...formData, children5PlusNames: next });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {Number(formData.childrenUnder5) > 0 && (
+                <div className="space-y-2">
+                  <Label>
+                    Child Name{Number(formData.childrenUnder5) > 1 ? "s" : ""} (Under 5) *
+                  </Label>
+                  {Array.from({ length: Number(formData.childrenUnder5) }).map((_, i) => (
+                    <Input
+                      key={`childunder5-name-${i}`}
+                      placeholder={`Child ${i + 1} full name`}
+                      value={formData.childrenUnder5Names[i] || ""}
+                      onChange={(e) => {
+                        const next = [...formData.childrenUnder5Names];
+                        next[i] = e.target.value;
+                        setFormData({ ...formData, childrenUnder5Names: next });
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
 
               {/* Total registration fee, based on membership status and attendee count */}
               {selectedEvent && (selectedEvent.memberFee > 0 || selectedEvent.nonMemberFee > 0) && (

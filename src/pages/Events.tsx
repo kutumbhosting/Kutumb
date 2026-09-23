@@ -37,6 +37,12 @@ const Events = () => {
     children: 0,
     childrenUnder5: 0,
     children5Plus: 0,
+    // Positionally matched to the counts above — adultNames[0] is the
+    // first additional adult's name, and so on. Kept in sync with the
+    // counts by UpcomingEvents.tsx as the person changes the numbers.
+    adultNames: [] as string[],
+    childrenUnder5Names: [] as string[],
+    children5PlusNames: [] as string[],
   });
 
   // ── Shared fetch function used on load and after registration ────────────
@@ -104,6 +110,22 @@ const Events = () => {
       toast({
         title: "Invalid Email",
         description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Every additional adult and child gets their own ticket, so each one
+    // needs an actual name — a blank slot here would otherwise fall back
+    // to a generic "Additional Adult 1" / "Child 1" label on their ticket.
+    const missingName =
+      formData.adultNames.slice(0, formData.adults).some((n) => !n.trim()) ||
+      formData.children5PlusNames.slice(0, formData.children5Plus).some((n) => !n.trim()) ||
+      formData.childrenUnder5Names.slice(0, formData.childrenUnder5).some((n) => !n.trim());
+    if (missingName) {
+      toast({
+        title: "Missing Names",
+        description: "Please enter a name for every additional adult and child so we can issue their tickets correctly.",
         variant: "destructive",
       });
       return;
@@ -199,6 +221,9 @@ const Events = () => {
         children: 0,
         childrenUnder5: 0,
         children5Plus: 0,
+        adultNames: [],
+        childrenUnder5Names: [],
+        children5PlusNames: [],
       });
     } catch (error: any) {
       console.error("API Error:", error);
