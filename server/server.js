@@ -1715,6 +1715,7 @@ app.post("/api/donations", async (req, res) => {
         name,
         amount: Number(donation.amount),
         membershipNumber: donation.membership_number,
+        paid: true,
         bankTransferred: donation.bank_transferred,
         transactionNumber: donation.transaction_number,
       }).catch((err) => console.error("Donation email error:", err));
@@ -2028,4 +2029,3 @@ app.listen(PORT, "0.0.0.0", () => {
     })
     .catch((err) => console.error("Startup members drop-in check failed:", err));
 });
-
