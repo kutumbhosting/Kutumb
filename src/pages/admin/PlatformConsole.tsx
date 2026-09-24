@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { BankFileDropBoxPanel, BankFeedPanel, RegistrationEmailsPanel, MediaDropBoxPanel } from "./BankSetupPanels";
+import { BankFileDropBoxPanel, OpenfeedPanel, RegistrationEmailsPanel, MediaDropBoxPanel } from "./BankSetupPanels";
 
 type SettingRow = {
   group: string;
@@ -242,7 +242,7 @@ function SettingsTab({ mode }: { mode: "keys" | "settings" }) {
                 {group === "Automatic Registration Emails" && <RegistrationEmailsPanel refreshKey={savedCount} />}
                 {group.startsWith("Bank File Drop Box") && <BankFileDropBoxPanel refreshKey={savedCount} />}
                 {group === "Event Media Drop Box" && <MediaDropBoxPanel refreshKey={savedCount} />}
-                {group.startsWith("Live Bank Feed") && <BankFeedPanel refreshKey={savedCount} />}
+                {group.startsWith("Live Bank Feed") && <OpenfeedPanel refreshKey={savedCount} />}
                 {group === "AI Email Draft" && (
                   <p className="text-xs text-muted-foreground">
                     Save your Groq API key first, then click "Load models" to see which models your

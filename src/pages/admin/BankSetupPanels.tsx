@@ -2,8 +2,8 @@
 // under their settings groups:
 //   • BankFileDropBoxPanel — Apps Script pick-up, recent files, optional
 //     server-side Google Drive connection
-//   • BankFeedPanel        — Basiq live bank feed connection
-import { useEffect, useState } from "react";
+//   • OpenfeedPanel        — live NAB feed through openfeed (CDR)
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -205,55 +205,148 @@ export function BankFileDropBoxPanel({ refreshKey }: { refreshKey?: number }) {
   );
 }
 
-export function BankFeedPanel({ refreshKey }: { refreshKey?: number }) {
+export function OpenfeedPanel({ refreshKey }: { refreshKey?: number }) {
   const { toast } = useToast();
-  const [feed, setFeed] = useState<any | null>(null);
+  const [st, setSt] = useState<any | null>(null);
+  const [busy, setBusy] = useState("");
 
-  const load = () => getJson("/api/events/reconcile/bank-feed/status").then(setFeed).catch(() => setFeed(null));
+  const load = () => getJson("/api/openfeed/status").then(setSt).catch(() => setSt(null));
   useEffect(() => {
     load();
   }, [refreshKey]);
 
-  const connect = async () => {
+  const act = async (name: string, fn: () => Promise<void>) => {
+    setBusy(name);
     try {
-      const { url } = await postJson("/api/events/reconcile/bank-feed/connect");
-      window.open(url, "_blank", "noopener");
-      toast({
-        title: "Finish connecting in the new tab",
-        description: "Log in to the bank and share the account that receives transfers, then click Refresh.",
-      });
+      await fn();
     } catch (err: any) {
-      toast({ title: "Couldn't connect bank", description: err.message, variant: "destructive" });
+      toast({ title: "openfeed", description: err.message, variant: "destructive" });
+    } finally {
+      setBusy("");
+      load();
     }
   };
 
-  if (!feed) return null;
+  const genKeys = () =>
+    act("keys", async () => {
+      if (st?.hasKeys && !window.confirm("Replace the existing keys? You'll need to paste the new public key into openfeed.")) return;
+      await postJson("/api/openfeed/keys", { rotate: !!st?.hasKeys });
+      toast({ title: "Keys ready", description: "Copy the public key set into your openfeed app registration." });
+    });
+  const copyJwks = async () => {
+    await navigator.clipboard.writeText(JSON.stringify(st.jwks, null, 2));
+    toast({ title: "Public key set copied" });
+  };
+  const connect = () =>
+    act("connect", async () => {
+      const { url } = await postJson("/api/openfeed/connect");
+      window.open(url, "_blank", "noopener");
+      toast({ title: "Finish in the new tab", description: "Sign in to openfeed and share the Kutumb NAB account, then click Refresh here." });
+    });
+  const sync = () =>
+    act("sync", async () => {
+      const r = await postJson("/api/openfeed/sync");
+      toast({ title: "Bank sync complete", description: r.message });
+    });
+  const rematch = () =>
+    act("match", async () => {
+      const r = await postJson("/api/openfeed/match-account");
+      toast({ title: r.matched ? "Account found" : "Account not found", description: r.matched ? "Kutumb NAB account selected." : "Share the Kutumb NAB account on openfeed, then try again." });
+    });
+  const disconnect = () =>
+    act("disconnect", async () => {
+      if (!window.confirm("Disconnect the live NAB feed?")) return;
+      const r = await postJson("/api/openfeed/disconnect");
+      toast({ title: "Disconnected", description: r.message });
+    });
+
+  if (!st) return null;
+  const step = (n: number, done: boolean, title: string, body: ReactNode) => (
+    <div className="flex gap-3">
+      <span className={`mt-0.5 h-5 w-5 shrink-0 rounded-full text-xs flex items-center justify-center ${done ? "bg-green-600 text-white" : "bg-muted"}`}>
+        {done ? "✓" : n}
+      </span>
+      <div className="space-y-1">
+        <p className="font-medium">{title}</p>
+        <div className="text-muted-foreground">{body}</div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="mt-4 rounded-md border p-4 space-y-2 text-sm">
+    <div className="mt-4 rounded-md border p-4 space-y-4 text-sm">
       <p className="text-muted-foreground">
-        Pulls incoming transfers straight from the bank (no file needed). Basiq charges for production access, so
-        the Bank File Drop Box above is the free option. Once connected, a <strong>Sync from Bank</strong> button
-        appears on the Event Registration page.
+        Pulls incoming transfers into the <strong>Kutumb Australia Inc</strong> NAB account (BSB 082-356, account
+        778280517) straight from NAB through <strong>openfeed</strong>, an accredited Consumer Data Right provider — no
+        statement files needed. Read-only: nothing can be paid out of the account, and NAB login details are never seen by
+        openfeed or this website.
       </p>
-      <p>
-        <span className="font-medium">Status:</span>{" "}
-        {!feed.configured
-          ? "Add the Basiq API key above to enable."
-          : feed.connected
-          ? `Connected — ${feed.accounts.map((a: any) => `${a.name || "account"} ${a.accountNo || ""}`.trim()).join(", ")}`
-          : "API key saved; bank not connected yet."}
-        {feed.lastSync && ` · last sync ${fmt(feed.lastSync)}`}
-      </p>
-      {feed.error && <p className="text-red-600">{feed.error}</p>}
-      <div className="flex gap-2 flex-wrap">
-        {feed.configured && (
-          <Button size="sm" variant="outline" onClick={connect}>
-            {feed.connected ? "Re-connect / renew consent" : "Connect Bank"}
-          </Button>
-        )}
-        <Button size="sm" variant="outline" onClick={load}>Refresh</Button>
-      </div>
+
+      {step(1, st.hasKeys, "Create the website's keys", (
+        <>
+          <p>openfeed needs two private keys (kept encrypted in the database) and one public key registered with them.</p>
+          <div className="flex gap-2 flex-wrap mt-1">
+            <Button size="sm" variant="outline" onClick={genKeys} disabled={!!busy}>
+              {st.hasKeys ? "Replace keys" : "Generate keys"}
+            </Button>
+            {st.jwks && <Button size="sm" variant="outline" onClick={copyJwks}>Copy public key set</Button>}
+          </div>
+        </>
+      ))}
+
+      {step(2, st.hasIds, "Register the Kutumb app with openfeed", (
+        <ol className="list-decimal pl-5 space-y-1">
+          <li>
+            Go to{" "}
+            <a className="underline" href="https://app.openfeed.au/registered-apps/new" target="_blank" rel="noopener noreferrer">
+              app.openfeed.au → Register app
+            </a>{" "}
+            (sign up with kutumbhosting@gmail.com or the treasurer's email).
+          </li>
+          <li>Name: <em>Kutumb Event Registrations</em>; website: your site address.</li>
+          <li>Auth method: <strong>private_key_jwt</strong>; paste the copied <strong>public key set</strong> as inline JWKS.</li>
+          <li>Scopes: <strong>openfeed-au:data:banking:read</strong> only.</li>
+          <li>Post-logout redirect URI: <span className="font-mono text-xs">{st.baseUrl}/</span> (with the slash).</li>
+          <li>
+            Copy the <strong>OAuth2 Client ID</strong> (starts with <span className="font-mono">app-</span>) and the{" "}
+            <strong>App ID</strong> into the fields above and save.
+          </li>
+        </ol>
+      ))}
+
+      {step(3, st.connected, "Connect the NAB account", (
+        <>
+          <p>
+            In openfeed's dashboard, connect <strong>NAB</strong> (you'll log in at NAB and approve sharing — for a business
+            account this must be done by a NAB <em>nominated representative</em> for Kutumb Australia Inc). Then click
+            Connect below and share the Kutumb account with the website.
+          </p>
+          <div className="flex gap-2 flex-wrap mt-1">
+            <Button size="sm" onClick={connect} disabled={!!busy || !st.hasKeys || !st.hasIds}>
+              {st.connected ? "Re-connect / change shared accounts" : "Connect"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={load}>Refresh</Button>
+          </div>
+        </>
+      ))}
+
+      {st.connected && (
+        <div className="rounded-md bg-muted/50 p-3 space-y-2">
+          <p>
+            <span className="font-medium">Account:</span>{" "}
+            {st.accountLabel || <span className="text-orange-700">Kutumb NAB account not found among shared accounts</span>}
+          </p>
+          <p className="text-muted-foreground">
+            {st.lastSync?.at ? `Last sync ${fmt(st.lastSync.at)}: ${st.lastSync.error || st.lastSync.message}` : "Not synced yet."}
+            {" "}({st.storedCredits} credit(s) stored from openfeed.) NAB data on openfeed refreshes about every 4 hours.
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" onClick={sync} disabled={!!busy}>{busy === "sync" ? "Syncing…" : "Sync now"}</Button>
+            <Button size="sm" variant="outline" onClick={rematch} disabled={!!busy}>Find Kutumb account again</Button>
+            <Button size="sm" variant="ghost" onClick={disconnect} disabled={!!busy}>Disconnect</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
