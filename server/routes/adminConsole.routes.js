@@ -12,7 +12,7 @@ import { importMembersDropIn } from "../lib/importMembersDropIn.js";
 import { listGroqModels } from "../lib/aiDraft.js";
 
 const router = Router();
-// Everything in the Admin Console (API Keys & Settings, Database, Admin
+// Everything in the Admin Console (API Keys, Settings, Database, Admin
 // Users, Audit Log) is Super Admin-only. Limited admins get scoped access
 // to Events Settings / Events Management / File Management instead — see
 // the route-level guards in server.js and dbTables.routes.js.
@@ -72,7 +72,7 @@ router.put("/settings/:key", async (req, res) => {
     }
     toStore = String(n);
   }
-  if (def.key === "gdrive_folder_id") {
+  if (def.key === "gdrive_folder_id" || def.key === "media_dropbox_folder_id") {
     // Accept a pasted folder link as well as a bare id.
     const m = String(value).match(/folders\/([A-Za-z0-9_-]+)/);
     toStore = m ? m[1] : String(value).trim();

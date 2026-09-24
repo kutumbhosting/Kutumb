@@ -82,10 +82,14 @@ export const SETTINGS_SCHEMA = [
   { group: "Bank File Drop Box (Google Drive)", key: "gdrive_client_id", label: "Optional server-side polling — Google OAuth Client ID", secret: false },
   { group: "Bank File Drop Box (Google Drive)", key: "gdrive_client_secret", label: "Optional server-side polling — Google OAuth Client Secret", secret: true },
   { group: "Bank File Drop Box (Google Drive)", key: "gdrive_poll_minutes", label: "Optional server-side polling — check every N minutes", secret: false, default: "5" },
+  // Event Media Drop Box: shared Drive folder where volunteers upload event
+  // photos/videos, each event in its own sub-folder. Opened from the footer
+  // link (after a prompt asking them to create/open the event's folder).
+  { group: "Event Media Drop Box", key: "media_dropbox_folder_id", label: "Drive Folder ID (or paste the folder link)", secret: false, default: "1xWnGVgBdTIuBFD2Gj8JjT0y0QgMJijJf" },
   // Live bank feed for bank-transfer reconciliation (Basiq, CDR open
   // banking). API key from dashboard.basiq.io. The User ID is filled in
   // automatically the first time "Connect Bank" is used in Admin →
-  // API Keys & Settings; Account ID is optional (leave blank to read every
+  // API Keys; Account ID is optional (leave blank to read every
   // account the holder shared, or set it to only read the account whose
   // BSB/account number is shown to registrants).
   { group: "Live Bank Feed (Basiq) — optional, paid", key: "basiq_api_key", label: "Basiq API Key", secret: true },

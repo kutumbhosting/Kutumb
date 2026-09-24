@@ -103,7 +103,7 @@ function sendFile_(file) {
       'Open ' + SITE_URL + '/api/events/reconcile/drive/ping in a browser — it should say ok: true.');
   }
   if (code === 401 && body.status === 'unauthorised') {
-    console.error('The website rejected the key. Copy the script again from Admin → API Keys & Settings, ' +
+    console.error('The website rejected the key. Copy the script again from Admin → Settings → Bank File Drop Box, ' +
       'and make sure the live site uses the same DATABASE_URL and ENCRYPTION_KEY as where you copied it.');
   }
 }

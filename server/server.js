@@ -81,6 +81,36 @@ app.use("/api/ticketing", ticketingRoutes);
 app.use("/api/checkin", checkinRoutes);
 app.use("/api/events/reconcile", reconciliationRoutes);
 app.use("/api/registration-emails", registrationEmailsRoutes);
+
+// PUBLIC: the two Google Drive drop boxes linked from the site footer, plus
+// suggested event folder names for the media drop box. Folder access itself
+// is controlled by each folder's Google Drive sharing, not by the site.
+app.get("/api/drop-box-links", async (req, res) => {
+  try {
+    const bankId = (await getSetting("gdrive_folder_id")) || "1wo2VFMi_2zZQSeQbJgFBSqBXS5enTCME";
+    const mediaId = (await getSetting("media_dropbox_folder_id")) || "1xWnGVgBdTIuBFD2Gj8JjT0y0QgMJijJf";
+    const { rows: upcoming } = await pool.query(
+      "SELECT title, date_text FROM kutumb_upcoming_events WHERE published = TRUE ORDER BY id DESC LIMIT 6"
+    );
+    const { rows: past } = await pool.query(
+      "SELECT title, date_text FROM kutumb_past_events ORDER BY created_at DESC LIMIT 6"
+    );
+    const withYear = (e) => {
+      const title = String(e.title || "").trim();
+      const yr = String(e.date_text || "").match(/\d{4}/)?.[0];
+      return yr && !title.includes(yr) ? `${title} ${yr}` : title;
+    };
+    const suggestedFolderNames = [...new Set([...upcoming, ...past].map(withYear).filter(Boolean))].slice(0, 8);
+    res.json({
+      bankFolderUrl: `https://drive.google.com/drive/folders/${bankId}`,
+      mediaFolderUrl: `https://drive.google.com/drive/folders/${mediaId}`,
+      suggestedFolderNames,
+    });
+  } catch (err) {
+    console.error("DROP BOX LINKS ERROR:", err);
+    res.status(500).json({ message: "Couldn't load links" });
+  }
+});
 app.use("/api/coupons", couponsRoutes);
 app.use("/api/events", registrationExtrasRoutes);
 app.use("/api/square", squareRoutes);

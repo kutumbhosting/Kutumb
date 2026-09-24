@@ -10,7 +10,7 @@
 // bank-side id, so it plugs straight into paymentReconciliation.reconcile():
 //   [{ id, date: Date|null, amount: number, details: string, accountId }]
 //
-// Credentials live in Admin → API Keys & Settings → "Live Bank Feed (Basiq)":
+// Credentials live in Admin → API Keys → "Live Bank Feed (Basiq)":
 //   basiq_api_key     (secret)  — from the Basiq dashboard
 //   basiq_user_id               — created automatically on first "Connect bank"
 //   basiq_account_id            — optional; limit the feed to one account
@@ -29,7 +29,7 @@ let cachedServerToken = null; // { token, expiresAt }
 async function getApiKey() {
   const key = (await getSetting("basiq_api_key")) || process.env.BASIQ_API_KEY;
   if (!key) {
-    throw new Error("Bank feed isn't set up: add the Basiq API key in Admin → API Keys & Settings → Live Bank Feed (Basiq).");
+    throw new Error("Bank feed isn't set up: add the Basiq API key in Admin → API Keys → Live Bank Feed (Basiq).");
   }
   return key.trim();
 }
@@ -148,7 +148,7 @@ export async function listAccounts() {
  */
 export async function refreshConnections({ timeoutMs = 45_000 } = {}) {
   const userId = await getSetting("basiq_user_id");
-  if (!userId) throw new Error("No bank connected yet — click Connect Bank in Admin → API Keys & Settings → Live Bank Feed (Basiq).");
+  if (!userId) throw new Error("No bank connected yet — click Connect Bank in Admin → API Keys → Live Bank Feed (Basiq).");
 
   let jobs = [];
   try {
@@ -189,7 +189,7 @@ function isoDate(d) {
  */
 export async function fetchCreditTransactions({ fromDate, toDate = new Date() }) {
   const userId = await getSetting("basiq_user_id");
-  if (!userId) throw new Error("No bank connected yet — click Connect Bank in Admin → API Keys & Settings → Live Bank Feed (Basiq).");
+  if (!userId) throw new Error("No bank connected yet — click Connect Bank in Admin → API Keys → Live Bank Feed (Basiq).");
   const accountId = await getSetting("basiq_account_id");
 
   const filters = [`transaction.postDate.bt('${isoDate(fromDate)}','${isoDate(toDate)}')`];

@@ -6,7 +6,7 @@
 // it can read the dropped files and remove them afterwards — a service
 // account can't delete files it doesn't own in a normal (My Drive) folder.
 //
-// Settings (Admin → API Keys & Settings → "Bank File Drop Box (Google Drive)"):
+// Settings (Admin → Settings → "Bank File Drop Box (Google Drive)"):
 //   gdrive_client_id / gdrive_client_secret — OAuth client from Google Cloud
 //   gdrive_folder_id      — the watched folder
 //   gdrive_refresh_token  — saved automatically by "Connect Google Drive"
@@ -32,7 +32,7 @@ async function clientCreds() {
   const clientSecret = (await getSetting("gdrive_client_secret")) || process.env.GDRIVE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
     throw new Error(
-      "Google Drive isn't set up: add the OAuth Client ID and Secret in Admin → API Keys & Settings → Bank File Drop Box."
+      "Google Drive isn't set up: add the OAuth Client ID and Secret in Admin → Settings → Bank File Drop Box."
     );
   }
   return { clientId: clientId.trim(), clientSecret: clientSecret.trim() };
@@ -112,7 +112,7 @@ export async function isConnected() {
 async function accessToken() {
   if (cachedAccess && cachedAccess.expiresAt > Date.now() + 60_000) return cachedAccess.token;
   const refreshToken = await getSetting("gdrive_refresh_token");
-  if (!refreshToken) throw new Error("Google Drive isn't connected yet — click Connect Google Drive in Admin → API Keys & Settings → Bank File Drop Box.");
+  if (!refreshToken) throw new Error("Google Drive isn't connected yet — click Connect Google Drive in Admin → Settings → Bank File Drop Box.");
   const { clientId, clientSecret } = await clientCreds();
   const res = await fetch(TOKEN_URL, {
     method: "POST",
@@ -128,7 +128,7 @@ async function accessToken() {
   if (!res.ok || !data.access_token) {
     if (data.error === "invalid_grant") {
       throw new Error(
-        "Google Drive access has expired or was revoked — click Connect Google Drive again in Admin → API Keys & Settings. " +
+        "Google Drive access has expired or was revoked — click Connect Google Drive again in Admin → Settings → Bank File Drop Box. " +
           "(If this happens every 7 days, publish the OAuth consent screen to 'In production' in Google Cloud.)"
       );
     }
