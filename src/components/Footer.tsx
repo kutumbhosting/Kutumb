@@ -77,13 +77,37 @@ const Footer = () => {
                   Contact Us
                 </Link>
               </li>
-<Link
-  to="/admin"
-  onClick={() => window.scrollTo(0, 0)}
-  className="text-muted-foreground hover:text-primary transition-colors text-sm"
->
-  Admin
-</Link>
+              <li>
+                <Link
+                  to="/admin"
+                  onClick={() => window.scrollTo(0, 0)}
+                  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                >
+                  Admin
+                </Link>
+              </li>
+              {/* Google Drive drop boxes (kutumbhosting@gmail.com). Access is
+                  controlled by the folders' own Drive sharing, not by the site. */}
+              <li>
+                <a
+                  href="https://drive.google.com/drive/folders/1wo2VFMi_2zZQSeQbJgFBSqBXS5enTCME"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                >
+                  Bank File Drop Box
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://drive.google.com/drive/folders/1xWnGVgBdTIuBFD2Gj8JjT0y0QgMJijJf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                >
+                  Event Media Drop Box
+                </a>
+              </li>
 
             </ul>
           </div>

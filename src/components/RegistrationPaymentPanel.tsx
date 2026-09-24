@@ -26,6 +26,8 @@ export interface RegistrationPaymentPanelData {
   fee: number;
   adults: number;
   children: number;
+  /** e.g. UTS26-R0012 — shown as the bank transfer reference. */
+  registrationNumber?: string;
 }
 
 /** A payment method a link (e.g. one in the registration email) can ask to
@@ -416,9 +418,17 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
             <p><span className="font-medium">BSB:</span> {BANK_DETAILS.bsb}</p>
             <p><span className="font-medium">Account:</span> {BANK_DETAILS.account}</p>
             <p className="pt-1 font-medium">Amount: ${remaining.toFixed(2)}</p>
+            {data.registrationNumber ? (
+              <p className="pt-1">
+                <span className="font-medium">Reference:</span>{" "}
+                <span className="font-mono font-bold text-base tracking-wide">{data.registrationNumber}</span>
+              </p>
+            ) : null}
             <p className="pt-1 text-xs text-orange-900">
-              Use your registration number as the payment reference. Tickets are issued after
-              we've verified your transfer.
+              {data.registrationNumber
+                ? "Enter this reference exactly in the description/reference field of your transfer so we can match your payment automatically. "
+                : "Use your registration number as the payment reference. "}
+              Tickets are issued after we've verified your transfer.
             </p>
           </div>
 

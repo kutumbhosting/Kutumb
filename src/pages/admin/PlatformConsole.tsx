@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { BankFileDropBoxPanel, BankFeedPanel } from "./BankSetupPanels";
 
 type SettingRow = {
   group: string;
@@ -34,7 +35,15 @@ function SettingsTab() {
   const [groqModels, setGroqModels] = useState<string[]>([]);
   const [loadingGroqModels, setLoadingGroqModels] = useState(false);
 
-  const load = () => api("/api/admin-console/settings").then(setSettings).catch(() => {});
+  // Bumped after every save so the bank setup panels re-read their status.
+  const [savedCount, setSavedCount] = useState(0);
+  const load = () =>
+    api("/api/admin-console/settings")
+      .then((rows) => {
+        setSettings(rows);
+        setSavedCount((n) => n + 1);
+      })
+      .catch(() => {});
   useEffect(() => { load(); }, []);
 
   const save = async (key: string) => {
@@ -190,7 +199,7 @@ function SettingsTab() {
                         <Label>{s.label}{s.secret && s.hasValue && " (set — hidden)"}</Label>
                         <Input
                           type={s.secret ? "password" : "text"}
-                          placeholder={s.secret ? "••••••••" : ""}
+                          placeholder={s.secret ? "••••••••" : s.default ? `Default: ${s.default}` : ""}
                           value={edits[s.key] ?? (s.secret ? "" : s.value)}
                           onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
                         />
@@ -200,6 +209,8 @@ function SettingsTab() {
                     </div>
                   );
                 })}
+                {group.startsWith("Bank File Drop Box") && <BankFileDropBoxPanel refreshKey={savedCount} />}
+                {group.startsWith("Live Bank Feed") && <BankFeedPanel refreshKey={savedCount} />}
                 {group === "AI Email Draft" && (
                   <p className="text-xs text-muted-foreground">
                     Save your Groq API key first, then click "Load models" to see which models your

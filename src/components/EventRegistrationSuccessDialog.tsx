@@ -203,6 +203,7 @@ const EventRegistrationSuccessDialog = ({
                 fee: data.fee as number,
                 adults: data.adults,
                 children: data.children,
+                registrationNumber: data.registrationNumber,
               }}
               anchorEl={dialogContentRef.current}
               onPaid={(outcome) => {

@@ -83,6 +83,49 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
     }
   };
 
+  // ── Live bank feed (Basiq / open banking) ───────────────────────────────
+  const [bankFeed, setBankFeed] = useState<any | null>(null);
+  const [syncingBank, setSyncingBank] = useState(false);
+
+  const fetchBankFeedStatus = async () => {
+    const data = await safeFetch("/api/events/reconcile/bank-feed/status");
+    setBankFeed(data || null);
+  };
+  useEffect(() => {
+    fetchBankFeedStatus();
+  }, []);
+
+  const syncFromBank = async () => {
+    if (!selectedEvent) return;
+    setSyncingBank(true);
+    try {
+      const res = await fetch("/api/events/reconcile/bank-feed/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventName: selectedEvent.eventName, eventYear: selectedEvent.eventYear }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Bank sync failed");
+
+      if (data.summary) {
+        setReconcileResult(data);
+        setReconcileResultOpen(true);
+        setLatestReconciliation({
+          reconciliationId: data.reconciliationId,
+          uploadedFilename: data.sourceLabel,
+          summary: data.summary,
+        });
+        onReload();
+      }
+      toast({ title: "Bank sync complete", description: data.message });
+      fetchBankFeedStatus();
+    } catch (err: any) {
+      toast({ title: "Couldn't sync from bank", description: err.message, variant: "destructive" });
+    } finally {
+      setSyncingBank(false);
+    }
+  };
+
   const downloadReconciliationReport = (id: number | string) => {
     window.open(`/api/events/reconcile/${id}/export`, "_blank");
   };
@@ -467,6 +510,17 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                 <Button variant="outline" onClick={triggerBankStatementUpload} disabled={reconciling}>
                   {reconciling ? "Reconciling..." : "🏦 Upload Bank Statement"}
                 </Button>
+                {bankFeed?.connected && (
+                  <Button
+                    variant="outline"
+                    onClick={syncFromBank}
+                    disabled={syncingBank}
+                    title={bankFeed.lastSync ? `Last synced ${new Date(bankFeed.lastSync).toLocaleString("en-AU")}` : "Not synced yet"}
+                  >
+                    {syncingBank ? "Syncing..." : "🔄 Sync from Bank"}
+                  </Button>
+                )}
+
                 {latestReconciliation?.reconciliationId && (
                   <Button
                     variant="outline"
@@ -1130,6 +1184,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 };

@@ -143,6 +143,7 @@ export default function PayRegistration() {
                 fee: registration.fee,
                 adults: registration.adults,
                 children: registration.children,
+                registrationNumber: registration.registrationNumber,
               }}
               anchorEl={cardEl}
               preferredMethod={preferredMethod}
