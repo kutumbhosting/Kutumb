@@ -103,9 +103,15 @@ function classifyTransaction(details) {
 function scoreMatch(reg, txn) {
   const flat = txn.flat;
 
-  const regNo = normalize(reg.registrationNumber);
-  if (regNo && flat.includes(regNo)) {
-    return { score: 100, confidence: "High", reason: `Registration no. ${reg.registrationNumber} in bank reference` };
+  const regNoHit = registrationNumberIn(reg.registrationNumber, txn);
+  if (regNoHit) {
+    // An event-prefixed number is unique across all events, so it outranks
+    // an old plain number (which exists once per event).
+    return {
+      score: regNoHit === "prefixed" ? 110 : 100,
+      confidence: "High",
+      reason: `Registration no. ${reg.registrationNumber} in bank reference`,
+    };
   }
 
   const memNo = reg.membershipNumber ? String(reg.membershipNumber).trim() : "";
@@ -153,6 +159,26 @@ function scoreMatch(reg, txn) {
     }
   }
   return { score: 0, confidence: "", reason: "" };
+}
+
+// Event-prefixed numbers (UTS26-R0012) are unique across events: match them
+// on the normalized text, however the payer spaced or hyphenated them.
+// Old plain numbers (R0012) exist in EVERY event, so they only count when
+// they stand on their own — not as the tail of another event's prefixed
+// number ("UTS26-R0012" must not match another event's plain "R0012").
+function registrationNumberIn(registrationNumber, txn) {
+  const raw = String(registrationNumber || "").trim().toUpperCase();
+  if (!raw) return null;
+  const norm = normalize(raw);
+  if (raw.includes("-")) {
+    return new RegExp(`${norm}(?!\\d)`).test(txn.flat) ? "prefixed" : null;
+  }
+  // Plain R0012: must stand alone — not glued to other letters/digits, and
+  // not following an event code such as "UTS26 " / "IYD26-" (that's another
+  // event's prefixed number, typed with a space or hyphen).
+  const digits = raw.replace(/^R/, "");
+  const re = new RegExp(`(?<![A-Z0-9-])(?<![A-Z]{3}\\d{2}[A-Z]?[\\s\\-_./]{1,3})R[\\s-]?${digits}(?!\\d)`);
+  return re.test(txn.raw) ? "plain" : null;
 }
 
 function titleCase(w) {

@@ -60,6 +60,25 @@ export const SETTINGS_SCHEMA = [
   // guessing an id that might already be renamed or retired.
   { group: "AI Email Draft", key: "groq_api_key", label: "Groq API Key", secret: true },
   { group: "AI Email Draft", key: "groq_model", label: "Groq Model", secret: false },
+  // Bank File Drop Box: a NAB statement file (.csv/.xlsx/.xls/Google Sheet)
+  // dropped in this Drive folder is imported, reconciled against every event
+  // with unpaid registrations, then removed from the folder. Pick-up is done
+  // by a Google Apps Script (copied from this settings page). The OAuth
+  // client below is only for the optional server-side polling.
+  { group: "Bank File Drop Box (Google Drive)", key: "gdrive_folder_id", label: "Drive Folder ID", secret: false, default: "1wo2VFMi_2zZQSeQbJgFBSqBXS5enTCME" },
+  { group: "Bank File Drop Box (Google Drive)", key: "gdrive_after_import", label: "After import: trash (recoverable 30 days) or delete (permanent)", secret: false, default: "trash" },
+  { group: "Bank File Drop Box (Google Drive)", key: "gdrive_client_id", label: "Optional server-side polling — Google OAuth Client ID", secret: false },
+  { group: "Bank File Drop Box (Google Drive)", key: "gdrive_client_secret", label: "Optional server-side polling — Google OAuth Client Secret", secret: true },
+  { group: "Bank File Drop Box (Google Drive)", key: "gdrive_poll_minutes", label: "Optional server-side polling — check every N minutes", secret: false, default: "5" },
+  // Live bank feed for bank-transfer reconciliation (Basiq, CDR open
+  // banking). API key from dashboard.basiq.io. The User ID is filled in
+  // automatically the first time "Connect Bank" is used in Admin →
+  // API Keys & Settings; Account ID is optional (leave blank to read every
+  // account the holder shared, or set it to only read the account whose
+  // BSB/account number is shown to registrants).
+  { group: "Live Bank Feed (Basiq) — optional, paid", key: "basiq_api_key", label: "Basiq API Key", secret: true },
+  { group: "Live Bank Feed (Basiq) — optional, paid", key: "basiq_user_id", label: "Basiq User ID (set automatically on Connect Bank)", secret: false },
+  { group: "Live Bank Feed (Basiq) — optional, paid", key: "basiq_account_id", label: "Basiq Account ID (optional — limit to one account)", secret: false },
 ];
 
 export async function getSetting(key) {

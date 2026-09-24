@@ -202,6 +202,7 @@ export async function sendEventConfirmationEmail({
   const paymentLine = feeOwed
     ? `<p style="font-size:14px;">Registration Fee: <strong>$${fee}</strong> &middot; Payment Status: <strong style="color:#b45309;">Pending</strong></p>
        ${payButton}
+       ${registrationNumber ? `<p style="font-size:14px;">Paying by bank transfer? Put <strong style="font-family:monospace;font-size:15px;">${registrationNumber}</strong> in the reference/description field so we can match your payment automatically.</p>` : ""}
        <p style="font-size:13px;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin:16px 0 0;font-weight:600;">
          Once your payment has been recorded, you'll receive a separate confirmation email —
          and your ticket(s), with a QR code for each person on this registration, will be
@@ -486,6 +487,43 @@ export async function sendBulkEmail({ recipients, subject, message }) {
   }
 
   return results;
+}
+
+/**
+ * Operational alert to the Kutumb admin mailbox (e.g. a bank statement in
+ * the Drive drop box that couldn't be imported). Recipient: ADMIN_ALERT_EMAIL
+ * in .env, else kutumbhosting@gmail.com.
+ */
+export async function sendAdminAlertEmail({ subject, message }) {
+  const to = process.env.ADMIN_ALERT_EMAIL || "kutumbhosting@gmail.com";
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: auto;">
+      <h2 style="color:#7c3f00;">${escapeHtml(subject)}</h2>
+      <p style="font-size:14px;white-space:pre-wrap;">${escapeHtml(message)}</p>
+    </div>`;
+  return send({ to, subject: `[Kutumb website] ${subject}`, html });
+}
+
+/**
+ * Tells the person who dropped a file in the Bank File Drop Box what
+ * happened to it — they may not have admin access to see it otherwise.
+ */
+export async function sendDropBoxResultEmail({ to, fileName, status, message }) {
+  const ok = status === "imported";
+  const subject = ok ? `Bank file imported: ${fileName}` : `Bank file NOT imported: ${fileName}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">${ok ? "Bank file imported" : "Bank file could not be imported"}</h2>
+      <p style="font-size:14px;">File: <strong>${escapeHtml(fileName)}</strong></p>
+      <p style="font-size:14px;white-space:pre-wrap;">${escapeHtml(message)}</p>
+      <p style="font-size:13px;color:#555;">${
+        ok
+          ? "The file has been removed from the drop box folder and a copy is kept on the website."
+          : "The file has been left in the folder. Please export the statement from NAB as CSV and drop that in instead, or contact the Kutumb admin team."
+      }</p>
+    </div>`;
+  return send({ to, subject: `[Kutumb] ${subject}`, html });
 }
 
 function escapeHtml(str) {

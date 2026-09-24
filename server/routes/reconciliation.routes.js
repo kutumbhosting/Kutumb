@@ -14,47 +14,64 @@
 //                                            works after a page reload).
 //   GET  /api/events/reconcile/:id/export  — regenerate and download the
 //                                            Excel report for a saved run.
+//
+//   Live bank feed (Basiq / CDR open banking) — same matching, no file:
+//   GET  /api/events/reconcile/bank-feed/status   — configured? connected? accounts
+//   POST /api/events/reconcile/bank-feed/connect  — consent URL for the account holder
+//   POST /api/events/reconcile/bank-feed/sync     — pull credits for an event and reconcile
+//
+//   Google Drive drop folder — statement files dropped there are imported,
+//   reconciled against all events with unpaid registrations, then removed:
+//   GET  /api/events/reconcile/drive/status       — connection, folder, recent imports
+//   POST /api/events/reconcile/drive/connect      — Google sign-in URL
+//   GET  /api/events/reconcile/drive/callback     — OAuth redirect target
+//   POST /api/events/reconcile/drive/run-now      — check the folder immediately
+//   POST /api/events/reconcile/drive/disconnect
+//   GET  /api/events/reconcile/drive/imports/:id/file — original file of an import
+//   POST /api/events/reconcile/drive/push         — file sent by the Google Apps
+//                                                    Script (key-authenticated, no login)
+//   GET  /api/events/reconcile/drive/apps-script  — the ready-to-paste script
 
 import { Router } from "express";
 import multer from "multer";
 import { pool } from "../db/pool.js";
 import { requireAdmin } from "../lib/auth.js";
 import { parseBankStatement } from "../lib/bankStatementParser.js";
-import { reconcile, groupAllocationsByRegistration } from "../lib/paymentReconciliation.js";
 import { buildReconciliationWorkbook } from "../lib/reconciliationReportBuilder.js";
-import { sendEventPaymentConfirmationEmail } from "../lib/mailer.js";
-import { sendEventTickets } from "../lib/tickets.js";
+import { runReconciliation } from "../lib/reconciliationRun.js";
+import {
+  isConfigured as bankFeedConfigured,
+  getConsentUrl,
+  listAccounts,
+  refreshConnections,
+  fetchCreditTransactions,
+} from "../lib/basiqClient.js";
+import { getSetting, setSetting } from "../lib/settings.js";
+import { getPublicBaseUrl } from "../lib/publicUrl.js";
+import { withStatementIds, storeCredits, markAllocations, reconcileOpenEvents } from "../lib/bankLedger.js";
+import {
+  buildAuthUrl as driveAuthUrl,
+  handleCallback as driveHandleCallback,
+  disconnect as driveDisconnect,
+  isConnected as driveConnected,
+  getFolderId as driveFolderId,
+  getFolderName as driveFolderName,
+  listFolderFiles as driveListFiles,
+  redirectUriFor as driveRedirectUri,
+} from "../lib/googleDrive.js";
+import {
+  pollDriveFolder,
+  getWatcherState,
+  importStatementFile,
+  previousOutcome,
+  noteRun,
+} from "../lib/driveStatementWatcher.js";
+import { getOrCreatePushKey, buildAppsScript } from "../lib/dropBoxScript.js";
+import crypto from "crypto";
+import express from "express";
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
-
-function dbRowToRegistration(r) {
-  return {
-    id: r.id,
-    eventName: r.event_name,
-    eventYear: r.event_year,
-    name: r.name,
-    email: r.email,
-    phone: r.phone,
-    adults: r.adults,
-    children: r.children,
-    comments: r.comments,
-    registrationNumber: r.registration_number,
-    isMember: r.is_member,
-    membershipNumber: r.membership_number,
-    fee: Number(r.fee),
-    perPersonFee: Number(r.per_person_fee),
-    bankTransferred: r.bank_transferred,
-    transactionNumber: r.transaction_number,
-    paymentStatus: r.payment_status,
-    registrationStatus: r.registration_status,
-    paymentAmount: r.payment_amount !== null ? Number(r.payment_amount) : null,
-    paymentDate: r.payment_date,
-    paymentMatchConfidence: r.payment_match_confidence,
-    paymentMatchNote: r.payment_match_note,
-    createdAt: r.created_at,
-  };
-}
 
 /* -----------------------------
    📤 UPLOAD BANK STATEMENT + RECONCILE
@@ -82,151 +99,329 @@ router.post("/", requireAdmin, upload.single("bankStatement"), async (req, res) 
       });
     }
 
-    const { rows: dbRows } = await pool.query(
-      "SELECT * FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2 ORDER BY created_at",
-      [eventName, eventYear]
-    );
-    if (dbRows.length === 0) {
-      return res.status(404).json({ message: "No registrations found for this event" });
-    }
-    const registrations = dbRows.map(dbRowToRegistration);
+    // Keep the uploaded credits in the shared ledger too, so the Drive
+    // folder / bank feed never re-match a credit this upload already used.
+    const credits = withStatementIds(parsed.transactions);
+    await storeCredits(credits, "upload");
 
-    const { allocations, unmatchedCredits } = reconcile(registrations, parsed.transactions);
-    const grouped = groupAllocationsByRegistration(allocations, (reg) => reg.id);
-
-    // ── Apply updates. A bank credit that fully covers the fee is a VERIFIED
-    // payment, so in one statement the registration becomes Paid AND
-    // Confirmed, with its payment method set (previously only payment_status
-    // changed, leaving a row showing "Paid" yet still "Pending Payment", with
-    // no tickets). A credit that covers only part of the fee records the
-    // amount, date and match but leaves the registration Pending — the same
-    // convention card/coupon part-payments use — so a short payment never
-    // confirms a registration or releases tickets by itself; an admin can
-    // still mark it Paid by hand. Never overwrites a manually-entered
-    // transaction number, and re-running the same statement can't double
-    // count (amount/date are only filled when empty).
-    const updatedRows = [];
-    for (const reg of registrations) {
-      const match = grouped.get(reg.id);
-      if (!match) continue;
-
-      const wasPaid = reg.paymentStatus === "Paid";
-      const fee = Number(reg.fee) || 0;
-      const amountRecorded = reg.paymentAmount !== null ? reg.paymentAmount : match.amount;
-      const coversFee = amountRecorded >= fee;
-      const newStatus = wasPaid || coversFee ? "Paid" : reg.paymentStatus;
-
-      const { rows } = await pool.query(
-        `UPDATE kutumb_event_registrations SET
-           payment_status = $1,
-           registration_status = CASE WHEN $1 = 'Paid' THEN 'confirmed' ELSE registration_status END,
-           payment_method = CASE WHEN $1 = 'Paid' THEN COALESCE(payment_method, 'bank_transfer') ELSE payment_method END,
-           payment_amount = COALESCE(payment_amount, $2),
-           payment_date = COALESCE(payment_date, $3),
-           payment_match_confidence = $4,
-           payment_match_note = $5,
-           transaction_number = CASE WHEN transaction_number IS NULL OR transaction_number = ''
-                                      THEN $6 ELSE transaction_number END,
-           bank_transferred = TRUE
-         WHERE id = $7
-         RETURNING *`,
-        [newStatus, match.amount, match.date, match.confidence, match.reason, match.bankReference, reg.id]
-      );
-      const finalRow = dbRowToRegistration(rows[0]);
-      updatedRows.push({
-        email: reg.email,
-        name: reg.name,
-        previousStatus: reg.paymentStatus,
-        newStatus: finalRow.paymentStatus,
-        amount: match.amount,
-        confidence: match.confidence,
-        partial: !wasPaid && !coversFee,
-      });
-
-      // Only when this run is what confirmed it. sendEventTickets has its
-      // own one-time claim, so it's safe even if another path got there first.
-      if (finalRow.registrationStatus === "confirmed" && reg.registrationStatus !== "confirmed") {
-        sendEventPaymentConfirmationEmail({
-          to: finalRow.email,
-          name: finalRow.name,
-          eventName: finalRow.eventName,
-          registrationNumber: finalRow.registrationNumber,
-          fee: finalRow.fee,
-          transactionNumber: finalRow.transactionNumber || "Bank transfer",
-        }).catch((err) => console.error("Reconciliation payment confirmation email error:", err));
-        sendEventTickets(finalRow.id).catch((err) => console.error("Reconciliation ticket email error:", err));
-      }
-    }
-
-    // Re-fetch fresh rows for the report (guarantees we reflect exactly
-    // what's now in the DB, including rows that had no match at all).
-    const { rows: freshDbRows } = await pool.query(
-      "SELECT * FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2 ORDER BY created_at",
-      [eventName, eventYear]
-    );
-    const reportRows = freshDbRows.map(dbRowToRegistration).map((r) => {
-      const match = grouped.get(r.id);
-      return { ...r, bankReference: match ? match.bankReference : "" };
-    });
-
-    const dates = parsed.transactions.map((t) => t.date).filter(Boolean);
-    const dateRange =
-      dates.length > 0
-        ? `${new Date(Math.min(...dates.map((d) => d.getTime()))).toLocaleDateString("en-AU")} – ${new Date(
-            Math.max(...dates.map((d) => d.getTime()))
-          ).toLocaleDateString("en-AU")}`
-        : null;
-
-    const summary = {
-      totalRegistrations: registrations.length,
-      totalTransactionsInFile: parsed.transactions.length,
-      newlyMatched: updatedRows.filter((u) => u.previousStatus !== "Paid" && u.newStatus === "Paid").length,
-      partialPayments: updatedRows.filter((u) => u.partial).length,
-      alreadyPaid: registrations.filter((r) => r.paymentStatus === "Paid").length,
-      stillUnpaid: reportRows.filter((r) => r.paymentStatus !== "Paid").length,
-      amountMatched: reportRows.reduce((s, r) => s + (Number(r.paymentAmount) || 0), 0),
-      unmatchedCreditsCount: unmatchedCredits.length,
-      unmatchedCreditsValue: unmatchedCredits.reduce((s, u) => s + u.transaction.amount, 0),
-      dateRange,
-    };
-
-    const reportPayload = {
+    const { allocations, ...result } = await runReconciliation({
       eventName,
       eventYear,
-      uploadedFilename: req.file.originalname,
-      dateRange,
-      rows: reportRows,
-      unmatchedCredits,
-    };
-
-    const { rows: savedRun } = await pool.query(
-      `INSERT INTO kutumb_bank_reconciliations (event_name, event_year, uploaded_filename, run_by, summary, report)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, run_at`,
-      [
-        eventName,
-        eventYear,
-        req.file.originalname,
-        req.admin?.email || req.admin?.name || null,
-        JSON.stringify(summary),
-        JSON.stringify(reportPayload),
-      ]
-    );
-
-    res.json({
-      message: `Reconciled ${parsed.transactions.length} bank credit(s) against ${registrations.length} registration(s): ${summary.newlyMatched} newly marked Paid${summary.partialPayments ? `, ${summary.partialPayments} part-payment(s) left Pending` : ""}.`,
-      reconciliationId: savedRun[0].id,
-      summary,
-      updated: updatedRows,
-      unmatchedCredits: unmatchedCredits.map((u) => ({
-        date: u.transaction.date,
-        amount: u.transaction.amount,
-        details: u.transaction.raw,
-        classification: u.classification,
-      })),
+      transactions: credits,
+      sourceLabel: req.file.originalname,
+      admin: req.admin,
     });
+    await markAllocations(allocations, eventName, eventYear);
+    res.json(result);
   } catch (err) {
+    if (err.status === 404) return res.status(404).json({ message: err.message });
     console.error("BANK RECONCILIATION ERROR:", err);
     res.status(500).json({ message: "Reconciliation failed" });
+  }
+});
+
+/* -----------------------------
+   🔌 LIVE BANK FEED (Basiq / CDR open banking)
+------------------------------ */
+router.get("/bank-feed/status", requireAdmin, async (req, res) => {
+  try {
+    const configured = await bankFeedConfigured();
+    if (!configured) return res.json({ configured: false, connected: false, accounts: [] });
+    const userId = await getSetting("basiq_user_id");
+    let accounts = [];
+    let error = null;
+    if (userId) {
+      try {
+        accounts = await listAccounts();
+      } catch (err) {
+        error = err.message;
+      }
+    }
+    const { rows } = await pool.query(
+      "SELECT MAX(fetched_at) AS last_sync, COUNT(*)::int AS total, COUNT(*) FILTER (WHERE allocated_registration_id IS NULL)::int AS unallocated FROM kutumb_bank_transactions"
+    );
+    res.json({
+      configured: true,
+      connected: accounts.length > 0,
+      accounts,
+      accountFilter: (await getSetting("basiq_account_id")) || null,
+      lastSync: rows[0].last_sync,
+      storedCredits: rows[0].total,
+      unallocatedCredits: rows[0].unallocated,
+      error,
+    });
+  } catch (err) {
+    console.error("BANK FEED STATUS ERROR:", err);
+    res.status(500).json({ message: "Couldn't read bank feed status" });
+  }
+});
+
+router.post("/bank-feed/connect", requireAdmin, async (req, res) => {
+  try {
+    const email = req.body?.email || req.admin?.email;
+    const url = await getConsentUrl({ email, mobile: req.body?.mobile });
+    res.json({ url });
+  } catch (err) {
+    console.error("BANK FEED CONNECT ERROR:", err);
+    res.status(400).json({ message: err.message || "Couldn't start bank connection" });
+  }
+});
+
+router.post("/bank-feed/sync", requireAdmin, async (req, res) => {
+  try {
+    const { eventName, eventYear, refresh = true } = req.body || {};
+    if (!eventName || !eventYear) return res.status(400).json({ message: "Missing event" });
+
+    // Default window: from the day before this event's first registration
+    // (no one pays before registering) up to today, capped at 12 months.
+    let fromDate = req.body?.fromDate ? new Date(req.body.fromDate) : null;
+    if (!fromDate || Number.isNaN(fromDate.getTime())) {
+      const { rows } = await pool.query(
+        "SELECT MIN(created_at) AS first FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2",
+        [eventName, eventYear]
+      );
+      if (!rows[0].first) return res.status(404).json({ message: "No registrations found for this event" });
+      fromDate = new Date(new Date(rows[0].first).getTime() - 86400000);
+    }
+    const yearAgo = new Date(Date.now() - 365 * 86400000);
+    if (fromDate < yearAgo) fromDate = yearAgo;
+
+    const refreshResult = refresh ? await refreshConnections() : { refreshed: false };
+    const credits = await fetchCreditTransactions({ fromDate });
+
+    // Store every credit once; keep the ledger's allocation untouched.
+    for (const t of credits) {
+      await pool.query(
+        `INSERT INTO kutumb_bank_transactions (id, source, account_id, post_date, amount, description)
+         VALUES ($1, 'basiq', $2, $3, $4, $5)
+         ON CONFLICT (id) DO UPDATE SET post_date = EXCLUDED.post_date, description = EXCLUDED.description`,
+        [t.id, t.accountId, t.date, t.amount, t.details]
+      );
+    }
+
+    // Only credits not already matched to some registration (in any event).
+    const { rows: open } = await pool.query(
+      `SELECT id, post_date, amount, description FROM kutumb_bank_transactions
+        WHERE allocated_registration_id IS NULL AND post_date >= $1
+        ORDER BY post_date`,
+      [fromDate]
+    );
+    const transactions = open.map((r) => ({
+      id: r.id,
+      date: r.post_date ? new Date(r.post_date) : null,
+      amount: Number(r.amount),
+      details: r.description || "",
+    }));
+
+    if (transactions.length === 0) {
+      return res.json({
+        message: `Bank feed synced (${credits.length} credit(s) since ${fromDate.toLocaleDateString("en-AU")}) — no new unmatched credits to reconcile.`,
+        summary: null,
+        updated: [],
+        unmatchedCredits: [],
+        dataRefreshed: refreshResult.refreshed,
+      });
+    }
+
+    const label = `Bank feed ${fromDate.toLocaleDateString("en-AU")} – ${new Date().toLocaleDateString("en-AU")}`;
+    const { allocations, ...result } = await runReconciliation({
+      eventName,
+      eventYear,
+      transactions,
+      sourceLabel: label,
+      admin: req.admin,
+    });
+
+    await markAllocations(allocations, eventName, eventYear);
+
+    res.json({ ...result, dataRefreshed: refreshResult.refreshed, sourceLabel: label });
+  } catch (err) {
+    if (err.status === 404) return res.status(404).json({ message: err.message });
+    console.error("BANK FEED SYNC ERROR:", err);
+    res.status(500).json({ message: err.message || "Bank feed sync failed" });
+  }
+});
+
+/* -----------------------------
+   📂 GOOGLE DRIVE STATEMENT DROP FOLDER
+------------------------------ */
+router.get("/drive/status", requireAdmin, async (req, res) => {
+  try {
+    const baseUrl = await getPublicBaseUrl(req);
+    const hasClient = !!((await getSetting("gdrive_client_id")) && (await getSetting("gdrive_client_secret")));
+    const connected = await driveConnected();
+    const folderId = await driveFolderId();
+    let folderName = null;
+    let filesWaiting = null;
+    let error = null;
+    if (connected) {
+      try {
+        folderName = await driveFolderName(folderId);
+        filesWaiting = (await driveListFiles(folderId)).length;
+      } catch (err) {
+        error = err.message;
+      }
+    }
+    const { rows: imports } = await pool.query(
+      `SELECT id, file_name, status, message, summary, processed_at, uploaded_by, (content IS NOT NULL) AS has_file
+         FROM kutumb_drive_imports ORDER BY processed_at DESC LIMIT 10`
+    );
+    res.json({
+      hasClient,
+      connected,
+      connectedEmail: (await getSetting("gdrive_connected_email")) || null,
+      folderId,
+      folderName,
+      folderUrl: `https://drive.google.com/drive/folders/${folderId}`,
+      filesWaiting,
+      redirectUri: driveRedirectUri(baseUrl),
+      watcher: getWatcherState(),
+      appsScriptLastSeen: (await getSetting("dropbox_script_last_seen")) || null,
+      imports,
+      error,
+    });
+  } catch (err) {
+    console.error("DRIVE STATUS ERROR:", err);
+    res.status(500).json({ message: "Couldn't read Google Drive status" });
+  }
+});
+
+// Open check (no login, no data): lets you confirm in a browser that the
+// address in the Apps Script reaches a website that has the drop box.
+router.get("/drive/ping", (req, res) => {
+  res.json({ ok: true, dropBox: true, message: "Kutumb Bank File Drop Box endpoint is available." });
+});
+
+/* Apps Script push (route A). Auth is the shared key, compared in constant
+   time; the file comes as the raw request body so the app-wide 100 kB JSON
+   limit doesn't apply. */
+router.post(
+  "/drive/push",
+  express.raw({ type: "application/octet-stream", limit: "25mb" }),
+  async (req, res) => {
+    try {
+      const expected = await getOrCreatePushKey();
+      const given = String(req.get("X-Kutumb-Key") || "");
+      const ok =
+        given.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+      if (!ok) return res.status(401).json({ status: "unauthorised", message: "Wrong drop box key" });
+
+      await setSettingSafe("dropbox_script_last_seen", new Date().toISOString());
+
+      const file = {
+        id: String(req.get("X-File-Id") || ""),
+        name: decodeURIComponent(String(req.get("X-File-Name") || "statement")),
+        mimeType: String(req.get("X-File-Mime") || ""),
+        modifiedTime: String(req.get("X-File-Modified") || ""),
+        uploadedBy: String(req.get("X-File-Owner") || "").trim() || null,
+      };
+      if (!file.id || !file.modifiedTime) return res.status(400).json({ status: "error", message: "Missing file id/modified time" });
+
+      const prev = await previousOutcome(file.id, file.modifiedTime);
+      if (prev?.status === "imported") {
+        return res.json({ status: "already-imported", message: prev.message });
+      }
+      if (prev?.status === "error") {
+        return res.json({ status: "error", message: `Failed earlier: ${prev.message}`, retry: false });
+      }
+      if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+        return res.status(400).json({ status: "error", message: "Empty file" });
+      }
+
+      const result = await importStatementFile({
+        file,
+        buffer: req.body,
+        filename: req.get("X-File-Converted-Name") ? decodeURIComponent(req.get("X-File-Converted-Name")) : file.name,
+        via: "apps-script",
+      });
+      noteRun({ message: `${file.name} → ${result.status}: ${result.message}`, error: null, via: "apps-script" });
+      res.json(result);
+    } catch (err) {
+      console.error("DROP BOX PUSH ERROR:", err);
+      res.status(500).json({ status: "error", message: err.message || "Import failed" });
+    }
+  }
+);
+
+async function setSettingSafe(key, value) {
+  await setSetting(key, value, false).catch(() => {});
+}
+
+router.get("/drive/apps-script", requireAdmin, async (req, res) => {
+  try {
+    const script = await buildAppsScript({
+      siteUrl: await getPublicBaseUrl(req),
+      folderId: await driveFolderId(),
+      afterImport: (await getSetting("gdrive_after_import")) === "delete" ? "delete" : "trash",
+    });
+    res.type("text/plain").send(script);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/drive/connect", requireAdmin, async (req, res) => {
+  try {
+    const url = await driveAuthUrl(await getPublicBaseUrl(req));
+    res.json({ url });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.get("/drive/callback", requireAdmin, async (req, res) => {
+  const page = (title, body) =>
+    `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title>
+     <div style="font-family:Arial,sans-serif;max-width:520px;margin:60px auto;padding:0 16px">
+     <h2 style="color:#7c3f00">${title}</h2><p>${body}</p><p><a href="/admin">Back to admin</a></p></div>`;
+  try {
+    if (req.query.error) throw new Error(`Google sign-in was cancelled (${req.query.error}).`);
+    const { email } = await driveHandleCallback({
+      code: String(req.query.code || ""),
+      state: String(req.query.state || ""),
+      baseUrl: await getPublicBaseUrl(req),
+    });
+    // Check straight away so anything already waiting is picked up.
+    pollDriveFolder({ admin: req.admin }).catch((err) => console.error("Drive first poll error:", err.message));
+    res.send(page("Google Drive connected", `Connected as <strong>${email || "your Google account"}</strong>. Statement files dropped in the folder will now be reconciled automatically. You can close this tab.`));
+  } catch (err) {
+    res.status(400).send(page("Couldn't connect Google Drive", String(err.message).replace(/</g, "&lt;")));
+  }
+});
+
+router.post("/drive/run-now", requireAdmin, async (req, res) => {
+  try {
+    const result = await pollDriveFolder({ admin: req.admin });
+    res.json(result);
+  } catch (err) {
+    console.error("DRIVE RUN ERROR:", err);
+    res.status(500).json({ message: err.message || "Drive check failed" });
+  }
+});
+
+router.post("/drive/disconnect", requireAdmin, async (req, res) => {
+  await driveDisconnect();
+  res.json({ message: "Google Drive disconnected" });
+});
+
+router.get("/drive/imports/:id/file", requireAdmin, async (req, res) => {
+  const { rows } = await pool.query("SELECT file_name, mime_type, content FROM kutumb_drive_imports WHERE id = $1", [req.params.id]);
+  if (!rows.length || !rows[0].content) return res.status(404).json({ message: "No stored file for that import" });
+  const name = rows[0].mime_type === "application/vnd.google-apps.spreadsheet" ? `${rows[0].file_name}.xlsx` : rows[0].file_name;
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename="${String(name).replace(/[^\w.\- ]+/g, "_")}"`);
+  res.send(rows[0].content);
+});
+
+// Reconcile every unmatched ledger credit against all open events (the same
+// pass the Drive watcher runs) — handy after new registrations come in.
+router.post("/open-events", requireAdmin, async (req, res) => {
+  try {
+    res.json(await reconcileOpenEvents({ sourceLabel: "Re-run on stored bank credits", admin: req.admin }));
+  } catch (err) {
+    console.error("OPEN EVENTS RECONCILE ERROR:", err);
+    res.status(500).json({ message: err.message || "Reconciliation failed" });
   }
 });
 

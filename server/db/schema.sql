@@ -525,3 +525,51 @@ UPDATE kutumb_event_registrations
  WHERE payment_status = 'Paid'
    AND registration_status = 'pending_payment'
    AND COALESCE(payment_amount, 0) < fee;
+
+-- ============================================================
+-- Live bank feed (Basiq / CDR open banking) — see server/lib/basiqClient.js.
+-- Every credit pulled from the connected account is kept here once (keyed
+-- by the bank-side transaction id), so re-syncing never double-counts, and
+-- a credit already matched to a registration in ONE event is never offered
+-- to another event's reconciliation (important when the same account
+-- receives money for several events, donations and personal transfers).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS kutumb_bank_transactions (
+  id TEXT PRIMARY KEY,                       -- Basiq transaction id
+  source TEXT NOT NULL DEFAULT 'basiq',
+  account_id TEXT,
+  post_date TIMESTAMPTZ,
+  amount NUMERIC(12,2) NOT NULL,
+  description TEXT,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  allocated_registration_id INTEGER REFERENCES kutumb_event_registrations(id) ON DELETE SET NULL,
+  allocated_event_name TEXT,
+  allocated_event_year TEXT,
+  allocated_at TIMESTAMPTZ,
+  match_confidence TEXT,
+  match_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_banktxn_date ON kutumb_bank_transactions(post_date);
+CREATE INDEX IF NOT EXISTS idx_kutumb_banktxn_unallocated ON kutumb_bank_transactions(post_date) WHERE allocated_registration_id IS NULL;
+
+-- One row per file picked up from the Google Drive "bank statement drop"
+-- folder (see server/lib/driveStatementWatcher.js). Keeps a copy of the
+-- original file, since the file itself is removed from Drive afterwards.
+-- (file_id, modified_time) is unique so a file is handled once per version.
+CREATE TABLE IF NOT EXISTS kutumb_drive_imports (
+  id SERIAL PRIMARY KEY,
+  file_id TEXT NOT NULL,
+  file_name TEXT,
+  mime_type TEXT,
+  modified_time TEXT NOT NULL,
+  status TEXT NOT NULL,              -- 'imported' | 'error'
+  message TEXT,
+  summary JSONB,
+  content BYTEA,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (file_id, modified_time)
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_drive_imports_time ON kutumb_drive_imports(processed_at DESC);
+
+-- Who dropped the file (the file's Drive owner), so they get a result email.
+ALTER TABLE kutumb_drive_imports ADD COLUMN IF NOT EXISTS uploaded_by TEXT;

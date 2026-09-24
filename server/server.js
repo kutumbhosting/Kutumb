@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
 import pastEventsRouter from "./routes/pastEventsRoute.js";
 import { getNextMembershipNumber } from "./lib/counters.js";
-import { getNextRegistrationNumber } from "./lib/registrationNumber.js";
+import { getNextRegistrationNumber, resolveEventCode } from "./lib/registrationNumber.js";
 import { generateQrDataUrl, generateQrPngBuffer, buildCardPdf } from "./lib/membershipCard.js";
 import {
   sendMembershipConfirmationEmail,
@@ -45,6 +45,7 @@ import paypalRoutes from "./routes/paypal.routes.js";
 import checkinRoutes from "./routes/checkin.routes.js";
 import mediaRoutes from "./routes/media.routes.js";
 import reconciliationRoutes from "./routes/reconciliation.routes.js";
+import { startDriveWatcher } from "./lib/driveStatementWatcher.js";
 import couponsRoutes from "./routes/coupons.routes.js";
 import registrationExtrasRoutes from "./routes/registrationExtras.routes.js";
 import { syncRegistrationAttendees } from "./lib/attendees.js";
@@ -337,8 +338,12 @@ app.post("/api/events", async (req, res) => {
         matchedMember = memberRows[0] || null;
         const isMember = !!matchedMember?.membership_number;
 
+        // Event-prefixed (e.g. UTS26-R0012) so the number is unique across
+        // all events and safe to use as the bank transfer reference.
+        const eventCode = await resolveEventCode(client, eventName, eventYear);
         const registrationNumber = getNextRegistrationNumber(
-          existingRegs.map((r) => ({ registrationNumber: r.registration_number }))
+          existingRegs.map((r) => ({ registrationNumber: r.registration_number })),
+          eventCode
         );
         perPersonFee = isMember ? memberFee : nonMemberFee;
         childFeeApplied = isMember ? childMemberFee : childNonMemberFee;
@@ -1993,6 +1998,9 @@ const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on", PORT);
+
+  // Bank statement drop folder (Google Drive) — only polls once connected.
+  startDriveWatcher().catch((err) => console.error("Drive watcher failed to start:", err.message));
 
   checkEmailConfig().then((status) => {
     if (!status.configured) {

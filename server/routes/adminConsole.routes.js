@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { buildPoolConfig } from "../db/pool.js";
 import { readEnvFile, setEnvVar } from "../lib/envFile.js";
 import { requireSuperAdmin, hashPassword } from "../lib/auth.js";
+import { startDriveWatcher } from "../lib/driveStatementWatcher.js";
 import { getAllSettingsForAdmin, setSetting, deleteSetting, getSetting, SETTINGS_SCHEMA } from "../lib/settings.js";
 import { normalizeBaseUrl, getPublicBaseUrlWarning } from "../lib/publicUrl.js";
 import { logAudit } from "../lib/audit.js";
@@ -41,8 +42,29 @@ router.put("/settings/:key", async (req, res) => {
     if (error) return res.status(400).json({ message: error });
     toStore = url;
   }
+  if (def.key === "gdrive_after_import") {
+    toStore = String(value).trim().toLowerCase();
+    if (!["trash", "delete"].includes(toStore)) {
+      return res.status(400).json({ message: 'Enter "trash" or "delete"' });
+    }
+  }
+  if (def.key === "gdrive_poll_minutes") {
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < 1 || n > 1440) {
+      return res.status(400).json({ message: "Enter a whole number of minutes between 1 and 1440" });
+    }
+    toStore = String(n);
+  }
+  if (def.key === "gdrive_folder_id") {
+    // Accept a pasted folder link as well as a bare id.
+    const m = String(value).match(/folders\/([A-Za-z0-9_-]+)/);
+    toStore = m ? m[1] : String(value).trim();
+  }
 
   await setSetting(def.key, toStore, def.secret);
+  if (def.key === "gdrive_poll_minutes") {
+    startDriveWatcher().catch((err) => console.error("Drive watcher restart failed:", err.message));
+  }
   await logAudit(req.admin, "settings.update", def.key, { secret: def.secret });
   res.json({ message: "Saved" });
 });

@@ -16,7 +16,10 @@ import ExcelJS from "exceljs";
 
 const DATE_KEYWORDS = ["date"];
 const AMOUNT_KEYWORDS = ["amount", "credit", "deposit"];
-const AMOUNT_EXCLUDE_KEYWORDS = ["balance"];
+// "Debit Amount" / "Withdrawal" columns must never be read as money in —
+// statements with separate Debit and Credit columns used to have the Debit
+// column picked (both contain "amount"), so real credits were ignored.
+const AMOUNT_EXCLUDE_KEYWORDS = ["balance", "debit", "withdraw"];
 const DETAILS_KEYWORDS = ["detail", "description", "narrative", "reference", "particular", "payee", "memo"];
 
 function normalizeHeader(h) {
@@ -209,8 +212,23 @@ export async function parseBankStatement(buffer, originalFilename = "") {
   const lower = originalFilename.toLowerCase();
   let rows;
 
-  if (lower.endsWith(".csv")) {
-    rows = parseCsvText(buffer.toString("utf-8"));
+  const isZip = buffer.length > 4 && buffer[0] === 0x50 && buffer[1] === 0x4b; // .xlsx is a zip
+  const isOldExcel =
+    buffer.length > 8 && buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0;
+
+  if (isOldExcel) {
+    const err = new Error(
+      "This is an old-format Excel file (.xls), which can't be read directly. " +
+        "Open it in Excel and Save As .xlsx or CSV, or export the statement from NAB as CSV."
+    );
+    err.code = "OLD_EXCEL";
+    throw err;
+  }
+
+  if (isZip) {
+    rows = await parseXlsxBuffer(buffer);
+  } else if (lower.endsWith(".csv") || !lower.match(/\.xlsx?$/)) {
+    rows = parseCsvText(buffer.toString("utf-8").replace(/^\uFEFF/, ""));
   } else {
     try {
       rows = await parseXlsxBuffer(buffer);
