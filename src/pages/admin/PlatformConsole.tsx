@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { BankFileDropBoxPanel, BankFeedPanel, RegistrationEmailsPanel } from "./BankSetupPanels";
+import { BankFileDropBoxPanel, BankFeedPanel, RegistrationEmailsPanel, MediaDropBoxPanel } from "./BankSetupPanels";
 
 type SettingRow = {
   group: string;
@@ -27,7 +27,16 @@ async function api(path: string, options: RequestInit = {}) {
   return data;
 }
 
-function SettingsTab() {
+// Groups shown on the "Settings" tab; every other group (and the database
+// connection) stays on the "API Keys" tab.
+const SETTINGS_TAB_GROUPS = [
+  "Payment Methods",
+  "Automatic Registration Emails",
+  "Bank File Drop Box (Google Drive)",
+  "Event Media Drop Box",
+];
+
+function SettingsTab({ mode }: { mode: "keys" | "settings" }) {
   const { toast } = useToast();
   const [settings, setSettings] = useState<SettingRow[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -102,16 +111,22 @@ function SettingsTab() {
     load();
   };
 
-  const groups = Array.from(new Set(settings.map((s) => s.group)));
+  const groups = Array.from(new Set(settings.map((s) => s.group)))
+    .filter((g) => (mode === "settings") === SETTINGS_TAB_GROUPS.includes(g))
+    .sort((a, b) =>
+      mode === "settings" ? SETTINGS_TAB_GROUPS.indexOf(a) - SETTINGS_TAB_GROUPS.indexOf(b) : 0
+    );
 
   return (
     <div className="space-y-8">
       {/* Database connection settings live here, just before Stripe, rather
           than as their own top-level tab. */}
-      <div>
-        <h3 className="font-bold text-lg mb-3">Database</h3>
-        <DatabaseTab />
-      </div>
+      {mode === "keys" && (
+        <div>
+          <h3 className="font-bold text-lg mb-3">Database</h3>
+          <DatabaseTab />
+        </div>
+      )}
 
       {groups.map((group) => {
         const groupSettings = settings.filter((s) => s.group === group);
@@ -226,6 +241,7 @@ function SettingsTab() {
                 })}
                 {group === "Automatic Registration Emails" && <RegistrationEmailsPanel refreshKey={savedCount} />}
                 {group.startsWith("Bank File Drop Box") && <BankFileDropBoxPanel refreshKey={savedCount} />}
+                {group === "Event Media Drop Box" && <MediaDropBoxPanel refreshKey={savedCount} />}
                 {group.startsWith("Live Bank Feed") && <BankFeedPanel refreshKey={savedCount} />}
                 {group === "AI Email Draft" && (
                   <p className="text-xs text-muted-foreground">
@@ -292,7 +308,7 @@ function AdminUsersTab() {
       </div>
       <p className="text-xs text-muted-foreground">
         <strong>Admin (limited access)</strong> can manage Events Settings, Events Management and File
-        Management only — no access to Members, Database Tables, or API Keys &amp; Settings.
+        Management only — no access to Members, Database Tables, API Keys or Settings.
         <strong className="ml-1">Super Admin</strong> has full access to everything in this console.
       </p>
       <div className="overflow-x-auto">
@@ -436,13 +452,15 @@ function DatabaseTab() {
 export default function PlatformConsole({ currentAdminEmail }: { currentAdminEmail?: string }) {
   return (
     <div>
-      <Tabs defaultValue="settings">
+      <Tabs defaultValue="keys">
         <TabsList className="flex flex-wrap h-auto w-full gap-1">
-          <TabsTrigger value="settings">API Keys & Settings</TabsTrigger>
+          <TabsTrigger value="keys">API Keys</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="users">Admin Users</TabsTrigger>
           <TabsTrigger value="audit">Audit Log</TabsTrigger>
         </TabsList>
-        <TabsContent value="settings"><SettingsTab /></TabsContent>
+        <TabsContent value="keys"><SettingsTab mode="keys" /></TabsContent>
+        <TabsContent value="settings"><SettingsTab mode="settings" /></TabsContent>
         <TabsContent value="users"><AdminUsersTab /></TabsContent>
         <TabsContent value="audit"><AuditLogTab /></TabsContent>
       </Tabs>

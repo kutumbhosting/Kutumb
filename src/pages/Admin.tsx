@@ -37,7 +37,7 @@ const Admin = () => {
   const [adminName, setAdminName] = useState("");
   // "superadmin" gets the full console; any other role ("admin") is a
   // limited admin — see the tab filtering below and the requireSuperAdmin
-  // guards on the server for Members, Database Tables, and API Keys & Settings.
+  // guards on the server for Members, Database Tables, API Keys and Settings.
   const [adminRole, setAdminRole] = useState<string>("admin");
   const isSuperAdmin = adminRole === "superadmin";
   const [loginData, setLoginData] = useState({ email: "", password: "" });

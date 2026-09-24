@@ -1,9 +1,48 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { FolderPlus, Copy } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Mail, Phone, MapPin, Facebook, Instagram, Twitter } from "lucide-react";
 import logo from "@/assets/kutumb-logo.png";
 
+const DEFAULT_BANK_FOLDER = "https://drive.google.com/drive/folders/1wo2VFMi_2zZQSeQbJgFBSqBXS5enTCME";
+const DEFAULT_MEDIA_FOLDER = "https://drive.google.com/drive/folders/1xWnGVgBdTIuBFD2Gj8JjT0y0QgMJijJf";
+
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  // Drop box folders come from Admin → Settings (defaults until loaded).
+  const [links, setLinks] = useState<{ bankFolderUrl: string; mediaFolderUrl: string; suggestedFolderNames: string[] }>({
+    bankFolderUrl: DEFAULT_BANK_FOLDER,
+    mediaFolderUrl: DEFAULT_MEDIA_FOLDER,
+    suggestedFolderNames: [],
+  });
+  const [mediaPromptOpen, setMediaPromptOpen] = useState(false);
+  const [copied, setCopied] = useState("");
+
+  useEffect(() => {
+    fetch("/api/drop-box-links")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setLinks((l) => ({ ...l, ...d })))
+      .catch(() => {});
+  }, []);
+
+  const copyName = async (name: string) => {
+    try {
+      await navigator.clipboard.writeText(name);
+      setCopied(name);
+      setTimeout(() => setCopied(""), 1500);
+    } catch {
+      /* clipboard not available — they can type it */
+    }
+  };
 
   return (
     <footer className="bg-gradient-to-b from-muted to-background border-t border-border">
@@ -90,7 +129,7 @@ const Footer = () => {
                   controlled by the folders' own Drive sharing, not by the site. */}
               <li>
                 <a
-                  href="https://drive.google.com/drive/folders/1wo2VFMi_2zZQSeQbJgFBSqBXS5enTCME"
+                  href={links.bankFolderUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-muted-foreground hover:text-primary transition-colors text-sm"
@@ -99,14 +138,14 @@ const Footer = () => {
                 </a>
               </li>
               <li>
-                <a
-                  href="https://drive.google.com/drive/folders/1xWnGVgBdTIuBFD2Gj8JjT0y0QgMJijJf"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                {/* Asks people to use an event-named folder before opening the drop box. */}
+                <button
+                  type="button"
+                  onClick={() => setMediaPromptOpen(true)}
+                  className="text-muted-foreground hover:text-primary transition-colors text-sm text-left"
                 >
                   Event Media Drop Box
-                </a>
+                </button>
               </li>
 
             </ul>
@@ -192,6 +231,58 @@ const Footer = () => {
           </div>
         </div>
       </div>
+          <Dialog open={mediaPromptOpen} onOpenChange={setMediaPromptOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderPlus className="w-5 h-5 text-primary" /> Before you upload
+            </DialogTitle>
+            <DialogDescription>
+              Please keep each event's photos and videos together in a folder named after the event.
+            </DialogDescription>
+          </DialogHeader>
+          <ol className="list-decimal pl-5 space-y-2 text-sm">
+            <li>Open the drop box (button below).</li>
+            <li>
+              If there's already a folder for your event, <strong>open it</strong>. If not, click{" "}
+              <strong>New → New folder</strong> and name it after the event, for example{" "}
+              <em>{links.suggestedFolderNames[0] || "Utsav Multicultural Festival 2026"}</em>.
+            </li>
+            <li>
+              Drop your images and videos <strong>inside that event folder</strong> — please don't leave files loose in
+              the main folder.
+            </li>
+          </ol>
+          {links.suggestedFolderNames.length > 0 && (
+            <div className="text-sm">
+              <p className="font-medium mb-1">Event folder names (tap to copy):</p>
+              <div className="flex flex-wrap gap-2">
+                {links.suggestedFolderNames.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => copyName(name)}
+                    className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs hover:bg-muted"
+                  >
+                    <Copy className="w-3 h-3" /> {copied === name ? "Copied!" : name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            You'll need to sign in with the Google account the folder has been shared with.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setMediaPromptOpen(false)}>Cancel</Button>
+            <Button asChild onClick={() => setMediaPromptOpen(false)}>
+              <a href={links.mediaFolderUrl} target="_blank" rel="noopener noreferrer">
+                OK — open the drop box
+              </a>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </footer>
   );
 };

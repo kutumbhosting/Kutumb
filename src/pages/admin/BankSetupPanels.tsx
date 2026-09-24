@@ -1,4 +1,4 @@
-// Setup panels shown inside Admin → Platform Console → API Keys & Settings,
+// Setup panels shown inside Admin → Platform Console → Settings / API Keys,
 // under their settings groups:
 //   • BankFileDropBoxPanel — Apps Script pick-up, recent files, optional
 //     server-side Google Drive connection
@@ -258,7 +258,7 @@ export function BankFeedPanel({ refreshKey }: { refreshKey?: number }) {
   );
 }
 
-// Admin → API Keys & Settings → Automatic Registration Emails
+// Admin → Settings → Automatic Registration Emails
 export function RegistrationEmailsPanel({ refreshKey }: { refreshKey?: number }) {
   const { toast } = useToast();
   const [status, setStatus] = useState<any | null>(null);
@@ -464,6 +464,39 @@ export function RegistrationEmailsPanel({ refreshKey }: { refreshKey?: number })
             </p>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+// Admin → Settings → Event Media Drop Box
+export function MediaDropBoxPanel({ refreshKey }: { refreshKey?: number }) {
+  const [links, setLinks] = useState<any | null>(null);
+  useEffect(() => {
+    getJson("/api/drop-box-links").then(setLinks).catch(() => setLinks(null));
+  }, [refreshKey]);
+
+  return (
+    <div className="mt-4 rounded-md border p-4 space-y-2 text-sm">
+      <p className="text-muted-foreground">
+        Volunteers and photographers upload event photos and videos here using the{" "}
+        <strong>Event Media Drop Box</strong> link in the website footer. Before the folder opens, they're asked to{" "}
+        <strong>create (or open) a folder named after the event</strong> and put their files inside it — never loose
+        in the main folder — so each event's media stays together.
+      </p>
+      {links?.suggestedFolderNames?.length > 0 && (
+        <p className="text-muted-foreground">
+          Folder names suggested to them: {links.suggestedFolderNames.map((n: string) => `"${n}"`).join(", ")}.
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Access is controlled in Google Drive: right-click the folder → Share → add each person as{" "}
+        <strong>Editor</strong>. Tip: create each event's folder yourself in advance, so people only have to open it.
+      </p>
+      {links?.mediaFolderUrl && (
+        <Button size="sm" variant="outline" asChild>
+          <a href={links.mediaFolderUrl} target="_blank" rel="noopener noreferrer">Open folder</a>
+        </Button>
       )}
     </div>
   );
