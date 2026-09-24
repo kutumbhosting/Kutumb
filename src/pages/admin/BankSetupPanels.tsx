@@ -257,3 +257,214 @@ export function BankFeedPanel({ refreshKey }: { refreshKey?: number }) {
     </div>
   );
 }
+
+// Admin → API Keys & Settings → Automatic Registration Emails
+export function RegistrationEmailsPanel({ refreshKey }: { refreshKey?: number }) {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<any | null>(null);
+  const [preview, setPreview] = useState<any | null>(null);
+  const [busy, setBusy] = useState<"" | "preview" | "run">("");
+  const [events, setEvents] = useState<any[] | null>(null);
+  const [savingEvent, setSavingEvent] = useState<string>("");
+
+  const load = () => {
+    getJson("/api/registration-emails/status").then(setStatus).catch(() => setStatus(null));
+    getJson("/api/registration-emails/events").then(setEvents).catch(() => setEvents([]));
+  };
+
+  const toggleEvent = async (ev: any, field: "autoReminders" | "autoCancel" | "autoWelcome", value: boolean) => {
+    setSavingEvent(`${ev.id}-${field}`);
+    try {
+      const res = await fetch(`/api/registration-emails/events/${ev.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: value }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message || "Couldn't save");
+      setEvents((list) => (list || []).map((e) => (e.id === ev.id ? { ...e, [field]: value } : e)));
+      setPreview(null);
+    } catch (err: any) {
+      toast({ title: "Couldn't save", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingEvent("");
+    }
+  };
+  useEffect(() => {
+    load();
+    setPreview(null);
+  }, [refreshKey]);
+
+  const doPreview = async () => {
+    setBusy("preview");
+    try {
+      setPreview(await getJson("/api/registration-emails/preview"));
+    } catch (err: any) {
+      toast({ title: "Couldn't preview", description: err.message, variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const runNow = async () => {
+    if (!window.confirm("Send the due reminder/welcome emails and cancel overdue unpaid registrations now?")) return;
+    setBusy("run");
+    try {
+      const r = await postJson("/api/registration-emails/run-now");
+      const n = (k: string) => r[k]?.length || 0;
+      toast({
+        title: "Done",
+        description: `${n("reminders")} reminder(s), ${n("finals")} final reminder(s), ${n("cancelled")} cancelled, ${n("welcomes")} welcome email(s)${n("failed") ? `, ${n("failed")} failed to send` : ""}.`,
+      });
+      setPreview(null);
+      load();
+    } catch (err: any) {
+      toast({ title: "Run failed", description: err.message, variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const cfg = status?.config;
+  const section = (title: string, items: any[], extra?: (i: any) => string) =>
+    items?.length ? (
+      <div>
+        <p className="font-medium">{title} ({items.length})</p>
+        <ul className="list-disc pl-5 text-muted-foreground">
+          {items.map((i: any) => (
+            <li key={`${title}-${i.id}`}>
+              {i.event} — {i.registrationNumber || ""} {i.name} ({i.email}){extra ? ` · ${extra(i)}` : ""}
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null;
+
+  return (
+    <div className="mt-4 rounded-md border p-4 space-y-3 text-sm">
+      {cfg && (
+        <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+          {!cfg.remindersOn && <li className="text-orange-700">Payment reminders are switched off above.</li>}
+          {!cfg.cancelOn && <li className="text-orange-700">Auto-cancel is switched off above.</li>}
+          {!cfg.welcomeOn && <li className="text-orange-700">Welcome emails are switched off above.</li>}
+          <li>
+            <strong>Payment reminders</strong> every {cfg.reminderDays.map((d: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]).join(" & ") || "(no days set)"} at {cfg.hour}:00
+            (Sydney) — only to registrations still awaiting payment, paid events only.
+          </li>
+          <li>
+            <strong>Final reminder</strong> {cfg.finalDays} days before the event. For events ticked for auto-cancel it
+            gives the cancellation date, and <strong>unpaid registrations are cancelled</strong> {cfg.cancelDays} days
+            before (spots released, registrant emailed, admin mailbox told).
+          </li>
+          <li>
+            Never auto-cancelled (listed for you instead): part-payments,
+            {cfg.cancelClaimed ? "" : " people who said they paid by bank transfer that isn't matched yet,"} and anyone who
+            registered in the final week.
+          </li>
+          <li>
+            <strong>Welcome email</strong> the day before the event to every confirmed registration (free and paid), with
+            their QR tickets attached again.
+          </li>
+          <li>Events whose date has no specific day (e.g. "November, 2026") are skipped.</li>
+        </ul>
+      )}
+      <div>
+        <p className="font-semibold mb-1">Which events</p>
+        <p className="text-xs text-muted-foreground mb-2">
+          An email goes out only when both the switch above and the event's tick here are on. New events start with
+          reminders and welcome ticked, and auto-cancel unticked.
+        </p>
+        {!events ? (
+          <p className="text-muted-foreground">Loading events…</p>
+        ) : events.length === 0 ? (
+          <p className="text-muted-foreground">No upcoming events.</p>
+        ) : (
+          <div className="overflow-x-auto border rounded-md">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-left">
+                <tr>
+                  <th className="p-2">Event</th>
+                  <th className="p-2">Registrations</th>
+                  <th className="p-2 text-center">Payment reminders</th>
+                  <th className="p-2 text-center">Auto-cancel unpaid</th>
+                  <th className="p-2 text-center">Welcome email</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {events.map((ev) => {
+                  const box = (field: "autoReminders" | "autoCancel" | "autoWelcome", disabled = false) => (
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4"
+                      checked={!!ev[field]}
+                      disabled={disabled || savingEvent === `${ev.id}-${field}`}
+                      onChange={(e) => toggleEvent(ev, field, e.target.checked)}
+                    />
+                  );
+                  return (
+                    <tr key={ev.id}>
+                      <td className="p-2">
+                        <p className="font-medium">{ev.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {ev.dateText || "no date"}
+                          {ev.daysUntil !== null && ` · ${ev.daysUntil === 0 ? "today" : `in ${ev.daysUntil} day(s)`}`}
+                          {!ev.schedulable && " · skipped: needs a specific day"}
+                          {!ev.paidEvent && " · free event"}
+                        </p>
+                      </td>
+                      <td className="p-2 text-xs whitespace-nowrap">
+                        {ev.confirmed} confirmed
+                        {ev.unpaid ? <span className="text-orange-700"> · {ev.unpaid} unpaid</span> : null}
+                        {ev.cancelled ? <span className="text-muted-foreground"> · {ev.cancelled} cancelled</span> : null}
+                      </td>
+                      <td className="p-2 text-center">{box("autoReminders", !ev.paidEvent)}</td>
+                      <td className="p-2 text-center">{box("autoCancel", !ev.paidEvent)}</td>
+                      <td className="p-2 text-center">{box("autoWelcome")}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {status?.lastActivity && (
+        <p className="text-muted-foreground">
+          Last activity {fmt(status.lastActivity.at)}: {status.lastActivity.reminders?.length || 0} reminder(s),{" "}
+          {status.lastActivity.finals?.length || 0} final, {status.lastActivity.cancelled?.length || 0} cancelled,{" "}
+          {status.lastActivity.welcomes?.length || 0} welcome
+          {status.lastActivity.failed?.length ? `, ${status.lastActivity.failed.length} failed to send` : ""}.
+        </p>
+      )}
+
+      <div className="flex gap-2 flex-wrap">
+        <Button size="sm" variant="outline" onClick={doPreview} disabled={!!busy}>
+          {busy === "preview" ? "Checking…" : "Preview what's due now"}
+        </Button>
+        <Button size="sm" onClick={runNow} disabled={!!busy}>
+          {busy === "run" ? "Running…" : "Run now"}
+        </Button>
+      </div>
+
+      {preview && (
+        <div className="rounded-md bg-muted/50 p-3 space-y-2">
+          <p className="font-medium">Due right now (nothing has been sent):</p>
+          {section("Payment reminders", preview.reminders, (i) => `$${i.amountDue.toFixed(2)} due${i.note ? `, ${i.note}` : ""}`)}
+          {section("Final reminders", preview.finals, (i) => `$${i.amountDue.toFixed(2)} due`)}
+          {section("Would be cancelled", preview.cancelled, (i) => `$${i.amountDue.toFixed(2)} unpaid`)}
+          {section("Welcome emails", preview.welcomes)}
+          {section("Needs your review", preview.needsReview, (i) => i.reason)}
+          {!["reminders", "finals", "cancelled", "welcomes", "needsReview"].some((k) => preview[k]?.length) && (
+            <p className="text-muted-foreground">Nothing is due at the moment.</p>
+          )}
+          {preview.skippedEvents?.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Skipped: {preview.skippedEvents.map((s: any) => `${s.title} (${s.reason})`).join("; ")}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

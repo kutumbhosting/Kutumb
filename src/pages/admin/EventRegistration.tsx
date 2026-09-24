@@ -155,22 +155,24 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
   // selecting such an event correctly shows "0 registrations" rather than 1.
   const selectedEventAllRows = selectedEventKey ? groupedEvents[selectedEventKey] || [] : [];
   const selectedEventRealRows = selectedEventAllRows.filter((m: any) => !m.__placeholder);
+  // Cancelled registrations stay listed but don't count towards headcount/fees.
+  const selectedEventActiveRows = selectedEventRealRows.filter((m: any) => m.registrationStatus !== "cancelled");
   const selectedEvent =
     selectedEventKey && selectedEventAllRows.length
       ? {
           members: selectedEventRealRows,
           eventName: selectedEventAllRows[0]?.eventName,
           eventYear: selectedEventAllRows[0]?.eventYear,
-          adults: selectedEventRealRows.reduce(
+          adults: selectedEventActiveRows.reduce(
             (sum: number, m: any) => sum + 1 + Number(m.adults || 0), 0
           ),
-          children: selectedEventRealRows.reduce(
+          children: selectedEventActiveRows.reduce(
             (sum: number, m: any) => sum + Number(m.children || 0), 0
           ),
-          totalPeople: selectedEventRealRows.reduce(
+          totalPeople: selectedEventActiveRows.reduce(
             (sum: number, m: any) => sum + 1 + Number(m.adults || 0) + Number(m.children || 0), 0
           ),
-          totalFees: selectedEventRealRows.reduce(
+          totalFees: selectedEventActiveRows.reduce(
             (sum: number, m: any) => sum + Number(m.fee || 0), 0
           ),
         }

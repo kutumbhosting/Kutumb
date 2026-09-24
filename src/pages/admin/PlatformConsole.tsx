@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { BankFileDropBoxPanel, BankFeedPanel } from "./BankSetupPanels";
+import { BankFileDropBoxPanel, BankFeedPanel, RegistrationEmailsPanel } from "./BankSetupPanels";
 
 type SettingRow = {
   group: string;
@@ -193,6 +193,21 @@ function SettingsTab() {
                     );
                   }
 
+                  if (s.type === "boolean") {
+                    return (
+                      <label key={s.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4"
+                          checked={s.value === "true"}
+                          disabled={savingKey === s.key}
+                          onChange={(e) => togglePaymentMethod(s.key, e.target.checked)}
+                        />
+                        {s.label}
+                      </label>
+                    );
+                  }
+
                   return (
                     <div key={s.key} className="flex items-end gap-3 flex-wrap">
                       <div className="flex-1 min-w-[220px]">
@@ -209,6 +224,7 @@ function SettingsTab() {
                     </div>
                   );
                 })}
+                {group === "Automatic Registration Emails" && <RegistrationEmailsPanel refreshKey={savedCount} />}
                 {group.startsWith("Bank File Drop Box") && <BankFileDropBoxPanel refreshKey={savedCount} />}
                 {group.startsWith("Live Bank Feed") && <BankFeedPanel refreshKey={savedCount} />}
                 {group === "AI Email Draft" && (

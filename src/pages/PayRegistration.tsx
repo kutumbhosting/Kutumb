@@ -17,6 +17,7 @@ interface RegistrationInfo {
   totalFee: number;
   paymentStatus: string;
   registrationStatus: string;
+  cancelledMessage?: string | null;
 }
 
 // Landed on from the "Pay Now" link in the pending-payment registration
@@ -37,7 +38,7 @@ export default function PayRegistration() {
   const preferredMethod = PREFERRED_METHODS.includes(methodParam as PreferredPaymentMethod)
     ? (methodParam as PreferredPaymentMethod)
     : null;
-  const [status, setStatus] = useState<"loading" | "found" | "not-found" | "already-paid">("loading");
+  const [status, setStatus] = useState<"loading" | "found" | "not-found" | "already-paid" | "cancelled">("loading");
   const [registration, setRegistration] = useState<RegistrationInfo | null>(null);
   const [paid, setPaid] = useState(false);
   const [outcome, setOutcome] = useState<PaymentOutcome>("confirmed");
@@ -57,7 +58,13 @@ export default function PayRegistration() {
       })
       .then((data: RegistrationInfo) => {
         setRegistration(data);
-        setStatus(data.registrationStatus === "confirmed" ? "already-paid" : "found");
+        setStatus(
+          data.registrationStatus === "confirmed"
+            ? "already-paid"
+            : data.registrationStatus === "cancelled"
+            ? "cancelled"
+            : "found"
+        );
       })
       .catch(() => setStatus("not-found"));
   }, [token]);
@@ -90,6 +97,21 @@ export default function PayRegistration() {
             </p>
             <Link to="/events" className="text-primary hover:underline text-sm inline-block">
               Back to Events
+            </Link>
+          </div>
+        )}
+
+        {status === "cancelled" && registration && (
+          <div className="text-center space-y-3">
+            <Clock className="w-10 h-10 text-muted-foreground mx-auto" />
+            <h1 className="text-xl font-bold">This registration was cancelled</h1>
+            <p className="text-muted-foreground text-sm">
+              Registration <strong>{registration.registrationNumber}</strong> for{" "}
+              <strong>{registration.eventName}</strong> was cancelled because payment wasn't received in
+              time. If you've already paid, please contact us and we'll sort it out.
+            </p>
+            <Link to="/events" className="text-primary hover:underline text-sm inline-block">
+              Register again
             </Link>
           </div>
         )}
