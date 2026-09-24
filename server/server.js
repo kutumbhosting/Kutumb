@@ -11,6 +11,7 @@ import fileManagerRoutes from "./routes/filemanager.js";
 import pastEventsRouter from "./routes/pastEventsRoute.js";
 import { getNextMembershipNumber } from "./lib/counters.js";
 import { getNextRegistrationNumber, resolveEventCode } from "./lib/registrationNumber.js";
+import { CANCELLED_MESSAGE, startRegistrationScheduler } from "./lib/registrationScheduler.js";
 import { generateQrDataUrl, generateQrPngBuffer, buildCardPdf } from "./lib/membershipCard.js";
 import {
   sendMembershipConfirmationEmail,
@@ -45,6 +46,7 @@ import paypalRoutes from "./routes/paypal.routes.js";
 import checkinRoutes from "./routes/checkin.routes.js";
 import mediaRoutes from "./routes/media.routes.js";
 import reconciliationRoutes from "./routes/reconciliation.routes.js";
+import registrationEmailsRoutes from "./routes/registrationEmails.routes.js";
 import { startDriveWatcher } from "./lib/driveStatementWatcher.js";
 import couponsRoutes from "./routes/coupons.routes.js";
 import registrationExtrasRoutes from "./routes/registrationExtras.routes.js";
@@ -78,6 +80,7 @@ app.use("/api/db-tables", dbTablesRoutes);
 app.use("/api/ticketing", ticketingRoutes);
 app.use("/api/checkin", checkinRoutes);
 app.use("/api/events/reconcile", reconciliationRoutes);
+app.use("/api/registration-emails", registrationEmailsRoutes);
 app.use("/api/coupons", couponsRoutes);
 app.use("/api/events", registrationExtrasRoutes);
 app.use("/api/square", squareRoutes);
@@ -154,7 +157,7 @@ async function archiveExpiredUpcomingEvents() {
       const eventYear = event.date_text ? String(year(event.date_text)) : "unknown";
 
       const { rows: regRows } = await pool.query(
-        "SELECT adults, children FROM kutumb_event_registrations WHERE lower(event_name) = lower($1) AND event_year = $2",
+        "SELECT adults, children FROM kutumb_event_registrations WHERE lower(event_name) = lower($1) AND event_year = $2 AND registration_status <> 'cancelled'",
         [event.title, eventYear]
       );
       const attendeesCount = regRows.reduce((sum, r) => sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0), 0);
@@ -305,7 +308,7 @@ app.post("/api/events", async (req, res) => {
     );
 
     const existsCheck = await client.query(
-      "SELECT id FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2 AND lower(email) = lower($3)",
+      "SELECT id FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2 AND lower(email) = lower($3) AND registration_status <> 'cancelled'",
       [eventName, eventYear, email]
     );
     if (existsCheck.rows.length > 0) {
@@ -322,10 +325,10 @@ app.post("/api/events", async (req, res) => {
       const childNonMemberFee = eventMeta?.child_non_member_fee != null ? Number(eventMeta.child_non_member_fee) : nonMemberFee;
 
       const { rows: existingRegs } = await client.query(
-        "SELECT adults, children, registration_number FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2",
+        "SELECT adults, children, registration_number, registration_status FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2",
         [eventName, eventYear]
       );
-      const used = existingRegs.reduce((sum, r) => sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0), 0);
+      const used = existingRegs.filter((r) => r.registration_status !== "cancelled").reduce((sum, r) => sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0), 0);
       const requested = (Number(adults) || 0) + numChildrenTotal;
 
       if (capacity > 0 && used + requested > capacity) {
@@ -731,6 +734,8 @@ app.get("/api/events/registration/by-token/:token", async (req, res) => {
       totalFee,
       paymentStatus: reg.payment_status,
       registrationStatus: reg.registration_status,
+      cancelled: reg.registration_status === "cancelled",
+      cancelledMessage: reg.registration_status === "cancelled" ? CANCELLED_MESSAGE : null,
     });
   } catch (err) {
     console.error("REGISTRATION BY TOKEN ERROR:", err);
@@ -759,6 +764,9 @@ app.post("/api/events/registration/:id/checkout-card", async (req, res) => {
     const { rows } = await pool.query("SELECT * FROM kutumb_event_registrations WHERE id = $1", [registrationId]);
     const registration = rows[0];
     if (!registration) return res.status(404).json({ message: "Registration not found" });
+    if (registration.registration_status === "cancelled") {
+      return res.status(410).json({ message: CANCELLED_MESSAGE });
+    }
 
     const fee = Number(registration.fee) || 0;
     const alreadyPaid = Number(registration.payment_amount) || 0;
@@ -905,11 +913,14 @@ app.post("/api/events/record-payment", async (req, res) => {
       : await pool.query(
           `SELECT * FROM kutumb_event_registrations
            WHERE event_name = $1 AND event_year = $2 AND lower(email) = lower($3)
-           ORDER BY created_at DESC LIMIT 1`,
+           ORDER BY (registration_status = 'cancelled') ASC, created_at DESC LIMIT 1`,
           [eventName, eventYear, email]
         );
     const existing = found[0];
     if (!existing) return res.status(404).json({ message: "Registration not found" });
+    if (existing.registration_status === "cancelled") {
+      return res.status(410).json({ message: CANCELLED_MESSAGE });
+    }
 
     // Never downgrade or overwrite a registration that's already paid.
     if (existing.payment_status === "Paid" || existing.registration_status === "confirmed") {
@@ -1000,6 +1011,7 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
          fee = COALESCE($6, fee),
          payment_status = COALESCE($7, payment_status),
          payment_method = CASE WHEN $23 THEN $24 ELSE payment_method END,
+         cancelled_at = CASE WHEN $7 = 'Paid' THEN NULL ELSE cancelled_at END,
          registration_status = CASE
            WHEN $7 = 'Paid' THEN 'confirmed'
            WHEN $7 IS NOT NULL AND $7 <> 'Paid' AND registration_status = 'confirmed' AND COALESCE($6, fee) > 0 THEN 'pending_payment'
@@ -1009,7 +1021,13 @@ app.post("/api/events/update", requireAdmin, async (req, res) => {
          bank_transferred = CASE WHEN $8 THEN ($9 <> '') ELSE bank_transferred END,
          payment_amount = CASE WHEN $13 THEN $14 ELSE payment_amount END,
          payment_date = CASE WHEN $15 THEN $16 ELSE payment_date END
-       WHERE event_name = $10 AND event_year = $11 AND lower(email) = lower($12)
+       WHERE id = (
+         -- The active registration for this email; a cancelled one only if
+         -- there's no active one (so an admin can still reinstate it).
+         SELECT id FROM kutumb_event_registrations
+          WHERE event_name = $10 AND event_year = $11 AND lower(email) = lower($12)
+          ORDER BY (registration_status = 'cancelled') ASC, created_at DESC LIMIT 1
+       )
        RETURNING *`,
       [
         updatedData?.name, updatedData?.phone,
@@ -1324,7 +1342,7 @@ app.get("/api/upcoming-events", async (req, res) => {
       events.map(async (event) => {
         const eventYear = event.date_text ? String(year(event.date_text)) : "unknown";
         const { rows: regRows } = await pool.query(
-          "SELECT adults, children FROM kutumb_event_registrations WHERE lower(event_name) = lower($1) AND event_year = $2",
+          "SELECT adults, children FROM kutumb_event_registrations WHERE lower(event_name) = lower($1) AND event_year = $2 AND registration_status <> 'cancelled'",
           [event.title, eventYear]
         );
         const totalRegistered = regRows.reduce((sum, r) => sum + 1 + (Number(r.adults) || 0) + (Number(r.children) || 0), 0);
@@ -2001,6 +2019,8 @@ app.listen(PORT, "0.0.0.0", () => {
 
   // Bank statement drop folder (Google Drive) — only polls once connected.
   startDriveWatcher().catch((err) => console.error("Drive watcher failed to start:", err.message));
+  // Payment reminders, auto-cancellation and day-before welcome emails.
+  startRegistrationScheduler();
 
   checkEmailConfig().then((status) => {
     if (!status.configured) {

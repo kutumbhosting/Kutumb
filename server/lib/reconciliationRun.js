@@ -61,7 +61,12 @@ export async function runReconciliation({ eventName, eventYear, transactions, so
   }
   const registrations = dbRows.map(dbRowToRegistration);
 
-  const { allocations, unmatchedCredits } = reconcile(registrations, transactions);
+  // A cancelled registration never claims a bank credit — a late payment
+  // from a cancelled registrant shows up as unmatched for an admin to handle.
+  const { allocations, unmatchedCredits } = reconcile(
+    registrations.filter((r) => r.registrationStatus !== "cancelled"),
+    transactions
+  );
   const grouped = groupAllocationsByRegistration(allocations, (reg) => reg.id);
 
   // ── Apply updates. A bank credit that fully covers the fee is a VERIFIED

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { CANCELLED_MESSAGE } from "../lib/registrationScheduler.js";
 import crypto from "crypto";
 import { pool } from "../db/pool.js";
 import { squareFetch, getSquareConfig } from "../lib/squareClient.js";
@@ -38,6 +39,7 @@ router.post("/:registrationId/checkout", async (req, res) => {
     const { rows } = await pool.query("SELECT * FROM kutumb_event_registrations WHERE id = $1", [registrationId]);
     const registration = rows[0];
     if (!registration) return res.status(404).json({ message: "Registration not found" });
+    if (registration.registration_status === "cancelled") return res.status(410).json({ message: CANCELLED_MESSAGE });
 
     const remaining = await getRemainingBalance(registration);
     if (remaining <= 0) return res.status(400).json({ message: "This registration has no remaining balance to pay" });

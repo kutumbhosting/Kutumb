@@ -27,7 +27,9 @@ router.post("/apply-coupon", async (req, res) => {
     await client.query("BEGIN");
     const { rows: regRows } = await client.query(
       `SELECT * FROM kutumb_event_registrations
-       WHERE event_name = $1 AND event_year = $2 AND lower(email) = lower($3) FOR UPDATE`,
+       WHERE event_name = $1 AND event_year = $2 AND lower(email) = lower($3)
+         AND registration_status <> 'cancelled'
+       ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
       [eventName, eventYear, email]
     );
     const registration = regRows[0];

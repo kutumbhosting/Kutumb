@@ -79,7 +79,7 @@ export async function reconcileOpenEvents({ sourceLabel, admin }) {
     `SELECT event_name, event_year, MIN(created_at) AS first_reg
        FROM kutumb_event_registrations
       GROUP BY event_name, event_year
-     HAVING bool_or(fee > 0 AND payment_status <> 'Paid')`
+     HAVING bool_or(fee > 0 AND payment_status <> 'Paid' AND registration_status <> 'cancelled')`
   );
   if (events.length === 0) return { events: [], unmatched: [], message: "No events have unpaid registrations." };
 
@@ -102,7 +102,8 @@ export async function reconcileOpenEvents({ sourceLabel, admin }) {
 
   const { rows: regRows } = await pool.query(
     `SELECT r.* FROM kutumb_event_registrations r
-      WHERE (r.event_name, r.event_year) IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
+      WHERE (r.event_name, r.event_year) IN (SELECT * FROM unnest($1::text[], $2::text[]))
+        AND r.registration_status <> 'cancelled'`,
     [events.map((e) => e.event_name), events.map((e) => String(e.event_year))]
   );
   const registrations = regRows.map(dbRowToRegistration);

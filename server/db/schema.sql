@@ -193,7 +193,10 @@ CREATE TABLE IF NOT EXISTS kutumb_event_registrations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_kutumb_evreg_event ON kutumb_event_registrations(event_name, event_year);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_kutumb_evreg_email_per_event ON kutumb_event_registrations(event_name, event_year, lower(email));
+-- (Originally unique on every row; now only among non-cancelled rows so a
+-- cancelled registrant can register again — see the reminders section below.
+-- registration_status is added further down, so the partial index is created there.)
+DROP INDEX IF EXISTS uq_kutumb_evreg_email_per_event;
 
 -- Added for bank-statement payment reconciliation (see
 -- server/lib/paymentReconciliation.js). Populated automatically when an
@@ -573,3 +576,34 @@ CREATE INDEX IF NOT EXISTS idx_kutumb_drive_imports_time ON kutumb_drive_imports
 
 -- Who dropped the file (the file's Drive owner), so they get a result email.
 ALTER TABLE kutumb_drive_imports ADD COLUMN IF NOT EXISTS uploaded_by TEXT;
+
+-- ============================================================
+-- Automatic registration emails (server/lib/registrationScheduler.js):
+-- twice-weekly payment reminders, a final reminder 6 days before the event,
+-- auto-cancellation 5 days before, and a welcome email the day before.
+-- ============================================================
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+
+-- A cancelled registration mustn't stop the same person registering again.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kutumb_evreg_email_per_event_active
+  ON kutumb_event_registrations(event_name, event_year, lower(email))
+  WHERE registration_status <> 'cancelled';
+
+-- One row per automatic email actually sent. period_key makes the
+-- twice-weekly reminder once-per-day (its Sydney date); '' for one-offs.
+CREATE TABLE IF NOT EXISTS kutumb_registration_notifications (
+  id SERIAL PRIMARY KEY,
+  registration_id INTEGER NOT NULL REFERENCES kutumb_event_registrations(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,            -- 'payment_reminder' | 'final_reminder' | 'cancelled' | 'welcome'
+  period_key TEXT NOT NULL DEFAULT '',
+  sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (registration_id, kind, period_key)
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_regnotif_reg ON kutumb_registration_notifications(registration_id, kind);
+
+-- Per-event switches for the automatic registration emails (ticked in
+-- Admin → API Keys & Settings → Automatic Registration Emails).
+ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS auto_reminders BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS auto_cancel BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS auto_welcome BOOLEAN NOT NULL DEFAULT TRUE;

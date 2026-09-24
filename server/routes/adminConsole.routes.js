@@ -55,6 +55,23 @@ router.put("/settings/:key", async (req, res) => {
     }
     toStore = String(n);
   }
+  if (def.key === "reg_reminder_days") {
+    const names = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+    const days = String(value).toLowerCase().split(/[\s,;]+/).filter(Boolean).map((d) => d.slice(0, 3));
+    if (!days.length || days.some((d) => !names.includes(d))) {
+      return res.status(400).json({ message: "Enter days like: mon,thu" });
+    }
+    toStore = [...new Set(days)].join(",");
+  }
+  const ranges = { reg_email_hour: [0, 23], reg_final_days_before: [2, 60], reg_cancel_days_before: [1, 59] };
+  if (ranges[def.key]) {
+    const [min, max] = ranges[def.key];
+    const n = Number(value);
+    if (!Number.isInteger(n) || n < min || n > max) {
+      return res.status(400).json({ message: `Enter a whole number from ${min} to ${max}` });
+    }
+    toStore = String(n);
+  }
   if (def.key === "gdrive_folder_id") {
     // Accept a pasted folder link as well as a bare id.
     const m = String(value).match(/folders\/([A-Za-z0-9_-]+)/);

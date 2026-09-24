@@ -523,11 +523,115 @@ export async function sendDropBoxResultEmail({ to, fileName, status, message }) 
           : "The file has been left in the folder. Please export the statement from NAB as CSV and drop that in instead, or contact the Kutumb admin team."
       }</p>
     </div>`;
-  return send({ to, subject: `[Kutumb] ${subject}`, html });
+  return send({ to, subject: `[Kutumb] ${subject}`, html, attachments: logoAttachment() });
+}
+
+
+// ── Automatic registration emails (registrationScheduler.js) ─────────────
+
+function eventDetailsHtml({ eventName, eventDate, eventTime, location, registrationNumber }) {
+  return `
+      <p style="font-size:16px;margin:4px 0;"><strong>${escapeHtml(eventName)}</strong></p>
+      ${eventDate ? `<p style="font-size:14px;margin:2px 0;">📅 ${escapeHtml(eventDate)}${eventTime ? ` &middot; ${escapeHtml(eventTime)}` : ""}</p>` : ""}
+      ${location ? `<p style="font-size:14px;margin:2px 0;">📍 ${escapeHtml(location)}</p>` : ""}
+      ${registrationNumber ? `<p style="font-size:14px;margin:2px 0;">Registration Number: <strong>${escapeHtml(registrationNumber)}</strong></p>` : ""}`;
+}
+
+function bankDetailsHtml(registrationNumber) {
+  return `
+      <div style="font-size:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin:12px 0;">
+        <p style="font-weight:600;color:#9a3412;margin:0 0 4px;">Pay by bank transfer</p>
+        <p style="margin:2px 0;">Account Name: ${BANK_DETAILS.accountName}</p>
+        <p style="margin:2px 0;">BSB: ${BANK_DETAILS.bsb}</p>
+        <p style="margin:2px 0;">Account: ${BANK_DETAILS.account}</p>
+        ${registrationNumber ? `<p style="margin:6px 0 0;">Reference: <strong style="font-family:monospace;">${escapeHtml(registrationNumber)}</strong></p>` : ""}
+      </div>`;
+}
+
+/**
+ * Payment reminder for a registration still awaiting payment. `final`
+ * switches to the last-chance wording with the cancellation date.
+ */
+export async function sendPaymentReminderEmail({
+  to, name, eventName, eventDate, eventTime, location, registrationNumber,
+  amountDue, payUrl, final = false, cancelOn = null, claimedTransfer = false,
+}) {
+  const heading = final
+    ? cancelOn
+      ? "Final reminder: payment needed to keep your booking"
+      : "Last reminder: your registration payment is still pending"
+    : "Reminder: your registration payment is still pending";
+  const intro = claimedTransfer
+    ? `Hi ${escapeHtml(name)}, you told us you'd paid by bank transfer, but we haven't been able to match it in our bank account yet.
+       Please check the transfer went through with the reference below, or reply to this email with the date and amount so we can find it.`
+    : `Hi ${escapeHtml(name)}, thank you for registering. We haven't received your payment yet.`;
+  const deadline = final && cancelOn
+    ? `<p style="font-size:14px;font-weight:600;color:#b91c1c;">If payment isn't received, your registration will be cancelled on ${escapeHtml(cancelOn)} and the spots released to others.</p>`
+    : "";
+  const payButton = payUrl
+    ? `<p style="text-align:center;margin:20px 0 8px;">
+         <a href="${payUrl}" target="_blank" rel="noopener" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
+           Pay $${Number(amountDue).toFixed(2)} Now
+         </a>
+       </p>`
+    : "";
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">${heading}</h2>
+      <p style="font-size:14px;">${intro}</p>
+      ${eventDetailsHtml({ eventName, eventDate, eventTime, location, registrationNumber })}
+      <p style="font-size:14px;margin-top:12px;">Amount due: <strong>$${Number(amountDue).toFixed(2)}</strong></p>
+      ${deadline}
+      ${payButton}
+      ${bankDetailsHtml(registrationNumber)}
+      <p style="font-size:13px;color:#555;">Already paid in the last day or two? Thank you — please ignore this email; bank transfers can take a little while to show.</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
+    </div>`;
+  const subject = final ? `Final reminder: payment for ${eventName}` : `Payment reminder: ${eventName}`;
+  return send({ to, subject, html, attachments: logoAttachment() });
+}
+
+export async function sendRegistrationCancelledEmail({ to, name, eventName, eventDate, registrationNumber, registerUrl }) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">Registration cancelled</h2>
+      <p style="font-size:14px;">Hi ${escapeHtml(name)}, as we didn't receive payment in time, your registration below has been cancelled and the spots released.</p>
+      ${eventDetailsHtml({ eventName, eventDate, registrationNumber })}
+      <p style="font-size:14px;">If you've paid in the last day or two, or think this is a mistake, please reply to this email and we'll sort it out.</p>
+      ${registerUrl ? `<p style="font-size:14px;">If spots are still available you're welcome to <a href="${registerUrl}">register again</a>.</p>` : ""}
+      <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
+    </div>`;
+  return send({ to, subject: `Registration cancelled - ${eventName}`, html, attachments: logoAttachment() });
+}
+
+export async function sendEventWelcomeEmail({
+  to, name, eventName, eventDate, eventTime, location, registrationNumber, peopleCount, ticketsPdfBuffer, when = "tomorrow",
+}) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">See you ${when}! 🙏</h2>
+      <p style="font-size:14px;">Hi ${escapeHtml(name)}, we're looking forward to welcoming you${peopleCount > 1 ? ` and your group of ${peopleCount}` : ""} to:</p>
+      ${eventDetailsHtml({ eventName, eventDate, eventTime, location, registrationNumber })}
+      <p style="font-size:14px;margin-top:12px;">
+        ${ticketsPdfBuffer
+          ? "Your QR ticket(s) are attached again for convenience — please have them ready on your phone or printed for a quick check-in."
+          : "Please bring your QR ticket(s) from your confirmation email for a quick check-in."}
+      </p>
+      <p style="font-size:14px;">If your plans have changed, please reply to let us know so we can offer your spot to someone else.</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
+    </div>`;
+  const attachments = [
+    ...logoAttachment(),
+    ...(ticketsPdfBuffer ? [{ filename: `kutumb-tickets-${registrationNumber || "event"}.pdf`, content: ticketsPdfBuffer }] : []),
+  ];
+  return send({ to, subject: `See you ${when} - ${eventName}`, html, attachments });
 }
 
 function escapeHtml(str) {
-  return str
+  return String(str ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

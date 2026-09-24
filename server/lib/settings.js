@@ -60,6 +60,18 @@ export const SETTINGS_SCHEMA = [
   // guessing an id that might already be renamed or retired.
   { group: "AI Email Draft", key: "groq_api_key", label: "Groq API Key", secret: true },
   { group: "AI Email Draft", key: "groq_model", label: "Groq Model", secret: false },
+  // Automatic registration emails — see server/lib/registrationScheduler.js.
+  // All times are Sydney time.
+  // Master switches; each event also has its own ticks (see the table in
+  // that settings section), and both must be on for an email to go out.
+  { group: "Automatic Registration Emails", key: "reg_reminders_enabled", label: "Payment reminders (twice weekly + final reminder) — on for ticked events", type: "boolean", default: "true" },
+  { group: "Automatic Registration Emails", key: "reg_autocancel_enabled", label: "Auto-cancel unpaid registrations — on for ticked events", type: "boolean", default: "true" },
+  { group: "Automatic Registration Emails", key: "reg_welcome_enabled", label: "Day-before welcome email — on for ticked events", type: "boolean", default: "true" },
+  { group: "Automatic Registration Emails", key: "reg_reminder_days", label: "Payment reminder days (e.g. mon,thu)", secret: false, default: "mon,thu" },
+  { group: "Automatic Registration Emails", key: "reg_email_hour", label: "Send at hour (0-23, Sydney time)", secret: false, default: "10" },
+  { group: "Automatic Registration Emails", key: "reg_final_days_before", label: "Final reminder — days before event", secret: false, default: "6" },
+  { group: "Automatic Registration Emails", key: "reg_cancel_days_before", label: "Cancel unpaid — days before event", secret: false, default: "5" },
+  { group: "Automatic Registration Emails", key: "reg_cancel_claimed_transfers", label: "Also auto-cancel people who said they paid by bank transfer but it isn't matched yet", type: "boolean", default: "false" },
   // Bank File Drop Box: a NAB statement file (.csv/.xlsx/.xls/Google Sheet)
   // dropped in this Drive folder is imported, reconciled against every event
   // with unpaid registrations, then removed from the folder. Pick-up is done

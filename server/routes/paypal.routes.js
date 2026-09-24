@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { CANCELLED_MESSAGE } from "../lib/registrationScheduler.js";
 import { pool } from "../db/pool.js";
 import { paypalFetch } from "../lib/paypalClient.js";
 import { getSetting } from "../lib/settings.js";
@@ -33,6 +34,10 @@ async function getRegistrationOrFail(registrationId, res) {
   const registration = rows[0];
   if (!registration) {
     res.status(404).json({ message: "Registration not found" });
+    return null;
+  }
+  if (registration.registration_status === "cancelled") {
+    res.status(410).json({ message: CANCELLED_MESSAGE });
     return null;
   }
   return registration;

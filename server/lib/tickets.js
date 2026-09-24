@@ -77,3 +77,31 @@ export async function sendEventTickets(registrationId) {
     console.error(`Failed to send tickets for registration ${registrationId}:`, err);
   }
 }
+
+/**
+ * Builds the QR tickets PDF for a confirmed registration without sending
+ * anything or touching tickets_sent_at — used to re-attach the tickets to
+ * the day-before welcome email (so nobody has to dig out the original).
+ * Returns null if there are no attendees.
+ */
+export async function buildTicketsPdfForRegistration(registration, eventDate = null) {
+  let attendeeRows = await getAttendeesForRegistration(registration.id);
+  if (attendeeRows.length === 0) {
+    await syncRegistrationAttendees(pool, registration);
+    attendeeRows = await getAttendeesForRegistration(registration.id);
+  }
+  if (attendeeRows.length === 0) return null;
+  const attendees = await Promise.all(
+    attendeeRows.map(async (a) => ({
+      name: a.name,
+      category: a.category,
+      qrPngBuffer: await generateQrPngBuffer(a.qr_token),
+    }))
+  );
+  return buildEventTicketsPdf({
+    eventName: registration.event_name,
+    eventDate,
+    registrationNumber: registration.registration_number,
+    attendees,
+  });
+}
