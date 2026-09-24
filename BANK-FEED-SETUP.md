@@ -17,7 +17,7 @@ Uploading a statement still works and is the fallback.
    sandbox, then request production access (Basiq charges per connected
    user in production — check their current pricing).
 2. Copy the application's API key.
-3. Admin → API Keys & Settings → **Live Bank Feed (Basiq)** → paste the API key.
+3. Admin → API Keys → **Live Bank Feed (Basiq)** → paste the API key.
 4. `npm run migrate` (adds the `kutumb_bank_transactions` table).
 5. Same settings section → **Connect Bank**. The account
    holder logs in to NAB in the new tab and shares the account whose BSB and

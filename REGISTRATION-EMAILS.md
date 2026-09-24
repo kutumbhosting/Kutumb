@@ -1,6 +1,6 @@
 # Automatic registration emails
 
-Settings: Admin → API Keys & Settings → **Automatic Registration Emails**.
+Settings: Admin → Settings → **Automatic Registration Emails**.
 
 Two levels of control, both must be on for an email to go out:
 

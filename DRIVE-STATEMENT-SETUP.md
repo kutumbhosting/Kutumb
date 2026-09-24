@@ -60,7 +60,7 @@ keeps working when the website's host puts the server to sleep, and it needs no
 Google Cloud project.
 
 1. `npm run migrate` once, then restart the site.
-2. Admin → Platform Console → **API Keys & Settings** → **Bank File Drop Box
+2. Admin → Platform Console → **Settings** → **Bank File Drop Box
    (Google Drive)**. Check the Drive Folder ID (a pasted folder link is fine), then
    click **Copy script**. The script already contains the website address, folder
    and a private key.
