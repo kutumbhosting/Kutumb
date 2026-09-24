@@ -86,15 +86,18 @@ export const SETTINGS_SCHEMA = [
   // photos/videos, each event in its own sub-folder. Opened from the footer
   // link (after a prompt asking them to create/open the event's folder).
   { group: "Event Media Drop Box", key: "media_dropbox_folder_id", label: "Drive Folder ID (or paste the folder link)", secret: false, default: "1xWnGVgBdTIuBFD2Gj8JjT0y0QgMJijJf" },
-  // Live bank feed for bank-transfer reconciliation (Basiq, CDR open
-  // banking). API key from dashboard.basiq.io. The User ID is filled in
-  // automatically the first time "Connect Bank" is used in Admin →
-  // API Keys; Account ID is optional (leave blank to read every
-  // account the holder shared, or set it to only read the account whose
-  // BSB/account number is shown to registrants).
-  { group: "Live Bank Feed (Basiq) — optional, paid", key: "basiq_api_key", label: "Basiq API Key", secret: true },
-  { group: "Live Bank Feed (Basiq) — optional, paid", key: "basiq_user_id", label: "Basiq User ID (set automatically on Connect Bank)", secret: false },
-  { group: "Live Bank Feed (Basiq) — optional, paid", key: "basiq_account_id", label: "Basiq Account ID (optional — limit to one account)", secret: false },
+  // Live NAB feed via openfeed (Consumer Data Right) — see
+  // server/lib/openfeedClient.js and OPENFEED-SETUP.md. The two IDs come from
+  // registering the app at app.openfeed.au; keys, tokens and the grant are
+  // created and stored automatically (hidden) by the setup panel.
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_client_id", label: "OAuth2 Client ID (app-… from openfeed)", secret: false },
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_app_id", label: "App ID (bare UUID from openfeed)", secret: false },
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_issuer", label: "Issuer", secret: false, default: "https://auth.openfeed.au" },
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_account_name", label: "Bank account name", secret: false, default: "Kutumb Australia Inc" },
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_account_bsb", label: "BSB", secret: false, default: "082-356" },
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_account_number", label: "Account number", secret: false, default: "778280517" },
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_auto_sync", label: "Pull new transactions and reconcile automatically every 4 hours", type: "boolean", default: "true" },
+  { group: "Live Bank Feed (openfeed)", key: "openfeed_sync_days", label: "Days of history to read on each sync", secret: false, default: "60" },
 ];
 
 export async function getSetting(key) {

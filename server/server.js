@@ -47,6 +47,8 @@ import checkinRoutes from "./routes/checkin.routes.js";
 import mediaRoutes from "./routes/media.routes.js";
 import reconciliationRoutes from "./routes/reconciliation.routes.js";
 import registrationEmailsRoutes from "./routes/registrationEmails.routes.js";
+import openfeedRoutes from "./routes/openfeed.routes.js";
+import { startOpenfeedAutoSync } from "./lib/openfeedSync.js";
 import { startDriveWatcher } from "./lib/driveStatementWatcher.js";
 import couponsRoutes from "./routes/coupons.routes.js";
 import registrationExtrasRoutes from "./routes/registrationExtras.routes.js";
@@ -81,6 +83,7 @@ app.use("/api/ticketing", ticketingRoutes);
 app.use("/api/checkin", checkinRoutes);
 app.use("/api/events/reconcile", reconciliationRoutes);
 app.use("/api/registration-emails", registrationEmailsRoutes);
+app.use("/api/openfeed", openfeedRoutes);
 
 // PUBLIC: the two Google Drive drop boxes linked from the site footer, plus
 // suggested event folder names for the media drop box. Folder access itself
@@ -2051,6 +2054,8 @@ app.listen(PORT, "0.0.0.0", () => {
   startDriveWatcher().catch((err) => console.error("Drive watcher failed to start:", err.message));
   // Payment reminders, auto-cancellation and day-before welcome emails.
   startRegistrationScheduler();
+  // Live NAB feed via openfeed — only runs once connected.
+  startOpenfeedAutoSync();
 
   checkEmailConfig().then((status) => {
     if (!status.configured) {

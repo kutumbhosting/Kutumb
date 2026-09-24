@@ -530,7 +530,8 @@ UPDATE kutumb_event_registrations
    AND COALESCE(payment_amount, 0) < fee;
 
 -- ============================================================
--- Live bank feed (Basiq / CDR open banking) — see server/lib/basiqClient.js.
+-- Bank credit ledger — fed by the openfeed live NAB feed (openfeedClient.js),
+-- the Bank File Drop Box and manual statement uploads.
 -- Every credit pulled from the connected account is kept here once (keyed
 -- by the bank-side transaction id), so re-syncing never double-counts, and
 -- a credit already matched to a registration in ONE event is never offered
@@ -538,8 +539,8 @@ UPDATE kutumb_event_registrations
 -- receives money for several events, donations and personal transfers).
 -- ============================================================
 CREATE TABLE IF NOT EXISTS kutumb_bank_transactions (
-  id TEXT PRIMARY KEY,                       -- Basiq transaction id
-  source TEXT NOT NULL DEFAULT 'basiq',
+  id TEXT PRIMARY KEY,                       -- of_<openfeed id> | stmt_<hash>
+  source TEXT NOT NULL DEFAULT 'upload',
   account_id TEXT,
   post_date TIMESTAMPTZ,
   amount NUMERIC(12,2) NOT NULL,

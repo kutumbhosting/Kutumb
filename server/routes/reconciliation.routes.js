@@ -15,10 +15,8 @@
 //   GET  /api/events/reconcile/:id/export  — regenerate and download the
 //                                            Excel report for a saved run.
 //
-//   Live bank feed (Basiq / CDR open banking) — same matching, no file:
-//   GET  /api/events/reconcile/bank-feed/status   — configured? connected? accounts
-//   POST /api/events/reconcile/bank-feed/connect  — consent URL for the account holder
-//   POST /api/events/reconcile/bank-feed/sync     — pull credits for an event and reconcile
+//   Live NAB feed (openfeed / CDR open banking) lives in openfeed.routes.js
+//   (/api/openfeed/*) and feeds the same ledger + matching.
 //
 //   Google Drive drop folder — statement files dropped there are imported,
 //   reconciled against all events with unpaid registrations, then removed:
@@ -39,13 +37,6 @@ import { requireAdmin } from "../lib/auth.js";
 import { parseBankStatement } from "../lib/bankStatementParser.js";
 import { buildReconciliationWorkbook } from "../lib/reconciliationReportBuilder.js";
 import { runReconciliation } from "../lib/reconciliationRun.js";
-import {
-  isConfigured as bankFeedConfigured,
-  getConsentUrl,
-  listAccounts,
-  refreshConnections,
-  fetchCreditTransactions,
-} from "../lib/basiqClient.js";
 import { getSetting, setSetting } from "../lib/settings.js";
 import { getPublicBaseUrl } from "../lib/publicUrl.js";
 import { withStatementIds, storeCredits, markAllocations, reconcileOpenEvents } from "../lib/bankLedger.js";
@@ -117,128 +108,6 @@ router.post("/", requireAdmin, upload.single("bankStatement"), async (req, res) 
     if (err.status === 404) return res.status(404).json({ message: err.message });
     console.error("BANK RECONCILIATION ERROR:", err);
     res.status(500).json({ message: "Reconciliation failed" });
-  }
-});
-
-/* -----------------------------
-   🔌 LIVE BANK FEED (Basiq / CDR open banking)
------------------------------- */
-router.get("/bank-feed/status", requireAdmin, async (req, res) => {
-  try {
-    const configured = await bankFeedConfigured();
-    if (!configured) return res.json({ configured: false, connected: false, accounts: [] });
-    const userId = await getSetting("basiq_user_id");
-    let accounts = [];
-    let error = null;
-    if (userId) {
-      try {
-        accounts = await listAccounts();
-      } catch (err) {
-        error = err.message;
-      }
-    }
-    const { rows } = await pool.query(
-      "SELECT MAX(fetched_at) AS last_sync, COUNT(*)::int AS total, COUNT(*) FILTER (WHERE allocated_registration_id IS NULL)::int AS unallocated FROM kutumb_bank_transactions"
-    );
-    res.json({
-      configured: true,
-      connected: accounts.length > 0,
-      accounts,
-      accountFilter: (await getSetting("basiq_account_id")) || null,
-      lastSync: rows[0].last_sync,
-      storedCredits: rows[0].total,
-      unallocatedCredits: rows[0].unallocated,
-      error,
-    });
-  } catch (err) {
-    console.error("BANK FEED STATUS ERROR:", err);
-    res.status(500).json({ message: "Couldn't read bank feed status" });
-  }
-});
-
-router.post("/bank-feed/connect", requireAdmin, async (req, res) => {
-  try {
-    const email = req.body?.email || req.admin?.email;
-    const url = await getConsentUrl({ email, mobile: req.body?.mobile });
-    res.json({ url });
-  } catch (err) {
-    console.error("BANK FEED CONNECT ERROR:", err);
-    res.status(400).json({ message: err.message || "Couldn't start bank connection" });
-  }
-});
-
-router.post("/bank-feed/sync", requireAdmin, async (req, res) => {
-  try {
-    const { eventName, eventYear, refresh = true } = req.body || {};
-    if (!eventName || !eventYear) return res.status(400).json({ message: "Missing event" });
-
-    // Default window: from the day before this event's first registration
-    // (no one pays before registering) up to today, capped at 12 months.
-    let fromDate = req.body?.fromDate ? new Date(req.body.fromDate) : null;
-    if (!fromDate || Number.isNaN(fromDate.getTime())) {
-      const { rows } = await pool.query(
-        "SELECT MIN(created_at) AS first FROM kutumb_event_registrations WHERE event_name = $1 AND event_year = $2",
-        [eventName, eventYear]
-      );
-      if (!rows[0].first) return res.status(404).json({ message: "No registrations found for this event" });
-      fromDate = new Date(new Date(rows[0].first).getTime() - 86400000);
-    }
-    const yearAgo = new Date(Date.now() - 365 * 86400000);
-    if (fromDate < yearAgo) fromDate = yearAgo;
-
-    const refreshResult = refresh ? await refreshConnections() : { refreshed: false };
-    const credits = await fetchCreditTransactions({ fromDate });
-
-    // Store every credit once; keep the ledger's allocation untouched.
-    for (const t of credits) {
-      await pool.query(
-        `INSERT INTO kutumb_bank_transactions (id, source, account_id, post_date, amount, description)
-         VALUES ($1, 'basiq', $2, $3, $4, $5)
-         ON CONFLICT (id) DO UPDATE SET post_date = EXCLUDED.post_date, description = EXCLUDED.description`,
-        [t.id, t.accountId, t.date, t.amount, t.details]
-      );
-    }
-
-    // Only credits not already matched to some registration (in any event).
-    const { rows: open } = await pool.query(
-      `SELECT id, post_date, amount, description FROM kutumb_bank_transactions
-        WHERE allocated_registration_id IS NULL AND post_date >= $1
-        ORDER BY post_date`,
-      [fromDate]
-    );
-    const transactions = open.map((r) => ({
-      id: r.id,
-      date: r.post_date ? new Date(r.post_date) : null,
-      amount: Number(r.amount),
-      details: r.description || "",
-    }));
-
-    if (transactions.length === 0) {
-      return res.json({
-        message: `Bank feed synced (${credits.length} credit(s) since ${fromDate.toLocaleDateString("en-AU")}) — no new unmatched credits to reconcile.`,
-        summary: null,
-        updated: [],
-        unmatchedCredits: [],
-        dataRefreshed: refreshResult.refreshed,
-      });
-    }
-
-    const label = `Bank feed ${fromDate.toLocaleDateString("en-AU")} – ${new Date().toLocaleDateString("en-AU")}`;
-    const { allocations, ...result } = await runReconciliation({
-      eventName,
-      eventYear,
-      transactions,
-      sourceLabel: label,
-      admin: req.admin,
-    });
-
-    await markAllocations(allocations, eventName, eventYear);
-
-    res.json({ ...result, dataRefreshed: refreshResult.refreshed, sourceLabel: label });
-  } catch (err) {
-    if (err.status === 404) return res.status(404).json({ message: err.message });
-    console.error("BANK FEED SYNC ERROR:", err);
-    res.status(500).json({ message: err.message || "Bank feed sync failed" });
   }
 });
 

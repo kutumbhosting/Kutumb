@@ -3,7 +3,7 @@
 // One reconciliation run for one event, independent of WHERE the bank
 // credits came from. Used by both:
 //   • POST /api/events/reconcile            — uploaded statement file
-//   • POST /api/events/reconcile/bank-feed/sync — live Basiq bank feed
+//   • the ledger (openfeed live NAB feed / Bank File Drop Box) via bankLedger.js
 //
 // Matches credits to registrations (paymentReconciliation.reconcile),
 // flips Pending → Paid/confirmed where a credit covers the fee, emails

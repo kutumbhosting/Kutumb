@@ -1,7 +1,7 @@
 // server/lib/bankLedger.js
 //
 // The bank-credit ledger (kutumb_bank_transactions) shared by every way
-// transactions come in: live Basiq feed, statement files dropped in Google
+// transactions come in: live openfeed NAB feed, statement files dropped in Google
 // Drive, and the manual "Upload Bank Statement" button.
 //
 // Statement rows have no bank-side id, so each gets a deterministic one from
@@ -39,9 +39,37 @@ export function withStatementIds(transactions) {
  * Stores credits (each must have an id). Returns how many were new.
  * @param {Array<{id:string, date:Date|null, amount:number, details:string, accountId?:string}>} txns
  */
+const squash = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/**
+ * The same bank credit can arrive twice through different routes (e.g. the
+ * live openfeed feed AND a statement dropped in the Drive folder) with
+ * different ids. Treat it as the same credit when another source already
+ * holds one with the same amount, a date within 2 days, and matching
+ * description text — so it can never be matched to a second registration.
+ */
+async function existsFromOtherSource(t, source) {
+  const { rows } = await pool.query(
+    `SELECT description FROM kutumb_bank_transactions
+      WHERE source <> $1 AND amount = $2
+        AND ($3::timestamptz IS NULL OR post_date IS NULL OR abs(extract(epoch FROM post_date - $3::timestamptz)) <= 2 * 86400)`,
+    [source, t.amount, t.date]
+  );
+  const mine = squash(t.details);
+  if (!mine) return false;
+  return rows.some((r) => {
+    const other = squash(r.description);
+    if (!other) return false;
+    const a = mine.slice(0, 12);
+    const b = other.slice(0, 12);
+    return other.includes(a) || mine.includes(b);
+  });
+}
+
 export async function storeCredits(txns, source) {
   let inserted = 0;
   for (const t of txns) {
+    if (await existsFromOtherSource(t, source)) continue;
     const { rowCount } = await pool.query(
       `INSERT INTO kutumb_bank_transactions (id, source, account_id, post_date, amount, description)
        VALUES ($1, $2, $3, $4, $5, $6)
