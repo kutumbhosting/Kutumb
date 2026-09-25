@@ -111,6 +111,22 @@ export async function buildBankReportPdf({ summary, lines, filters, generatedBy 
   });
   doc.y = ty + 60;
 
+  // Balance reconciliation (whole account; only when not filtered to an event).
+  const pb = summary.periodBalances;
+  if (pb && !filters.event && !filters.type && !filters.q) {
+    const d = (x) => (x ? x.split("-").reverse().join("/") : "");
+    doc.font("Helvetica").fontSize(9).fillColor(C.text).text(
+      `Opening balance${pb.openingDate ? ` (${d(pb.openingDate)})` : ""} ${money(pb.opening)}  +  money in ${money(t.credits)}  -  money out ${money(t.debits)}  =  closing balance${pb.closingDate ? ` (${d(pb.closingDate)})` : " (today)"} ${money(pb.closing)}`,
+      M, doc.y, { width: W }
+    );
+    doc.font("Helvetica").fontSize(7.5).fillColor(C.muted).text(
+      "Net is the movement within the period only; balances are worked back from the live NAB balance using the transactions provided by openfeed" +
+        (pb.startsBeforeData ? " (opening = balance before the earliest transaction held)" : "") + ". Pending transactions are not included.",
+      M, doc.y + 2, { width: W }
+    );
+    doc.moveDown(0.5);
+  }
+
   /* ── Event money ── */
   const es = summary.eventSummary;
   if (es) {

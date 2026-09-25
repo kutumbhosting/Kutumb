@@ -121,12 +121,43 @@ export async function buildSummary(query) {
   );
 
   const status = await getOpenfeedStatus().catch(() => null);
+  const balance = status?.connected ? await getBalance() : null;
+
+  // Opening/closing balance for the period, worked back from today's live
+  // balance using the stored transactions (whole account — not event-filtered).
+  //   closing(to)   = current balance − everything after `to`
+  //   opening(from) = closing − net movement between from and to
+  let periodBalances = null;
+  if (balance?.currentBalance != null) {
+    const to = /^\d{4}-\d{2}-\d{2}$/.test(query.to || "") ? query.to : null;
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(query.from || "") ? query.from : null;
+    const { rows: b } = await pool.query(
+      `SELECT COALESCE(SUM(amount) FILTER (WHERE $1::date IS NOT NULL AND txn_date > $1::date), 0)::float AS after_to,
+              COALESCE(SUM(amount) FILTER (WHERE ($2::date IS NULL OR txn_date >= $2::date) AND ($1::date IS NULL OR txn_date <= $1::date)), 0)::float AS in_period,
+              to_char(MIN(txn_date), 'YYYY-MM-DD') AS first_day
+         FROM kutumb_bank_statement_lines`,
+      [to, from]
+    );
+    const closing = balance.currentBalance - b[0].after_to;
+    const opening = closing - b[0].in_period;
+    const startsBeforeData = !from || (b[0].first_day && from < b[0].first_day);
+    periodBalances = {
+      opening,
+      closing,
+      openingDate: startsBeforeData ? b[0].first_day : from,
+      closingDate: to && to < new Date().toISOString().slice(0, 10) ? to : null,
+      firstDataDay: b[0].first_day,
+      startsBeforeData,
+    };
+  }
+
   return {
+    periodBalances,
     months,
     totals: { ...totals, net: totals.credits - totals.debits },
     eventSummary,
     categories,
-    balance: status?.connected ? await getBalance() : null,
+    balance,
     account: status?.accountLabel || null,
     lastSync: status?.lastSync || null,
     connected: !!status?.connected,
