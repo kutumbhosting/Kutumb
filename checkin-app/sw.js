@@ -1,6 +1,6 @@
 // Deliberately minimal: caches only the app shell (this page + manifest),
 // never the /api/* calls, since check-in must always hit the live server.
-const CACHE = "kutumb-checkin-shell-v1";
+const CACHE = "kutumb-checkin-shell-v2";
 const SHELL_FILES = ["/checkin-app/", "/checkin-app/index.html", "/checkin-app/manifest.json"];
 
 self.addEventListener("install", (event) => {

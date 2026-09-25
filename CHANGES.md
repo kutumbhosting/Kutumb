@@ -16,6 +16,82 @@ TypeScript compiles clean, Vite build succeeds) is in this zip.
 
 ---
 
+## Admin Console "Manuals" tab
+
+New **Manuals** tab (last tab, visible to every admin) listing both user
+manuals, each with **Read here** (built-in PDF viewer), **Open in new tab**
+and **Download PDF**.
+
+- PDFs are stored in the data folder: `server/data/manuals/`
+  (`Kutumb-Admin-Console-Manual.pdf`,
+  `Kutumb-Membership-and-Event-Booking-Guide.pdf`).
+- Served by the new `server/routes/manuals.routes.js`, admin login required:
+  `GET /api/manuals` (list) and `GET /api/manuals/:id` (inline;
+  `?download=1` to download).
+- On a server whose `DATA_ROOT` is a persistent volume that was seeded
+  before this change, any missing manual is copied in at startup. Existing
+  files are never overwritten, so a manual replaced by an admin stays.
+- To update a manual, upload the new PDF with the same file name to the
+  `manuals` folder in Data Management → File Management. Any other PDF put
+  there is listed too. The `manuals` folder can't be deleted there.
+
+Files: `server/routes/manuals.routes.js` (new), `server/server.js`,
+`server/routes/filemanager.js`, `src/pages/admin/Manuals.tsx` (new),
+`src/pages/Admin.tsx`, `server/data/manuals/*.pdf` (new), rebuilt `dist/`.
+
+---
+
+## September 2026 update — password toggle, coupon part-payments, check-in link, coupon emails
+
+No database migration is needed (no new columns or tables). Restart the
+server after deploying; run `npm run build` if you rebuild the frontend.
+
+**1. Show/hide password.** New `src/components/ui/password-input.tsx`
+(eye-icon toggle), used for the Admin login, Platform Console (admin-user
+password, secret API keys, DB connection string), the `/checkin` page and
+the `/checkin-app` phone app (service-worker cache bumped to v2 so phones
+pick up the new page).
+
+**2. Coupon part-payments.**
+- Payment panel shows Amount due / Paid by coupon / Balance to pay.
+- *Thank-you + balance-due email* (`sendCouponPartPaymentEmail`): sent once
+  if the balance is still unpaid N minutes (default 30) after the coupon was
+  applied — i.e. the registrant left the payment window. Runs every 10 min
+  (`runCouponPartPaymentEmails` in `registrationScheduler.js`). Settings:
+  `reg_coupon_partial_email_enabled`, `reg_coupon_partial_email_delay_min`.
+- Registrations part-paid **only** by coupon now get the normal reminders,
+  final reminder and auto-cancel. The final reminder warns the coupon payment
+  will lapse; the cancellation email confirms it lapsed. Registrations with
+  any real (card/bank/PayPal/Square) money are still never auto-cancelled —
+  they're flagged for admin review as before.
+- **Bug fix:** coupon + bank transfer for the balance now reconciles. The
+  matcher accepts a credit equal to the balance (not just the full fee), and
+  the balance is added to the coupon amount so the registration becomes
+  Paid/confirmed (tickets sent). Re-running a statement never double-counts.
+
+**3. Footer:** "Check-in" link under "Events" in Quick Links (→ `/checkin`).
+
+**4. Check-in login** pre-fills `info@kutumb.org.au` (both check-in pages).
+The password is never pre-filled.
+
+**6. Coupon emails.** Creating coupons with a Recipient Email emails the
+code(s), value, event, validity, notes and QR code (one email per batch).
+New `POST /api/coupons/admin/:id/email` + "✉️ Email" button to resend.
+Setting: `coupon_issue_email_enabled`.
+
+Files changed: `checkin-app/index.html`, `checkin-app/sw.js`,
+`server/db/schema.sql` (comment only), `server/lib/mailer.js`,
+`server/lib/paymentReconciliation.js`, `server/lib/reconciliationRun.js`,
+`server/lib/registrationScheduler.js`, `server/lib/settings.js`,
+`server/routes/coupons.routes.js`, `src/components/Footer.tsx`,
+`src/components/RegistrationPaymentPanel.tsx`,
+`src/components/ui/password-input.tsx` (new), `src/pages/Admin.tsx`,
+`src/pages/admin/BankSetupPanels.tsx` (help text),
+`src/pages/CheckInStaff.tsx`, `src/pages/admin/Coupons.tsx`,
+`src/pages/admin/PlatformConsole.tsx`, plus a rebuilt `dist/`.
+
+---
+
 ## Fix: "Pay Now" email link opened api.stripe.com; email now lists every payment method
 
 **Bug.** The pending-payment registration email builds its link as
