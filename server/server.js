@@ -2023,6 +2023,11 @@ app.post("/api/pastevents/delete-media", requireAdmin, async (req, res) => {
 ------------------------------ */
 app.use("/api", fileManagerRoutes);
 
+// 📱 Lightweight standalone check-in app — plain HTML/JS, no React bundle,
+// so it opens instantly and can be "Added to Home Screen" as its own app.
+// Registered before the SPA static/fallback below so those don't intercept it.
+app.use("/checkin-app", express.static(path.join(__dirname, "../checkin-app")));
+
 app.use(express.static(path.join(__dirname, "../dist")));
 
 // -----------------------------
