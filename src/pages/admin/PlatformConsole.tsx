@@ -31,6 +31,7 @@ async function api(path: string, options: RequestInit = {}) {
 // connection) stays on the "API Keys" tab.
 const SETTINGS_TAB_GROUPS = [
   "Payment Methods",
+  "Payment Reconciliation",
   "Automatic Registration Emails",
   "Bank File Drop Box (Google Drive)",
   "Event Media Drop Box",

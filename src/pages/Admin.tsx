@@ -18,6 +18,7 @@ import TicketingManager from "./admin/TicketingManager";
 import CheckIn from "./admin/CheckIn";
 import Coupons from "./admin/Coupons";
 import PlatformConsole from "./admin/PlatformConsole";
+import BankDashboard from "./admin/BankDashboard";
 
 // ─── Shared utilities ────────────────────────────────────────────────────────
 import { safeFetch } from "./admin/safeFetch";
@@ -242,6 +243,7 @@ const Admin = () => {
               >
                 <TabsList className="flex flex-wrap h-auto w-full max-w-4xl mx-auto gap-3 mb-12">
                   {isSuperAdmin && <TabsTrigger value="members">Members</TabsTrigger>}
+                  {isSuperAdmin && <TabsTrigger value="bank">Bank</TabsTrigger>}
                   <TabsTrigger value="events-settings">Events Settings</TabsTrigger>
                   <TabsTrigger value="events-management">Events Management</TabsTrigger>
                   <TabsTrigger value="data-management">Data Management</TabsTrigger>
@@ -255,6 +257,13 @@ const Admin = () => {
                       memberData={memberData}
                       onReload={() => fetchData(isSuperAdmin)}
                     />
+                  </TabsContent>
+                )}
+
+                {/* ── Bank dashboard (Super Admin only) ── */}
+                {isSuperAdmin && (
+                  <TabsContent value="bank">
+                    <BankDashboard />
                   </TabsContent>
                 )}
 

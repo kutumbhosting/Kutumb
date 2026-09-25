@@ -239,8 +239,18 @@ export function OpenfeedPanel({ refreshKey }: { refreshKey?: number }) {
   };
   const connect = () =>
     act("connect", async () => {
-      const { url } = await postJson("/api/openfeed/connect");
-      window.open(url, "_blank", "noopener");
+      // Open the tab straight away (inside the click) so pop-up blockers don't
+      // hold it back — openfeed's sign-in link is only valid for about 60 seconds.
+      const tab = window.open("about:blank", "_blank");
+      let url: string;
+      try {
+        ({ url } = await postJson("/api/openfeed/connect"));
+      } catch (err) {
+        tab?.close();
+        throw err;
+      }
+      if (tab) tab.location.href = url;
+      else window.location.href = url;
       toast({ title: "Finish in the new tab", description: "Sign in to openfeed and share the Kutumb NAB account, then click Refresh here." });
     });
   const sync = () =>
