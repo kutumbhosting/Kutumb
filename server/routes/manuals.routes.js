@@ -61,6 +61,11 @@ export function ensureBundledManuals() {
   }
 }
 
+// Manuals anyone may read WITHOUT logging in (linked as "User Manual" in the
+// website footer). The admin manual is deliberately NOT here.
+export const PUBLIC_MANUAL_IDS = ["membership-booking"];
+export const PUBLIC_MANUAL_PATH = "/user-manual";
+
 const isPdf = (name) => /\.pdf$/i.test(name);
 const slug = (name) => name.replace(/\.pdf$/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -77,7 +82,13 @@ function listManuals() {
   }
   return out.map((m) => {
     const st = fs.statSync(path.join(MANUALS_DIR, m.file));
-    return { ...m, sizeBytes: st.size, updatedAt: st.mtime.toISOString(), url: `/api/manuals/${m.id}` };
+    return {
+      ...m,
+      sizeBytes: st.size,
+      updatedAt: st.mtime.toISOString(),
+      url: `/api/manuals/${m.id}`,
+      publicUrl: PUBLIC_MANUAL_IDS.includes(m.id) ? PUBLIC_MANUAL_PATH : null,
+    };
   });
 }
 
@@ -91,14 +102,10 @@ router.get("/", requireAdmin, (req, res) => {
   }
 });
 
-// GET /api/manuals/:id            → opens in the browser (inline)
-// GET /api/manuals/:id?download=1 → downloads the PDF
-router.get("/:id", requireAdmin, (req, res) => {
-  const manual = listManuals().find((m) => m.id === req.params.id);
-  if (!manual) return res.status(404).json({ message: "Manual not found" });
+function sendManual(res, manual, download) {
   const full = path.resolve(MANUALS_DIR, manual.file);
   if (!full.startsWith(path.resolve(MANUALS_DIR) + path.sep)) return res.status(400).json({ message: "Bad path" });
-  const disposition = req.query.download ? "attachment" : "inline";
+  const disposition = download ? "attachment" : "inline";
   res.set({
     "Content-Type": "application/pdf",
     "Content-Disposition": `${disposition}; filename="${manual.file.replace(/"/g, "")}"`,
@@ -106,6 +113,30 @@ router.get("/:id", requireAdmin, (req, res) => {
     "X-Content-Type-Options": "nosniff",
   });
   res.sendFile(full);
+}
+
+// GET /api/manuals/:id            → opens in the browser (inline)
+// GET /api/manuals/:id?download=1 → downloads the PDF
+router.get("/:id", requireAdmin, (req, res) => {
+  const manual = listManuals().find((m) => m.id === req.params.id);
+  if (!manual) return res.status(404).json({ message: "Manual not found" });
+  sendManual(res, manual, !!req.query.download);
 });
+
+/**
+ * PUBLIC (no login): the Membership & Event Booking Guide, served at
+ * /user-manual (mounted in server.js). Only ids in PUBLIC_MANUAL_IDS can
+ * ever be reached this way. ?download=1 downloads instead of opening.
+ */
+export function servePublicManual(req, res) {
+  try {
+    const manual = listManuals().find((m) => PUBLIC_MANUAL_IDS.includes(m.id));
+    if (!manual) return res.status(404).send("The user manual isn't available right now. Please try again later.");
+    sendManual(res, manual, !!req.query.download);
+  } catch (err) {
+    console.error("PUBLIC MANUAL ERROR:", err);
+    res.status(500).send("Could not open the user manual");
+  }
+}
 
 export default router;

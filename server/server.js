@@ -8,7 +8,7 @@ import cors from "cors";
 import multer from "multer";
 import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
-import manualsRoutes, { ensureBundledManuals } from "./routes/manuals.routes.js";
+import manualsRoutes, { ensureBundledManuals, servePublicManual, PUBLIC_MANUAL_PATH } from "./routes/manuals.routes.js";
 import pastEventsRouter from "./routes/pastEventsRoute.js";
 import { getNextMembershipNumber } from "./lib/counters.js";
 import { getNextRegistrationNumber, resolveEventCode } from "./lib/registrationNumber.js";
@@ -119,6 +119,9 @@ app.get("/api/drop-box-links", async (req, res) => {
 });
 app.use("/api/coupons", couponsRoutes);
 app.use("/api/manuals", manualsRoutes);
+// Public "User Manual" (Membership & Event Booking Guide) — no login; linked
+// from the website footer. Registered before the static/SPA fallback.
+app.get(PUBLIC_MANUAL_PATH, servePublicManual);
 app.use("/api/events", registrationExtrasRoutes);
 app.use("/api/square", squareRoutes);
 app.use("/api/paypal", paypalRoutes);
@@ -911,17 +914,40 @@ app.post("/api/events/registration/:id/send-payment-reminder", async (req, res) 
       "SELECT date_text FROM kutumb_upcoming_events WHERE lower(title) = lower($1)",
       [registration.event_name]
     );
+    // Anything already paid (e.g. a coupon applied before leaving the
+    // payment window) is shown, and the email asks only for the balance.
+    const totalFee = Number(registration.fee) || 0;
+    const amountPaid = Number(registration.payment_amount) || 0;
+    const couponAmount = Number(registration.coupon_amount) || 0;
+    const couponOnlyPartial =
+      amountPaid > 0 && amountPaid < totalFee && couponAmount > 0 && amountPaid <= couponAmount + 0.001;
     sendEventConfirmationEmail({
       to: registration.email,
       name: registration.name,
       eventName: registration.event_name,
       eventDate: eventRows[0]?.date_text || null,
       registrationNumber: registration.registration_number,
-      fee: Number(registration.fee),
+      fee: totalFee,
+      amountPaid,
+      couponAmount,
+      couponCode: registration.coupon_code,
       membershipNumber: registration.membership_number,
       payToken: registration.pay_token,
       baseUrl,
-    }).catch((err) => console.error("Payment reminder email error:", err));
+    })
+      .then(async (result) => {
+        // This email already thanks them for the coupon part payment and
+        // asks for the balance, so the scheduler's separate ~30-minute
+        // "Thank you for your part payment" email would be a duplicate.
+        if (result?.sent && couponOnlyPartial) {
+          await pool.query(
+            `INSERT INTO kutumb_registration_notifications (registration_id, kind, period_key, sent_at)
+             VALUES ($1, 'coupon_part_payment', '', now()) ON CONFLICT DO NOTHING`,
+            [registration.id]
+          );
+        }
+      })
+      .catch((err) => console.error("Payment reminder email error:", err));
 
     res.json({ sent: true });
   } catch (err) {

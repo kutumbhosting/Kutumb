@@ -370,7 +370,11 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
         // (coupon lapses) — instead of being parked for admin review.
         const couponOnlyPartial = partial && couponPaid > 0 && paid <= couponPaid + 0.001 && !r.payment_match_confidence;
         const claimed = !!r.bank_transferred && !r.payment_match_confidence && (paid === 0 || couponOnlyPartial);
-        const couponInfo = couponOnlyPartial ? { couponAmount: couponPaid, totalFee: fee } : {};
+        // Any part payment: the reminder shows fee / paid / balance.
+        const couponPart = Math.min(couponPaid, paid);
+        const couponInfo = partial
+          ? { couponAmount: couponPart, otherPaid: Math.round((paid - couponPart) * 100) / 100, totalFee: fee }
+          : {};
         const payUrl = baseUrl && r.pay_token ? `${baseUrl}/pay/${r.pay_token}` : null;
         const common = {
           to: r.email,

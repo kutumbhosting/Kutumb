@@ -164,7 +164,17 @@ export async function sendEventConfirmationEmail({
   baseUrl, // optional - required (together with payToken) for the "Pay Now" link to appear
   flyerBuffer, // optional - the event's flyer image, attached as a keepsake
   flyerFilename, // optional - original filename, used to infer extension/content type
+  // Part payments already received (e.g. a coupon applied before leaving the
+  // payment window). When > 0 the email shows Registration fee / Payment
+  // received / Balance to pay, and the Pay button is for the balance only.
+  amountPaid = 0,
+  couponAmount = 0, // the part of amountPaid that came from coupon(s)
+  couponCode = null,
 }) {
+  const money = (n) => {
+    const v = Math.round(Number(n) * 100) / 100;
+    return Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`;
+  };
   const membershipLine = membershipNumber
     ? `<p style="font-size:14px;">Your Kutumb Membership Number: <strong>${membershipNumber}</strong></p>`
     : "";
@@ -174,6 +184,11 @@ export async function sendEventConfirmationEmail({
     : "";
 
   const feeOwed = typeof fee === "number" && fee > 0;
+  const paidSoFar = feeOwed ? Math.min(Math.max(Number(amountPaid) || 0, 0), fee) : 0;
+  const balance = feeOwed ? Math.round((fee - paidSoFar) * 100) / 100 : 0;
+  const partlyPaid = feeOwed && paidSoFar > 0 && balance > 0;
+  const couponPart = partlyPaid ? Math.min(Math.max(Number(couponAmount) || 0, 0), paidSoFar) : 0;
+  const otherPart = Math.round((paidSoFar - couponPart) * 100) / 100;
   // Only ever build this link when there's actually a fee owed AND we have
   // both a token and a base URL to build it from — payToken is only set on
   // registrations created after the pay_token column existed, so an older
@@ -186,7 +201,7 @@ export async function sendEventConfirmationEmail({
   const payButton = payUrl
     ? `<p style="text-align:center;margin:20px 0 4px;">
          <a href="${payUrl}" target="_blank" rel="noopener" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
-           Pay $${fee} Now
+           Pay ${money(partlyPaid ? balance : fee)} Now
          </a>
        </p>
        <p style="font-size:12px;color:#888;text-align:center;">
@@ -199,10 +214,30 @@ export async function sendEventConfirmationEmail({
   // actually confirmed (see sendEventTickets) — never before payment for a
   // paid event, so set that expectation here rather than leaving it a
   // surprise, or worse, implying a ticket exists already.
+  const row = (label, value, strong = false) =>
+    `<tr><td style="padding:4px 0;">${label}</td><td style="padding:4px 0;text-align:right;white-space:nowrap;">${strong ? `<strong>${value}</strong>` : value}</td></tr>`;
+  const partPaymentBlock = partlyPaid
+    ? `<p style="font-size:14px;">Thank you for your part payment. Please pay the remaining balance to confirm your booking.</p>
+       <table style="width:100%;font-size:14px;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;margin:8px 0 12px;padding:4px 0;">
+         ${row("Registration fee", money(fee))}
+         ${couponPart > 0 ? row(`Paid by coupon${couponCode ? ` <span style="font-family:monospace;">${escapeHtml(couponCode)}</span>` : ""}`, `&minus; ${money(couponPart)}`) : ""}
+         ${otherPart > 0 ? row(couponPart > 0 ? "Other payment received" : "Payment received", `&minus; ${money(otherPart)}`) : ""}
+         ${row("Balance to pay", `<span style="color:#b45309;">${money(balance)}</span>`, true)}
+       </table>
+       <p style="font-size:14px;">Payment Status: <strong style="color:#b45309;">Part paid &mdash; balance pending</strong></p>`
+    : "";
+  const bankLine = registrationNumber
+    ? `<p style="font-size:14px;">Paying by bank transfer? ${partlyPaid ? `Transfer the balance of <strong>${money(balance)}</strong> and put` : "Put"} <strong style="font-family:monospace;font-size:15px;">${registrationNumber}</strong> in the reference/description field so we can match your payment automatically.</p>`
+    : "";
+  const couponLapseNote = partlyPaid && couponPart > 0 && otherPart <= 0
+    ? `<p style="font-size:13px;color:#555;">Please pay the balance before the payment deadline &mdash; unpaid registrations may be cancelled before the event, and the coupon payment would then lapse.</p>`
+    : "";
+
   const paymentLine = feeOwed
-    ? `<p style="font-size:14px;">Registration Fee: <strong>$${fee}</strong> &middot; Payment Status: <strong style="color:#b45309;">Pending</strong></p>
+    ? `${partlyPaid ? partPaymentBlock : `<p style="font-size:14px;">Registration Fee: <strong>${money(fee)}</strong> &middot; Payment Status: <strong style="color:#b45309;">Pending</strong></p>`}
        ${payButton}
-       ${registrationNumber ? `<p style="font-size:14px;">Paying by bank transfer? Put <strong style="font-family:monospace;font-size:15px;">${registrationNumber}</strong> in the reference/description field so we can match your payment automatically.</p>` : ""}
+       ${bankLine}
+       ${couponLapseNote}
        <p style="font-size:13px;color:#9a3412;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin:16px 0 0;font-weight:600;">
          Once your payment has been recorded, you'll receive a separate confirmation email —
          and your ticket(s), with a QR code for each person on this registration, will be
@@ -219,11 +254,15 @@ export async function sendEventConfirmationEmail({
   // opening sentence while a fee is still outstanding; that's the same
   // premature-success messaging that was fixed in the success dialog and
   // the post-submit toast, just showing up in the inbox instead.
-  const heading = feeOwed ? "Registration Received — Payment Required" : "Registration Confirmed";
+  const heading = partlyPaid
+    ? "Registration Received — Balance Payment Required"
+    : feeOwed ? "Registration Received — Payment Required" : "Registration Confirmed";
   const openingLine = feeOwed
     ? `Hi ${name}, we've received your registration for:`
     : `Hi ${name}, you're registered for:`;
-  const subject = feeOwed ? `Registration Received (Payment Required) - ${eventName}` : `Registration Confirmed - ${eventName}`;
+  const subject = partlyPaid
+    ? `Registration Received (Balance ${money(balance)} Due) - ${eventName}`
+    : feeOwed ? `Registration Received (Payment Required) - ${eventName}` : `Registration Confirmed - ${eventName}`;
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
@@ -560,8 +599,10 @@ export async function sendPaymentReminderEmail({
   // "your coupon payment will lapse if the balance isn't paid" warning to
   // the final (pre-cancellation) reminder.
   couponAmount = 0, totalFee = null, couponWillLapse = false,
+  otherPaid = 0, // part payments received by card / bank / PayPal / Square
 }) {
   const hasCoupon = Number(couponAmount) > 0;
+  const hasPartPayment = hasCoupon || Number(otherPaid) > 0;
   const heading = final
     ? cancelOn
       ? "Final reminder: payment needed to keep your booking"
@@ -570,10 +611,10 @@ export async function sendPaymentReminderEmail({
   const intro = claimedTransfer
     ? `Hi ${escapeHtml(name)}, you told us you'd paid by bank transfer, but we haven't been able to match it in our bank account yet.
        Please check the transfer went through with the reference below, or reply to this email with the date and amount so we can find it.`
-    : hasCoupon
-    ? `Hi ${escapeHtml(name)}, thank you for registering and for your part payment by coupon. The remaining balance of your registration fee hasn't been received yet.`
+    : hasPartPayment
+    ? `Hi ${escapeHtml(name)}, thank you for registering and for your part payment${hasCoupon && !(Number(otherPaid) > 0) ? " by coupon" : ""}. The remaining balance of your registration fee hasn't been received yet.`
     : `Hi ${escapeHtml(name)}, thank you for registering. We haven't received your payment yet.`;
-  const couponBreakdown = hasCoupon ? couponBreakdownHtml({ totalFee, couponAmount, amountDue }) : "";
+  const couponBreakdown = hasPartPayment ? couponBreakdownHtml({ totalFee, couponAmount, amountDue, otherPaid }) : "";
   const couponLapse = hasCoupon && couponWillLapse
     ? `<p style="font-size:14px;font-weight:600;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;">
          Please note: your coupon payment of $${Number(couponAmount).toFixed(2)} will lapse${cancelOn ? ` on ${escapeHtml(cancelOn)}` : ""} if the balance isn't paid —
@@ -626,13 +667,14 @@ export async function sendRegistrationCancelledEmail({ to, name, eventName, even
   return send({ to, subject: `Registration cancelled - ${eventName}`, html, attachments: logoAttachment() });
 }
 
-function couponBreakdownHtml({ totalFee, couponAmount, amountDue }) {
+function couponBreakdownHtml({ totalFee, couponAmount, amountDue, otherPaid = 0 }) {
   const row = (label, value, strong = false) =>
     `<tr><td style="padding:3px 0;">${label}</td><td style="padding:3px 0;text-align:right;">${strong ? `<strong>${value}</strong>` : value}</td></tr>`;
   return `
       <table style="width:100%;font-size:14px;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;margin:12px 0;padding:6px 0;">
         ${totalFee !== null && totalFee !== undefined ? row("Registration fee", `$${Number(totalFee).toFixed(2)}`) : ""}
-        ${row("Paid by coupon", `&minus; $${Number(couponAmount).toFixed(2)}`)}
+        ${Number(couponAmount) > 0 ? row("Paid by coupon", `&minus; $${Number(couponAmount).toFixed(2)}`) : ""}
+        ${Number(otherPaid) > 0 ? row(Number(couponAmount) > 0 ? "Other payment received" : "Payment received", `&minus; $${Number(otherPaid).toFixed(2)}`) : ""}
         ${row("Balance to pay", `$${Number(amountDue).toFixed(2)}`, true)}
       </table>`;
 }
