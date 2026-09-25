@@ -13,6 +13,11 @@ import { useEffect, useRef, useState } from "react";
 // credentials would leak them to every visitor. Instead, type it in once;
 // the phone's browser will offer to save it, so every login after the
 // first is effectively one tap.
+// The email box is pre-filled with the shared door account's user id
+// (DEFAULT_CHECKIN_EMAIL) — that's only a login name, not a secret, so it's
+// safe to ship. The password is never pre-filled.
+
+const DEFAULT_CHECKIN_EMAIL = "info@kutumb.org.au";
 
 async function api(path: string, options: RequestInit = {}) {
   const res = await fetch(path, {
@@ -34,9 +39,10 @@ export default function CheckInStaff() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [adminName, setAdminName] = useState("");
-  const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [loginData, setLoginData] = useState({ email: DEFAULT_CHECKIN_EMAIL, password: "" });
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [banner, setBanner] = useState<Banner>(null);
   const [count, setCount] = useState(0);
@@ -78,7 +84,7 @@ export default function CheckInStaff() {
   const handleLogout = async () => {
     await api("/api/admin-auth/logout", { method: "POST" }).catch(() => {});
     setIsLoggedIn(false);
-    setLoginData({ email: "", password: "" });
+    setLoginData({ email: DEFAULT_CHECKIN_EMAIL, password: "" });
     setBanner(null);
     setCount(0);
   };
@@ -177,15 +183,33 @@ export default function CheckInStaff() {
             onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
             required
           />
-          <input
-            style={styles.input}
-            type="password"
-            placeholder="Password"
-            autoComplete="current-password"
-            value={loginData.password}
-            onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-            required
-          />
+          <div style={styles.passwordWrap}>
+            <input
+              style={{ ...styles.input, width: "100%", boxSizing: "border-box", paddingRight: 52 }}
+              type={showPassword ? "text" : "password"}
+              placeholder="Password"
+              autoComplete="current-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={loginData.password}
+              onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              style={styles.eyeButton}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              )}
+            </button>
+          </div>
           {loginError && <p style={styles.errorText}>{loginError}</p>}
           <button type="submit" style={styles.primaryButton} disabled={loggingIn}>
             {loggingIn ? "Signing in…" : "Sign in"}
@@ -253,6 +277,24 @@ const styles: Record<string, React.CSSProperties> = {
   },
   title: { margin: 0, fontSize: 24, fontWeight: 800, textAlign: "center", color: "#1e293b" },
   subtitle: { margin: "0 0 8px", fontSize: 14, textAlign: "center", color: "#64748b" },
+  passwordWrap: {
+    position: "relative",
+    display: "flex",
+  },
+  eyeButton: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 48,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "transparent",
+    border: "none",
+    color: "#64748b",
+    cursor: "pointer",
+  },
   input: {
     fontSize: 16,
     padding: "14px 16px",

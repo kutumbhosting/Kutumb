@@ -144,7 +144,18 @@ const Coupons = ({ groupedEvents }: CouponsProps) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to generate coupon(s)");
-      toast({ title: "Success 🎟️", description: `Generated ${data.length} coupon(s).` });
+      const email = data[0]?.email;
+      if (email?.attempted && email.sent) {
+        toast({ title: "Success 🎟️", description: `Generated ${data.length} coupon(s) and emailed the details to ${email.to}.` });
+      } else if (email?.attempted) {
+        toast({
+          title: `Generated ${data.length} coupon(s) — email NOT sent`,
+          description: `${email.error || "Email failed"}. Use the "Email" button on the coupon to try again.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Success 🎟️", description: `Generated ${data.length} coupon(s).` });
+      }
       setRecipientName("");
       setRecipientEmail("");
       setNotes("");
@@ -153,6 +164,29 @@ const Coupons = ({ groupedEvents }: CouponsProps) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const [emailingId, setEmailingId] = useState<number | null>(null);
+  const emailCoupon = async (c: any) => {
+    if (!c.recipient_email) {
+      toast({ title: "No recipient email", description: "Edit the coupon to add an email address first.", variant: "destructive" });
+      return;
+    }
+    setEmailingId(c.id);
+    try {
+      const res = await fetch(`/api/coupons/admin/${c.id}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Email failed");
+      toast({ title: "Coupon emailed ✉️", description: `Sent ${c.code} to ${data.to}.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setEmailingId(null);
     }
   };
 
@@ -296,7 +330,7 @@ const Coupons = ({ groupedEvents }: CouponsProps) => {
                 </div>
                 <div>
                   <Label>Recipient Email (optional)</Label>
-                  <Input value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} className="mt-2" placeholder="For sharing the coupon" />
+                  <Input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} className="mt-2" placeholder="Coupon code & details are emailed here" />
                 </div>
                 <div>
                   <Label>Valid Until (optional)</Label>
@@ -312,7 +346,8 @@ const Coupons = ({ groupedEvents }: CouponsProps) => {
               </Button>
               <p className="text-xs text-muted-foreground">
                 Each coupon is single-use — once it's applied to a registration it can never be redeemed again.
-                Share the code (or the QR code below) with the person it's intended for.
+                If a recipient email is entered, the coupon code(s), value, validity and QR code are emailed there
+                automatically; otherwise share the code (or the QR code below) with the person it's intended for.
               </p>
             </CardContent>
           </Card>
@@ -405,6 +440,17 @@ const Coupons = ({ groupedEvents }: CouponsProps) => {
                             <Button size="sm" variant="outline" onClick={() => openEdit(c)}>
                               Edit
                             </Button>
+                            {c.recipient_email && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => emailCoupon(c)}
+                                disabled={emailingId === c.id}
+                                title={`Email this coupon to ${c.recipient_email}`}
+                              >
+                                {emailingId === c.id ? "Sending..." : "✉️ Email"}
+                              </Button>
+                            )}
                             {c.status === "active" && (
                               <Button size="sm" variant="destructive" onClick={() => voidCoupon(c.id)}>
                                 Void

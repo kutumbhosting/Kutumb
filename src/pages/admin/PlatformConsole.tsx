@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -228,12 +229,21 @@ function SettingsTab({ mode }: { mode: "keys" | "settings" }) {
                     <div key={s.key} className="flex items-end gap-3 flex-wrap">
                       <div className="flex-1 min-w-[220px]">
                         <Label>{s.label}{s.secret && s.hasValue && " (set — hidden)"}</Label>
-                        <Input
-                          type={s.secret ? "password" : "text"}
-                          placeholder={s.secret ? "••••••••" : s.default ? `Default: ${s.default}` : ""}
-                          value={edits[s.key] ?? (s.secret ? "" : s.value)}
-                          onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
-                        />
+                        {s.secret ? (
+                          <PasswordInput
+                            placeholder="••••••••"
+                            autoComplete="new-password"
+                            value={edits[s.key] ?? ""}
+                            onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
+                          />
+                        ) : (
+                          <Input
+                            type="text"
+                            placeholder={s.default ? `Default: ${s.default}` : ""}
+                            value={edits[s.key] ?? s.value}
+                            onChange={(e) => setEdits({ ...edits, [s.key]: e.target.value })}
+                          />
+                        )}
                       </div>
                       <Button size="sm" onClick={() => save(s.key)}>Save</Button>
                       {s.hasValue && <Button size="sm" variant="outline" onClick={() => clear(s.key)}>Clear</Button>}
@@ -293,7 +303,7 @@ function AdminUsersTab() {
       <div className="flex gap-2 flex-wrap items-end">
         <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div><Label>Email</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-        <div><Label>Password</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+        <div><Label>Password</Label><PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
         <div>
           <Label>Role</Label>
           <select
@@ -419,8 +429,7 @@ function DatabaseTab() {
           connection until you restart the server after saving.
         </p>
         <Label>New connection string</Label>
-        <Input
-          type="password"
+        <PasswordInput
           placeholder="postgresql://user:password@host/db?sslmode=require"
           value={newConnStr}
           onChange={(e) => { setNewConnStr(e.target.value); setTestResult(null); }}

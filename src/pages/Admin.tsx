@@ -4,6 +4,7 @@ import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 
@@ -18,6 +19,7 @@ import TicketingManager from "./admin/TicketingManager";
 import CheckIn from "./admin/CheckIn";
 import Coupons from "./admin/Coupons";
 import PlatformConsole from "./admin/PlatformConsole";
+import Manuals from "./admin/Manuals";
 import BankDashboard from "./admin/BankDashboard";
 
 // ─── Shared utilities ────────────────────────────────────────────────────────
@@ -200,8 +202,7 @@ const Admin = () => {
                       value={loginData.email}
                       onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                     />
-                    <Input
-                      type="password"
+                    <PasswordInput
                       placeholder="Password"
                       value={loginData.password}
                       onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
@@ -241,13 +242,14 @@ const Admin = () => {
                 defaultValue={isSuperAdmin ? "members" : "events-settings"}
                 className="max-w-7xl mx-auto"
               >
-                <TabsList className="flex flex-wrap h-auto w-full max-w-4xl mx-auto gap-3 mb-12">
+                <TabsList className="flex flex-wrap h-auto w-full max-w-5xl mx-auto gap-3 mb-12">
                   {isSuperAdmin && <TabsTrigger value="members">Members</TabsTrigger>}
                   {isSuperAdmin && <TabsTrigger value="bank">Bank</TabsTrigger>}
                   <TabsTrigger value="events-settings">Events Settings</TabsTrigger>
                   <TabsTrigger value="events-management">Events Management</TabsTrigger>
                   <TabsTrigger value="data-management">Data Management</TabsTrigger>
                   {isSuperAdmin && <TabsTrigger value="console">Key Settings & Access</TabsTrigger>}
+                  <TabsTrigger value="manuals">Manuals</TabsTrigger>
                 </TabsList>
 
                 {/* ── Members (Super Admin only) ── */}
@@ -336,6 +338,11 @@ const Admin = () => {
                     <PlatformConsole currentAdminEmail={adminName} />
                   </TabsContent>
                 )}
+
+                {/* ── Manuals: read / download the user manuals (all admins) ── */}
+                <TabsContent value="manuals">
+                  <Manuals />
+                </TabsContent>
               </Tabs>
             </div>
           </section>

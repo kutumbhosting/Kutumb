@@ -67,7 +67,7 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
   // ── Pay (or part-pay) with an event coupon ──────────────────────────────
   const [couponCode, setCouponCode] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
-  const [couponResult, setCouponResult] = useState<{ remaining: number } | null>(null);
+  const [couponResult, setCouponResult] = useState<{ remaining: number; applied: number } | null>(null);
 
   // Which payment methods are currently offered, set by an admin under
   // Settings & Access → Payment Methods. Bank transfer is on by default so
@@ -249,7 +249,12 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Could not apply that coupon");
-      setCouponResult({ remaining: Number(result.remaining) || 0 });
+      setCouponResult((prev) => ({
+        remaining: Number(result.remaining) || 0,
+        // Running total, in case a second coupon is applied on top.
+        applied: (prev?.applied || 0) + (Number(result.amountApplied) || 0),
+      }));
+      setCouponCode("");
       toast({ title: "Coupon applied 🎟️", description: result.message });
       if (Number(result.remaining) <= 0) onPaid();
     } catch (err: any) {
@@ -341,9 +346,19 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
       )}
 
       {couponResult && couponResult.remaining > 0 && (
-        <p className="text-sm text-green-700 font-medium" style={{ order: -2 }}>
-          🎟️ Coupon applied — ${couponResult.remaining.toFixed(2)} still remaining.
-        </p>
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm space-y-1" style={{ order: -2 }}>
+          <p className="font-semibold text-green-800">🎟️ Thank you — coupon part payment received</p>
+          <div className="flex justify-between"><span>Amount due</span><span>${data.fee.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>Paid by coupon</span><span>− ${couponResult.applied.toFixed(2)}</span></div>
+          <div className="flex justify-between font-bold border-t border-green-200 pt-1">
+            <span>Balance to pay</span><span>${couponResult.remaining.toFixed(2)}</span>
+          </div>
+          <p className="text-xs text-green-900 pt-1">
+            Please pay the balance below by card or bank transfer to confirm your booking. If you leave now, we'll
+            email you a link to pay the balance later — but unpaid registrations are cancelled before the event and
+            the coupon payment then lapses.
+          </p>
+        </div>
       )}
 
       <div className="space-y-2" style={{ order: -1 }}>

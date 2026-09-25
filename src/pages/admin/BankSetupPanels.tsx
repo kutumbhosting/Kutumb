@@ -460,7 +460,12 @@ export function RegistrationEmailsPanel({ refreshKey }: { refreshKey?: number })
             before (spots released, registrant emailed, admin mailbox told).
           </li>
           <li>
-            Never auto-cancelled (listed for you instead): part-payments,
+            Part-paid only by <b>coupon</b>: treated like unpaid — thanked and asked for the balance ~30 min after
+            applying the coupon, reminded, warned in the final reminder that the coupon payment will lapse, then
+            cancelled (coupon lapses).
+          </li>
+          <li>
+            Never auto-cancelled (listed for you instead): part-payments with card / bank / PayPal / Square money,
             {cfg.cancelClaimed ? "" : " people who said they paid by bank transfer that isn't matched yet,"} and anyone who
             registered in the final week.
           </li>

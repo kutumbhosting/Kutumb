@@ -94,6 +94,11 @@ const Footer = () => {
                   Events
                 </Link>
               </li>
+              <li>
+                <Link to="/checkin" onClick={() => window.scrollTo(0, 0)} className="text-muted-foreground hover:text-primary transition-colors text-sm">
+                  Check-in
+                </Link>
+              </li>
             </ul>
           </div>
 
