@@ -60,6 +60,8 @@ export const SETTINGS_SCHEMA = [
   // guessing an id that might already be renamed or retired.
   { group: "AI Email Draft", key: "groq_api_key", label: "Groq API Key", secret: true },
   { group: "AI Email Draft", key: "groq_model", label: "Groq Model", secret: false },
+  // Automatic payment reconciliation for upcoming events (openfeedSync.js).
+  { group: "Payment Reconciliation", key: "auto_reconcile_upcoming", label: "Automatically reconcile pending payments for upcoming events (hourly check of bank credits; new NAB transactions pulled every 4 hours)", type: "boolean", default: "true" },
   // Automatic registration emails — see server/lib/registrationScheduler.js.
   // All times are Sydney time.
   // Master switches; each event also has its own ticks (see the table in

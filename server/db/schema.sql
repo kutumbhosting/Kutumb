@@ -608,3 +608,31 @@ CREATE INDEX IF NOT EXISTS idx_kutumb_regnotif_reg ON kutumb_registration_notifi
 ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS auto_reminders BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS auto_cancel BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS auto_welcome BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- ============================================================
+-- Bank dashboard: EVERY line (money in and out) of the Kutumb NAB account
+-- pulled through openfeed. amount is signed (+ credit, − debit). A line's
+-- event is its manual tag if set, otherwise the event its credit was
+-- reconciled to (kutumb_bank_transactions.allocated_event_*).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS kutumb_bank_statement_lines (
+  id TEXT PRIMARY KEY,                 -- of_<openfeed transactionId>
+  source TEXT NOT NULL DEFAULT 'openfeed',
+  account_id TEXT,
+  txn_date DATE,                       -- Sydney calendar date
+  posted_at TIMESTAMPTZ,
+  amount NUMERIC(12,2) NOT NULL,
+  description TEXT,
+  reference TEXT,
+  merchant_name TEXT,
+  transaction_type TEXT,
+  event_name TEXT,                     -- manual tag
+  event_year TEXT,
+  category TEXT,
+  notes TEXT,
+  tagged_by TEXT,
+  tagged_at TIMESTAMPTZ,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_bsl_date ON kutumb_bank_statement_lines(txn_date);
+CREATE INDEX IF NOT EXISTS idx_kutumb_bsl_event ON kutumb_bank_statement_lines(event_name, event_year);

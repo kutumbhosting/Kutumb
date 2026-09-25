@@ -391,35 +391,83 @@ function isoDay(d) {
   return new Date(d).toISOString().slice(0, 10);
 }
 
+function sydneyDay(d) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Sydney", year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(d)
+      .map((x) => [x.type, x.value])
+  );
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
 /**
- * Money-in transactions for the matched account, newest `days` days, in the
- * shape the reconciliation expects. Pending items are skipped (their ids can
- * change when they post).
+ * All POSTED transactions (money in and out) for the matched account over the
+ * last `days` days. Pending items are skipped (their ids can change when they
+ * post). Returns statement lines for the dashboard and, separately, the
+ * credits in the shape the reconciliation expects.
  */
-export async function fetchCredits({ days } = {}) {
+export async function fetchTransactions({ days } = {}) {
   let accountId = await getSetting("openfeed_account_id");
   if (!accountId) accountId = (await matchAccount()).matched;
   if (!accountId) throw new Error("Couldn't find the Kutumb NAB account among the accounts shared on openfeed.");
-  const nDays = Math.min(Math.max(Number(days || (await getSetting("openfeed_sync_days")) || 60), 1), 365);
+  const nDays = Math.min(Math.max(Number(days || (await getSetting("openfeed_sync_days")) || 60), 1), 730);
   const oldest = isoDay(Date.now() - nDays * 86_400_000);
   // accountId is used raw (not percent-encoded) — openfeed ids may contain "=".
   const txns = await allPages(`/v1/banking/accounts/${accountId}/transactions?oldestDate=${oldest}&limit=1000`);
-  const out = [];
+  const lines = [];
+  const credits = [];
   for (const t of txns) {
-    const amount = Number(t.amount);
-    if (!(amount > 0)) continue;
+    const amount = Math.round(Number(t.amount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount === 0) continue;
     if (t.status && String(t.status).toUpperCase() === "PENDING") continue;
-    const when = t.postedDateTime || t.valueDate || t.transactionDate || t.executionDateTime || null;
-    const details = [t.description, t.reference, t.merchantName].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-    out.push({
-      id: `of_${t.transactionId}`,
+    const when = t.postedDateTime || t.executionDateTime || null;
+    const day = t.transactionDate || t.valueDate || (when ? sydneyDay(new Date(when)) : null);
+    const id = `of_${t.transactionId}`;
+    lines.push({
+      id,
       accountId,
-      date: when ? new Date(when) : null,
-      amount: Math.round(amount * 100) / 100,
-      details,
+      txnDate: day,
+      postedAt: when ? new Date(when) : day ? new Date(`${day}T00:00:00+10:00`) : null,
+      amount,
+      description: t.description || null,
+      reference: t.reference || null,
+      merchantName: t.merchantName || null,
+      transactionType: t.transactionType || null,
     });
+    if (amount > 0) {
+      credits.push({
+        id,
+        accountId,
+        date: when ? new Date(when) : day ? new Date(`${day}T00:00:00+10:00`) : null,
+        amount,
+        details: [t.description, t.reference, t.merchantName].filter(Boolean).join(" ").replace(/\s+/g, " ").trim(),
+      });
+    }
   }
-  return { credits: out, oldest };
+  return { lines, credits, oldest };
+}
+
+/** Back-compat helper: credits only. */
+export async function fetchCredits(opts) {
+  const { credits, oldest } = await fetchTransactions(opts);
+  return { credits, oldest };
+}
+
+/** Live balance (openfeed caches ~15 min). Never throws — null if unavailable. */
+export async function getBalance() {
+  try {
+    const accountId = await getSetting("openfeed_account_id");
+    if (!accountId) return null;
+    const r = await api(`/v1/banking/accounts/${accountId}/balance`);
+    return {
+      currentBalance: r.data?.currentBalance != null ? Number(r.data.currentBalance) : null,
+      availableBalance: r.data?.availableBalance != null ? Number(r.data.availableBalance) : null,
+      currency: r.data?.currency || "AUD",
+      at: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function getStatus() {

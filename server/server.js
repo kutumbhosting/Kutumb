@@ -48,6 +48,7 @@ import mediaRoutes from "./routes/media.routes.js";
 import reconciliationRoutes from "./routes/reconciliation.routes.js";
 import registrationEmailsRoutes from "./routes/registrationEmails.routes.js";
 import openfeedRoutes from "./routes/openfeed.routes.js";
+import bankDashboardRoutes from "./routes/bankDashboard.routes.js";
 import { startOpenfeedAutoSync } from "./lib/openfeedSync.js";
 import { startDriveWatcher } from "./lib/driveStatementWatcher.js";
 import couponsRoutes from "./routes/coupons.routes.js";
@@ -84,6 +85,7 @@ app.use("/api/checkin", checkinRoutes);
 app.use("/api/events/reconcile", reconciliationRoutes);
 app.use("/api/registration-emails", registrationEmailsRoutes);
 app.use("/api/openfeed", openfeedRoutes);
+app.use("/api/bank-dashboard", bankDashboardRoutes);
 
 // PUBLIC: the two Google Drive drop boxes linked from the site footer, plus
 // suggested event folder names for the media drop box. Folder access itself

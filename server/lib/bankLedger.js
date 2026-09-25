@@ -14,6 +14,7 @@ import crypto from "crypto";
 import { pool } from "../db/pool.js";
 import { reconcile } from "./paymentReconciliation.js";
 import { runReconciliation, dbRowToRegistration } from "./reconciliationRun.js";
+import { parseEventStartDate } from "./eventDates.js";
 
 function dayKey(date) {
   if (!date) return "nodate";
@@ -102,14 +103,43 @@ export async function markAllocations(allocations, eventName, eventYear) {
  * applies the result event by event through the normal runReconciliation(),
  * which updates statuses, emails tickets and saves a report per event.
  */
-export async function reconcileOpenEvents({ sourceLabel, admin }) {
-  const { rows: events } = await pool.query(
+/**
+ * (lower(title), year) of events on the Upcoming Events list that haven't
+ * finished more than `graceDays` ago (events without a parseable date count
+ * as upcoming).
+ */
+async function upcomingEventKeys(graceDays = 7) {
+  const { rows } = await pool.query("SELECT title, date_text FROM kutumb_upcoming_events");
+  const cutoff = Date.now() - graceDays * 86_400_000;
+  const keys = new Set();
+  for (const e of rows) {
+    const start = parseEventStartDate(e.date_text);
+    const year = start ? String(start.getFullYear()) : String(e.date_text || "").match(/\d{4}/)?.[0];
+    if (start && start.getTime() < cutoff) continue;
+    if (year) keys.add(`${String(e.title).toLowerCase()}\u0000${year}`);
+  }
+  return keys;
+}
+
+export async function reconcileOpenEvents({ sourceLabel, admin, onlyUpcoming = false }) {
+  const { rows: allEvents } = await pool.query(
     `SELECT event_name, event_year, MIN(created_at) AS first_reg
        FROM kutumb_event_registrations
       GROUP BY event_name, event_year
      HAVING bool_or(fee > 0 AND payment_status <> 'Paid' AND registration_status <> 'cancelled')`
   );
-  if (events.length === 0) return { events: [], unmatched: [], message: "No events have unpaid registrations." };
+  let events = allEvents;
+  if (onlyUpcoming) {
+    const keys = await upcomingEventKeys();
+    events = allEvents.filter((e) => keys.has(`${String(e.event_name).toLowerCase()}\u0000${e.event_year}`));
+  }
+  if (events.length === 0) {
+    return {
+      events: [],
+      unmatched: [],
+      message: onlyUpcoming ? "No upcoming events have unpaid registrations." : "No events have unpaid registrations.",
+    };
+  }
 
   const earliest = new Date(Math.min(...events.map((e) => new Date(e.first_reg).getTime())) - 86400000);
   const { rows: credits } = await pool.query(
