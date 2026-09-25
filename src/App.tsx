@@ -13,6 +13,7 @@ import Membership from "./pages/Membership";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin"; // 👈 ADD THIS
+import CheckInStaff from "./pages/CheckInStaff";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import EventTerms from "./pages/EventTerms";
 import CheckoutReturn from "./pages/CheckoutReturn";
@@ -38,6 +39,9 @@ const App = () => (
 
         {/* ✅ ADMIN ROUTE */}
         <Route path="/Admin" element={<Admin />} />
+
+        {/* ✅ SIMPLE MOBILE CHECK-IN — login + continuous camera scanning only */}
+        <Route path="/checkin" element={<CheckInStaff />} />
 
         {/* ✅ LEGAL CENTRE ROUTES */}
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
