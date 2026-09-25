@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BookOpen, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { BookOpen, Download, ExternalLink, RefreshCw, Globe, Copy } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 // Admin → Manuals: read the user manuals right in the console, open them in
 // a new tab, or download them. The PDFs are served by /api/manuals from
@@ -20,11 +21,23 @@ type Manual = {
   sizeBytes: number;
   updatedAt: string;
   url: string;
+  /** Set when anyone can open it without logging in (footer "User Manual"). */
+  publicUrl: string | null;
 };
 
 const formatSize = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`);
 
 const Manuals = () => {
+  const { toast } = useToast();
+  const copyPublicLink = async (path: string) => {
+    const full = `${window.location.origin}${path}`;
+    try {
+      await navigator.clipboard.writeText(full);
+      toast({ title: "Link copied", description: full });
+    } catch {
+      toast({ title: "Public link", description: full });
+    }
+  };
   const [manuals, setManuals] = useState<Manual[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -86,6 +99,22 @@ const Manuals = () => {
                 {m.audience && <Badge variant="secondary">{m.audience}</Badge>}
               </div>
               {m.description && <p className="text-sm text-muted-foreground">{m.description}</p>}
+              {m.publicUrl ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs rounded-md bg-green-50 border border-green-200 px-3 py-2">
+                  <Globe className="h-4 w-4 text-green-700" />
+                  <span className="text-green-900">
+                    Public — anyone can open it (footer “User Manual”):{" "}
+                    <a href={m.publicUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                      {window.location.host}{m.publicUrl}
+                    </a>
+                  </span>
+                  <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => copyPublicLink(m.publicUrl!)}>
+                    <Copy className="h-3 w-3 mr-1" /> Copy link
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">🔒 Admins only — requires admin login.</p>
+              )}
               <p className="text-xs text-muted-foreground">
                 PDF · {formatSize(m.sizeBytes)} · updated {new Date(m.updatedAt).toLocaleDateString("en-AU")}
               </p>

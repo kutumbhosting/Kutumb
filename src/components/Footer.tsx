@@ -99,6 +99,19 @@ const Footer = () => {
                   Check-in
                 </Link>
               </li>
+              <li>
+                {/* A plain link (not a router Link): /user-manual is a PDF
+                    served by the server, not a page of this app. Public — no
+                    login needed. */}
+                <a
+                  href="/user-manual"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-primary transition-colors text-sm"
+                >
+                  User Manual
+                </a>
+              </li>
             </ul>
           </div>
 
