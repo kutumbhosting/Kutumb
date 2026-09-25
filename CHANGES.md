@@ -16,6 +16,49 @@ TypeScript compiles clean, Vite build succeeds) is in this zip.
 
 ---
 
+## Public "User Manual" link in the footer
+
+- Footer → Quick Links has a new **User Manual** link directly below
+  **Check-in**. It opens the Membership & Event Booking Guide (PDF) in a
+  new tab.
+- The guide is public at **`/user-manual`** (e.g.
+  https://kutumb.org.au/user-manual) with **no login needed**. Add
+  `?download=1` to download it instead of opening it.
+- Only the member guide is public. The Admin Console manual and the manuals
+  list still require an admin login (`/api/manuals/*`).
+- Admin → Manuals shows the public link on the guide's card, with a
+  **Copy link** button. The admin manual's card is marked "Admins only".
+- Both manuals mention the new link. The copies in `server/data/manuals/`
+  are updated.
+
+Files: `server/routes/manuals.routes.js`, `server/server.js`,
+`src/components/Footer.tsx`, `src/pages/admin/Manuals.tsx`,
+`server/data/manuals/*.pdf`, rebuilt `dist/`.
+
+---
+
+## Fix: part-paid registrations were emailed the full fee
+
+The "Registration Received (Payment Required)" email (sent when someone
+leaves the payment window unpaid) always showed the full fee and a
+"Pay $<full fee> Now" button, even after a part payment (e.g. a coupon).
+
+- It now shows **Registration fee**, **Paid by coupon <code>** and/or
+  **Payment received**, and **Balance to pay**. The Pay button and the
+  bank-transfer instruction are for the balance only. The subject becomes
+  "Registration Received (Balance $X Due) - <event>".
+- If that email already thanked a coupon part-payer, the separate
+  ~30-minute "Thank you for your part payment" email is not sent as well.
+- Scheduled payment reminders now show the same fee / paid / balance
+  breakdown for ANY part payment (card, bank, PayPal, Square), not only
+  coupons.
+- Registrations with nothing paid get exactly the same email as before.
+
+Files: `server/lib/mailer.js`, `server/server.js`,
+`server/lib/registrationScheduler.js`.
+
+---
+
 ## Admin Console "Manuals" tab
 
 New **Manuals** tab (last tab, visible to every admin) listing both user
