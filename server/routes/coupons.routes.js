@@ -3,6 +3,37 @@ import { pool } from "../db/pool.js";
 import { requireAdmin } from "../lib/auth.js";
 import { logAudit } from "../lib/audit.js";
 import { generateCouponCode, buildCouponQrDataUrl, findValidCoupon } from "../lib/coupons.js";
+import { sendCouponIssuedEmail } from "../lib/mailer.js";
+import { getSetting } from "../lib/settings.js";
+import { getConfiguredPublicBaseUrl } from "../lib/publicUrl.js";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Emails the given coupon rows (same event) to `to`. Never throws. */
+async function emailCoupons(to, rows) {
+  try {
+    if (!to || !EMAIL_RE.test(to)) return { sent: false, error: "No valid recipient email" };
+    const baseUrl = await getConfiguredPublicBaseUrl().catch(() => null);
+    return await sendCouponIssuedEmail({
+      to,
+      recipientName: rows[0].recipient_name,
+      eventName: rows[0].event_name,
+      eventYear: rows[0].event_year,
+      eventsUrl: baseUrl ? `${baseUrl}/events` : null,
+      coupons: rows.map((c) => ({
+        code: c.code,
+        amount: Number(c.amount),
+        qrDataUrl: c.qr_code,
+        validFrom: c.valid_from,
+        validUntil: c.valid_until,
+        notes: c.notes,
+      })),
+    });
+  } catch (err) {
+    console.error("COUPON EMAIL ERROR:", err);
+    return { sent: false, error: err.message };
+  }
+}
 
 const router = Router();
 
@@ -34,6 +65,9 @@ router.post("/admin", requireAdmin, async (req, res) => {
     if (!(Number(amount) > 0)) {
       return res.status(400).json({ message: "Coupon amount must be greater than 0" });
     }
+    if (recipientEmail?.trim() && !EMAIL_RE.test(recipientEmail.trim())) {
+      return res.status(400).json({ message: "Recipient email doesn't look like a valid email address" });
+    }
 
     const howMany = Math.min(Math.max(Number(count) || 1, 1), 100);
     const created = [];
@@ -62,8 +96,22 @@ router.post("/admin", requireAdmin, async (req, res) => {
       if (coupon) created.push(coupon);
     }
 
-    await logAudit(req.admin, "coupon.create", `${eventName} ${eventYear}`, { count: created.length, amount });
-    res.status(201).json(created);
+    // Email the coupon code(s) + details to the recipient email entered on
+    // the form (one email for the whole batch). The coupons are already
+    // saved, so a mail failure is reported back but never undoes them.
+    let email = { attempted: false, sent: false, error: null, to: null };
+    const emailOn = ((await getSetting("coupon_issue_email_enabled")) ?? "true") !== "false";
+    if (emailOn && recipientEmail?.trim() && created.length) {
+      const r = await emailCoupons(recipientEmail.trim(), created);
+      email = { attempted: true, sent: !!r.sent, error: r.error || null, to: recipientEmail.trim() };
+    }
+
+    await logAudit(req.admin, "coupon.create", `${eventName} ${eventYear}`, {
+      count: created.length, amount, emailedTo: email.sent ? email.to : null,
+    });
+    // Still an array (existing callers use data.length); each row also
+    // carries the email outcome.
+    res.status(201).json(created.map((c) => ({ ...c, email })));
   } catch (err) {
     console.error("COUPON CREATE ERROR:", err);
     res.status(500).json({ message: "Failed to generate coupon(s)" });
@@ -78,6 +126,22 @@ router.post("/admin/:id/void", requireAdmin, async (req, res) => {
   if (!rows[0]) return res.status(400).json({ message: "Only an active, unused coupon can be voided" });
   await logAudit(req.admin, "coupon.void", `${rows[0].event_name} ${rows[0].event_year}`, { id: req.params.id });
   res.json(rows[0]);
+});
+
+/* ============================================================
+   ADMIN: (re)send one coupon's code + details to its recipient email
+   (or to an email given in the body).
+   ============================================================ */
+router.post("/admin/:id/email", requireAdmin, async (req, res) => {
+  const { rows } = await pool.query("SELECT * FROM kutumb_event_coupons WHERE id = $1", [req.params.id]);
+  const coupon = rows[0];
+  if (!coupon) return res.status(404).json({ message: "Coupon not found" });
+  const to = (req.body?.to || coupon.recipient_email || "").trim();
+  if (!to) return res.status(400).json({ message: "This coupon has no recipient email — edit it to add one first" });
+  const r = await emailCoupons(to, [coupon]);
+  if (!r.sent) return res.status(502).json({ message: `Email not sent: ${r.error || "unknown error"}` });
+  await logAudit(req.admin, "coupon.email", `${coupon.event_name} ${coupon.event_year}`, { id: coupon.id, to });
+  res.json({ sent: true, to });
 });
 
 /* ============================================================

@@ -1,6 +1,6 @@
 // server/lib/registrationScheduler.js
 //
-// Automatic registration emails, checked every 15 minutes and acted on once
+// Automatic registration emails, checked every 10 minutes and acted on once
 // the configured hour (default 10:00 Sydney time) has passed each day:
 //
 //   • Payment reminder — on the reminder days (default Mon & Thu), to every
@@ -9,15 +9,23 @@
 //   • Final reminder — 6 days before the event, to those still unpaid,
 //     saying when the registration will be cancelled.
 //   • Auto-cancel — 5 days before the event, registrations still unpaid are
-//     cancelled (spots released) and the registrant is emailed. Just before
+//     cancelled (spots released) and the registrant is emailed. This includes
+//     registrations part-paid ONLY by coupon (the coupon value lapses; the
+//     final reminder warns them first). Just before
 //     cancelling, every stored bank credit is reconciled once more so a
 //     transfer that has already arrived is never missed. NOT auto-cancelled
 //     (listed for an admin instead):
-//       – part-payments (some money received),
+//       – part-payments with real money received (card / bank / PayPal /
+//         Square) — never auto-cancelled,
 //       – people who said they paid by bank transfer that isn't matched yet
 //         (unless the setting to cancel those too is on),
 //       – anyone who never got the final reminder (e.g. registered in the
 //         last 6 days, or email was down) — nobody is cancelled unwarned.
+//   • Coupon part-payment thank-you — when a coupon covered only part of
+//     the fee and the balance still hasn't been paid ~30 min later (i.e. the
+//     registrant left the payment window), one email thanks them for the part
+//     payment and asks for the balance by card or bank transfer. Checked on
+//     every tick, not held back until the daily hour.
 //   • Welcome — the day before the event, to every CONFIRMED registration
 //     (paid and free events alike), with their QR tickets attached again.
 //
@@ -35,6 +43,7 @@ import {
   sendRegistrationCancelledEmail,
   sendEventWelcomeEmail,
   sendAdminAlertEmail,
+  sendCouponPartPaymentEmail,
 } from "./mailer.js";
 import { buildTicketsPdfForRegistration } from "./tickets.js";
 import { reconcileOpenEvents } from "./bankLedger.js";
@@ -47,6 +56,7 @@ const TZ = "Australia/Sydney";
 const DAY_MS = 86_400_000;
 const WEEKDAYS = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 const LOCK_KEY = "kutumb_registration_scheduler";
+const COUPON_LOCK_KEY = "kutumb_coupon_part_payment_emails";
 
 let timer = null;
 let lastRun = null;
@@ -180,6 +190,101 @@ function regSummary(r, e, extra = {}) {
   };
 }
 
+function noteFor(claimed, couponOnlyPartial, couponPaid) {
+  const notes = [];
+  if (couponOnlyPartial) notes.push(`coupon $${couponPaid.toFixed(2)} part-paid`);
+  if (claimed) notes.push("said they paid by transfer");
+  return notes.length ? { note: notes.join("; ") } : {};
+}
+
+/* ── Coupon part-payment thank-you ───────────────────────────────────── */
+
+/**
+ * A coupon that covers only part of the fee is redeemed straight away, and
+ * the registrant is shown the balance to pay by card / bank transfer. If
+ * they leave the payment window without paying it, this sends ONE email
+ * thanking them for the part payment and asking for the balance.
+ *
+ * "Left the payment window" is detected as: the balance is still unpaid
+ * `delayMinutes` after the coupon was redeemed (a browser can't reliably
+ * report that a tab was closed). Coupons redeemed more than 7 days ago are
+ * ignored, so switching this on doesn't email old registrations.
+ */
+export async function runCouponPartPaymentEmails({ dryRun = false, now = new Date() } = {}) {
+  const out = { sent: [], failed: [] };
+  if (((await getSetting("reg_coupon_partial_email_enabled")) ?? "true") === "false") return out;
+  const rawDelay = Number(await getSetting("reg_coupon_partial_email_delay_min"));
+  const delayMinutes = Number.isInteger(rawDelay) && rawDelay >= 5 && rawDelay <= 1440 ? rawDelay : 30;
+
+  const lockClient = await pool.connect();
+  let locked = false;
+  try {
+    const { rows: lk } = await lockClient.query("SELECT pg_try_advisory_lock(hashtext($1)) AS ok", [COUPON_LOCK_KEY]);
+    locked = lk[0].ok;
+    if (!locked) return out;
+
+    const { rows } = await pool.query(
+      `SELECT r.*, c.last_redeemed_at
+         FROM kutumb_event_registrations r
+         JOIN LATERAL (
+           SELECT max(redeemed_at) AS last_redeemed_at
+             FROM kutumb_event_coupons WHERE redeemed_by_registration_id = r.id
+         ) c ON c.last_redeemed_at IS NOT NULL
+        WHERE r.registration_status = 'pending_payment'
+          AND r.payment_status <> 'Paid'
+          AND COALESCE(r.coupon_amount, 0) > 0
+          AND COALESCE(r.payment_amount, 0) < COALESCE(r.fee, 0)
+          AND COALESCE(r.payment_amount, 0) <= COALESCE(r.coupon_amount, 0)
+          AND c.last_redeemed_at <= $1::timestamptz - make_interval(mins => $2)
+          AND c.last_redeemed_at >= $1::timestamptz - interval '7 days'
+          AND NOT EXISTS (
+            SELECT 1 FROM kutumb_registration_notifications n
+             WHERE n.registration_id = r.id AND n.kind = 'coupon_part_payment'
+          )`,
+      [now.toISOString(), delayMinutes]
+    );
+    if (!rows.length) return out;
+
+    const baseUrl = await getConfiguredPublicBaseUrl();
+    for (const r of rows) {
+      const { rows: ev } = await pool.query(
+        "SELECT date_text, time_text, location FROM kutumb_upcoming_events WHERE lower(title) = lower($1) LIMIT 1",
+        [r.event_name]
+      );
+      const fee = Number(r.fee) || 0;
+      const paid = Number(r.payment_amount) || 0;
+      const amountDue = Math.max(fee - paid, 0);
+      const item = { id: r.id, event: r.event_name, registrationNumber: r.registration_number, name: r.name, email: r.email, amountDue };
+      if (dryRun) {
+        out.sent.push(item);
+        continue;
+      }
+      const sent = await sendCouponPartPaymentEmail({
+        to: r.email,
+        name: r.name,
+        eventName: r.event_name,
+        eventDate: ev[0]?.date_text,
+        eventTime: ev[0]?.time_text,
+        location: ev[0]?.location,
+        registrationNumber: r.registration_number,
+        totalFee: fee,
+        couponAmount: Number(r.coupon_amount) || paid,
+        couponCode: r.coupon_code,
+        amountDue,
+        payUrl: baseUrl && r.pay_token ? `${baseUrl}/pay/${r.pay_token}` : null,
+      });
+      if (sent.sent) {
+        await markSent(r.id, "coupon_part_payment", "", now);
+        out.sent.push(item);
+      } else out.failed.push({ ...item, error: sent.error });
+    }
+    return out;
+  } finally {
+    if (locked) await lockClient.query("SELECT pg_advisory_unlock(hashtext($1))", [COUPON_LOCK_KEY]).catch(() => {});
+    lockClient.release();
+  }
+}
+
 /* ── The run ─────────────────────────────────────────────────────────── */
 
 /**
@@ -258,8 +363,14 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
           const p = sydneyParts(created);
           return dayNumber(p.y, p.m, p.d);
         })();
-        const claimed = !!r.bank_transferred && !r.payment_match_confidence && paid === 0;
+        const couponPaid = Number(r.coupon_amount) || 0;
         const partial = paid > 0 && paid < fee;
+        // Part-paid ONLY by coupon (no card/bank/PayPal/Square money on file):
+        // treated like an unpaid registration — reminded, then auto-cancelled
+        // (coupon lapses) — instead of being parked for admin review.
+        const couponOnlyPartial = partial && couponPaid > 0 && paid <= couponPaid + 0.001 && !r.payment_match_confidence;
+        const claimed = !!r.bank_transferred && !r.payment_match_confidence && (paid === 0 || couponOnlyPartial);
+        const couponInfo = couponOnlyPartial ? { couponAmount: couponPaid, totalFee: fee } : {};
         const payUrl = baseUrl && r.pay_token ? `${baseUrl}/pay/${r.pay_token}` : null;
         const common = {
           to: r.email,
@@ -304,10 +415,10 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
         // ── Regular reminder (event more than finalDays away) ──
         if (e.daysUntil > cfg.finalDays) {
           if (evReminders && cfg.reminderDays.has(syd.weekday) && now - created >= DAY_MS && !(await alreadySent(r.id, "payment_reminder", todayKey))) {
-            const item = regSummary(r, e, claimed ? { note: "said they paid by transfer" } : {});
+            const item = regSummary(r, e, noteFor(claimed, couponOnlyPartial, couponPaid));
             if (dryRun) result.reminders.push(item);
             else {
-              const sent = await sendPaymentReminderEmail({ ...common, amountDue, payUrl, claimedTransfer: claimed });
+              const sent = await sendPaymentReminderEmail({ ...common, ...couponInfo, amountDue, payUrl, claimedTransfer: claimed });
               if (sent.sent) {
                 await markSent(r.id, "payment_reminder", todayKey, now);
                 result.reminders.push(item);
@@ -339,11 +450,14 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
         // ── Final reminder ──
         if (!finalAt) {
           if (e.daysUntil >= 1) {
-            const item = regSummary(r, e, claimed ? { note: "said they paid by transfer" } : {});
+            const item = regSummary(r, e, noteFor(claimed, couponOnlyPartial, couponPaid));
             if (dryRun) result.finals.push(item);
             else {
               const sent = await sendPaymentReminderEmail({
                 ...common,
+                ...couponInfo,
+                // Warn that the coupon part payment lapses on cancellation.
+                couponWillLapse: couponOnlyPartial && evCancel,
                 amountDue,
                 payUrl,
                 final: true,
@@ -363,11 +477,11 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
 
         // ── Auto-cancel ──
         if (evCancel && e.daysUntil <= cfg.cancelDays && e.daysUntil >= 1 && now - finalAt >= 20 * 3_600_000) {
-          if (partial || (claimed && !cfg.cancelClaimed)) {
+          if ((partial && !couponOnlyPartial) || (claimed && !cfg.cancelClaimed)) {
             if (!(await alreadySent(r.id, "flagged_review"))) {
               result.needsReview.push(
                 regSummary(r, e, {
-                  reason: partial
+                  reason: partial && !couponOnlyPartial
                     ? `part-paid ($${paid.toFixed(2)} of $${fee.toFixed(2)}) — not cancelled`
                     : "said they paid by bank transfer, not matched yet — not cancelled",
                 })
@@ -375,7 +489,11 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
             }
             continue;
           }
-          cancelCandidates.push({ r, e, common, item: regSummary(r, e) });
+          cancelCandidates.push({
+            r, e, common,
+            couponLapsedAmount: couponOnlyPartial ? couponPaid : 0,
+            item: regSummary(r, e, couponOnlyPartial ? { note: `coupon $${couponPaid.toFixed(2)} lapsed` } : {}),
+          });
         }
       }
     }
@@ -396,7 +514,13 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
                 SET registration_status = 'cancelled', cancelled_at = now(),
                     cancel_reason = 'Payment not received by the cancellation date (automatic)'
               WHERE id = $1 AND registration_status = 'pending_payment' AND payment_status <> 'Paid'
-                AND COALESCE(payment_amount, 0) = 0
+                AND (
+                  COALESCE(payment_amount, 0) = 0
+                  -- coupon-only part payment: nothing but coupon value on file
+                  OR (COALESCE(coupon_amount, 0) > 0
+                      AND COALESCE(payment_amount, 0) <= COALESCE(coupon_amount, 0)
+                      AND payment_match_confidence IS NULL)
+                )
               RETURNING id`,
             [c.r.id]
           );
@@ -405,6 +529,7 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
           result.cancelled.push(c.item);
           const sent = await sendRegistrationCancelledEmail({
             ...c.common,
+            couponLapsedAmount: c.couponLapsedAmount,
             registerUrl: baseUrl ? `${baseUrl}/events` : null,
           });
           if (!sent.sent) result.failed.push({ ...c.item, kind: "cancelled", error: sent.error });
@@ -417,7 +542,7 @@ export async function runRegistrationEmails({ dryRun = false, now = new Date(), 
       const lines = [];
       if (result.cancelled.length) {
         lines.push("Cancelled (payment not received):");
-        for (const c of result.cancelled) lines.push(`  • ${c.event} — ${c.registrationNumber || ""} ${c.name} <${c.email}> ($${c.amountDue.toFixed(2)} due)`);
+        for (const c of result.cancelled) lines.push(`  • ${c.event} — ${c.registrationNumber || ""} ${c.name} <${c.email}> ($${c.amountDue.toFixed(2)} due)${c.note ? ` — ${c.note}` : ""}`);
         lines.push("");
       }
       if (result.needsReview.length) {
@@ -502,10 +627,12 @@ export async function getSchedulerStatus() {
 
 export function startRegistrationScheduler() {
   if (timer) clearInterval(timer);
-  const tick = () =>
+  const tick = () => {
+    runCouponPartPaymentEmails().catch((err) => console.error("Coupon part-payment email error:", err.message));
     runRegistrationEmails().catch((err) => console.error("Registration email scheduler error:", err.message));
-  timer = setInterval(tick, 15 * 60_000);
+  };
+  timer = setInterval(tick, 10 * 60_000);
   timer.unref?.();
   setTimeout(tick, 60_000).unref?.();
-  console.log("⏰ Registration emails: reminders, auto-cancel and day-before welcome checked every 15 min");
+  console.log("⏰ Registration emails: reminders, auto-cancel and day-before welcome and coupon part-payment emails checked every 10 min");
 }

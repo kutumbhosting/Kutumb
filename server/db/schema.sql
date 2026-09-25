@@ -596,7 +596,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_kutumb_evreg_email_per_event_active
 CREATE TABLE IF NOT EXISTS kutumb_registration_notifications (
   id SERIAL PRIMARY KEY,
   registration_id INTEGER NOT NULL REFERENCES kutumb_event_registrations(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL,            -- 'payment_reminder' | 'final_reminder' | 'cancelled' | 'welcome'
+  kind TEXT NOT NULL,            -- 'payment_reminder' | 'final_reminder' | 'cancelled' | 'welcome' | 'coupon_part_payment' | 'flagged_review'
   period_key TEXT NOT NULL DEFAULT '',
   sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (registration_id, kind, period_key)

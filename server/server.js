@@ -8,6 +8,7 @@ import cors from "cors";
 import multer from "multer";
 import { fileURLToPath } from "url";
 import fileManagerRoutes from "./routes/filemanager.js";
+import manualsRoutes, { ensureBundledManuals } from "./routes/manuals.routes.js";
 import pastEventsRouter from "./routes/pastEventsRoute.js";
 import { getNextMembershipNumber } from "./lib/counters.js";
 import { getNextRegistrationNumber, resolveEventCode } from "./lib/registrationNumber.js";
@@ -117,6 +118,7 @@ app.get("/api/drop-box-links", async (req, res) => {
   }
 });
 app.use("/api/coupons", couponsRoutes);
+app.use("/api/manuals", manualsRoutes);
 app.use("/api/events", registrationExtrasRoutes);
 app.use("/api/square", squareRoutes);
 app.use("/api/paypal", paypalRoutes);
@@ -154,6 +156,9 @@ const SEED_MARKER_FILE = path.join(DATA_ROOT, ".kutumb-seeded");
     console.error("SEED DATA ERROR:", err);
   }
 })();
+// User manuals (Admin → Manuals tab): make sure the bundled PDFs exist in
+// DATA_ROOT/manuals even on a volume seeded before they were added.
+ensureBundledManuals();
 
 // Flyer images and past-event photos/videos now live in Postgres
 // (kutumb_media_files), served dynamically instead of as static files.

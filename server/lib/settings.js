@@ -73,6 +73,9 @@ export const SETTINGS_SCHEMA = [
   { group: "Automatic Registration Emails", key: "reg_email_hour", label: "Send at hour (0-23, Sydney time)", secret: false, default: "10" },
   { group: "Automatic Registration Emails", key: "reg_final_days_before", label: "Final reminder — days before event", secret: false, default: "6" },
   { group: "Automatic Registration Emails", key: "reg_cancel_days_before", label: "Cancel unpaid — days before event", secret: false, default: "5" },
+  { group: "Automatic Registration Emails", key: "reg_coupon_partial_email_enabled", label: "Coupon part payment — email a thank-you + balance-due request if the registrant leaves without paying the balance", type: "boolean", default: "true" },
+  { group: "Automatic Registration Emails", key: "reg_coupon_partial_email_delay_min", label: "Coupon part payment — minutes to wait before sending that email (5-1440)", secret: false, default: "30" },
+  { group: "Automatic Registration Emails", key: "coupon_issue_email_enabled", label: "Email the coupon code & details to the email entered when a coupon is created", type: "boolean", default: "true" },
   { group: "Automatic Registration Emails", key: "reg_cancel_claimed_transfers", label: "Also auto-cancel people who said they paid by bank transfer but it isn't matched yet", type: "boolean", default: "false" },
   // Bank File Drop Box: a NAB statement file (.csv/.xlsx/.xls/Google Sheet)
   // dropped in this Drive folder is imported, reconciled against every event

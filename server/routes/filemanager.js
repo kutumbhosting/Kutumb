@@ -94,7 +94,7 @@ router.post("/folder/delete", (req, res) => {
     }
 
     // ❌ Protect system folders (VERY IMPORTANT)
-    const protectedFolders = ["events", "members", "upcomingevents", "eventflyer"];
+    const protectedFolders = ["events", "members", "upcomingevents", "eventflyer", "manuals"];
 
     if (protectedFolders.includes(folderName)) {
       return res.status(403).json({

@@ -204,7 +204,11 @@ export function reconcile(registrations, transactions) {
       if (score === 0) continue;
 
       const fee = Number(reg.fee) || 0;
-      const amountOk = txn.amount === fee;
+      // After a coupon part-payment the registrant only transfers the
+      // BALANCE (fee − coupon), so that is also an exact, expected amount.
+      const alreadyPaid = Number(reg.paymentAmount) || 0;
+      const balanceDue = Math.round((fee - alreadyPaid) * 100) / 100;
+      const amountOk = txn.amount === fee || (alreadyPaid > 0 && balanceDue > 0 && txn.amount === balanceDue);
       const accept =
         score >= 88 ||
         (score >= 70 && (amountOk || txn.hasEventWords)) ||

@@ -36,6 +36,7 @@ export function dbRowToRegistration(r) {
     paymentStatus: r.payment_status,
     registrationStatus: r.registration_status,
     paymentAmount: r.payment_amount !== null ? Number(r.payment_amount) : null,
+    couponAmount: r.coupon_amount !== null && r.coupon_amount !== undefined ? Number(r.coupon_amount) : 0,
     paymentDate: r.payment_date,
     paymentMatchConfidence: r.payment_match_confidence,
     paymentMatchNote: r.payment_match_note,
@@ -87,7 +88,19 @@ export async function runReconciliation({ eventName, eventYear, transactions, so
 
     const wasPaid = reg.paymentStatus === "Paid";
     const fee = Number(reg.fee) || 0;
-    const amountRecorded = reg.paymentAmount !== null ? reg.paymentAmount : match.amount;
+    // Coupon part-payment + bank transfer for the balance: the only money on
+    // file so far is the coupon and no bank credit has been matched before,
+    // so this credit is the balance and is ADDED to the coupon amount (the
+    // old COALESCE rule would have kept just the coupon and left the
+    // registration Pending forever). Once matched, payment_match_confidence
+    // is set, so re-running the same statement can't add it twice.
+    const couponOnlySoFar =
+      reg.couponAmount > 0 &&
+      (reg.paymentAmount ?? 0) <= reg.couponAmount + 0.001 &&
+      !reg.paymentMatchConfidence;
+    const amountRecorded = couponOnlySoFar
+      ? Math.round(((reg.paymentAmount ?? 0) + match.amount) * 100) / 100
+      : reg.paymentAmount !== null ? reg.paymentAmount : match.amount;
     const coversFee = amountRecorded >= fee;
     const newStatus = wasPaid || coversFee ? "Paid" : reg.paymentStatus;
 
@@ -95,8 +108,10 @@ export async function runReconciliation({ eventName, eventYear, transactions, so
       `UPDATE kutumb_event_registrations SET
          payment_status = $1,
          registration_status = CASE WHEN $1 = 'Paid' THEN 'confirmed' ELSE registration_status END,
-         payment_method = CASE WHEN $1 = 'Paid' THEN COALESCE(payment_method, 'bank_transfer') ELSE payment_method END,
-         payment_amount = COALESCE(payment_amount, $2),
+         payment_method = CASE WHEN $8 THEN 'bank_transfer'
+                               WHEN $1 = 'Paid' THEN COALESCE(payment_method, 'bank_transfer')
+                               ELSE payment_method END,
+         payment_amount = CASE WHEN $8 THEN $9 ELSE COALESCE(payment_amount, $2) END,
          payment_date = COALESCE(payment_date, $3),
          payment_match_confidence = $4,
          payment_match_note = $5,
@@ -105,7 +120,7 @@ export async function runReconciliation({ eventName, eventYear, transactions, so
          bank_transferred = TRUE
        WHERE id = $7
        RETURNING *`,
-      [newStatus, match.amount, match.date, match.confidence, match.reason, match.bankReference, reg.id]
+      [newStatus, match.amount, match.date, match.confidence, match.reason, match.bankReference, reg.id, couponOnlySoFar, amountRecorded]
     );
     const finalRow = dbRowToRegistration(rows[0]);
     updatedRows.push({

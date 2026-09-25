@@ -555,7 +555,13 @@ function bankDetailsHtml(registrationNumber) {
 export async function sendPaymentReminderEmail({
   to, name, eventName, eventDate, eventTime, location, registrationNumber,
   amountDue, payUrl, final = false, cancelOn = null, claimedTransfer = false,
+  // Coupon part-payment: the amount already covered by a coupon, and the
+  // full fee, so the email can show the breakdown. couponWillLapse adds the
+  // "your coupon payment will lapse if the balance isn't paid" warning to
+  // the final (pre-cancellation) reminder.
+  couponAmount = 0, totalFee = null, couponWillLapse = false,
 }) {
+  const hasCoupon = Number(couponAmount) > 0;
   const heading = final
     ? cancelOn
       ? "Final reminder: payment needed to keep your booking"
@@ -564,7 +570,16 @@ export async function sendPaymentReminderEmail({
   const intro = claimedTransfer
     ? `Hi ${escapeHtml(name)}, you told us you'd paid by bank transfer, but we haven't been able to match it in our bank account yet.
        Please check the transfer went through with the reference below, or reply to this email with the date and amount so we can find it.`
+    : hasCoupon
+    ? `Hi ${escapeHtml(name)}, thank you for registering and for your part payment by coupon. The remaining balance of your registration fee hasn't been received yet.`
     : `Hi ${escapeHtml(name)}, thank you for registering. We haven't received your payment yet.`;
+  const couponBreakdown = hasCoupon ? couponBreakdownHtml({ totalFee, couponAmount, amountDue }) : "";
+  const couponLapse = hasCoupon && couponWillLapse
+    ? `<p style="font-size:14px;font-weight:600;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;">
+         Please note: your coupon payment of $${Number(couponAmount).toFixed(2)} will lapse${cancelOn ? ` on ${escapeHtml(cancelOn)}` : ""} if the balance isn't paid —
+         the coupon is single-use, so it cannot be refunded or used again once your registration is cancelled.
+       </p>`
+    : "";
   const deadline = final && cancelOn
     ? `<p style="font-size:14px;font-weight:600;color:#b91c1c;">If payment isn't received, your registration will be cancelled on ${escapeHtml(cancelOn)} and the spots released to others.</p>`
     : "";
@@ -581,8 +596,9 @@ export async function sendPaymentReminderEmail({
       <h2 style="color:#7c3f00;">${heading}</h2>
       <p style="font-size:14px;">${intro}</p>
       ${eventDetailsHtml({ eventName, eventDate, eventTime, location, registrationNumber })}
-      <p style="font-size:14px;margin-top:12px;">Amount due: <strong>$${Number(amountDue).toFixed(2)}</strong></p>
+      ${couponBreakdown || `<p style="font-size:14px;margin-top:12px;">Amount due: <strong>$${Number(amountDue).toFixed(2)}</strong></p>`}
       ${deadline}
+      ${couponLapse}
       ${payButton}
       ${bankDetailsHtml(registrationNumber)}
       <p style="font-size:13px;color:#555;">Already paid in the last day or two? Thank you — please ignore this email; bank transfers can take a little while to show.</p>
@@ -592,18 +608,126 @@ export async function sendPaymentReminderEmail({
   return send({ to, subject, html, attachments: logoAttachment() });
 }
 
-export async function sendRegistrationCancelledEmail({ to, name, eventName, eventDate, registrationNumber, registerUrl }) {
+export async function sendRegistrationCancelledEmail({ to, name, eventName, eventDate, registrationNumber, registerUrl, couponLapsedAmount = 0 }) {
+  const couponLine = Number(couponLapsedAmount) > 0
+    ? `<p style="font-size:14px;color:#b91c1c;">The coupon part payment of <strong>$${Number(couponLapsedAmount).toFixed(2)}</strong> applied to this registration has lapsed with the cancellation.</p>`
+    : "";
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
       ${LOGO_HTML}
       <h2 style="color:#7c3f00;">Registration cancelled</h2>
       <p style="font-size:14px;">Hi ${escapeHtml(name)}, as we didn't receive payment in time, your registration below has been cancelled and the spots released.</p>
       ${eventDetailsHtml({ eventName, eventDate, registrationNumber })}
+      ${couponLine}
       <p style="font-size:14px;">If you've paid in the last day or two, or think this is a mistake, please reply to this email and we'll sort it out.</p>
       ${registerUrl ? `<p style="font-size:14px;">If spots are still available you're welcome to <a href="${registerUrl}">register again</a>.</p>` : ""}
       <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
     </div>`;
   return send({ to, subject: `Registration cancelled - ${eventName}`, html, attachments: logoAttachment() });
+}
+
+function couponBreakdownHtml({ totalFee, couponAmount, amountDue }) {
+  const row = (label, value, strong = false) =>
+    `<tr><td style="padding:3px 0;">${label}</td><td style="padding:3px 0;text-align:right;">${strong ? `<strong>${value}</strong>` : value}</td></tr>`;
+  return `
+      <table style="width:100%;font-size:14px;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;margin:12px 0;padding:6px 0;">
+        ${totalFee !== null && totalFee !== undefined ? row("Registration fee", `$${Number(totalFee).toFixed(2)}`) : ""}
+        ${row("Paid by coupon", `&minus; $${Number(couponAmount).toFixed(2)}`)}
+        ${row("Balance to pay", `$${Number(amountDue).toFixed(2)}`, true)}
+      </table>`;
+}
+
+/**
+ * Sent once when a coupon covered only PART of a registration fee and the
+ * registrant then left without paying the balance (see
+ * runCouponPartPaymentEmails in registrationScheduler.js). Thanks them for
+ * the part payment and asks for the remainder by card or bank transfer.
+ */
+export async function sendCouponPartPaymentEmail({
+  to, name, eventName, eventDate, eventTime, location, registrationNumber,
+  totalFee, couponAmount, couponCode, amountDue, payUrl,
+}) {
+  const payButton = payUrl
+    ? `<p style="text-align:center;margin:20px 0 8px;">
+         <a href="${payUrl}" target="_blank" rel="noopener" style="display:inline-block;background:#c2410c;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600;font-size:15px;">
+           Pay balance $${Number(amountDue).toFixed(2)} by card
+         </a>
+       </p>`
+    : "";
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">Thank you for your part payment 🙏</h2>
+      <p style="font-size:14px;">Hi ${escapeHtml(name)}, thank you — your coupon${couponCode ? ` <strong style="font-family:monospace;">${escapeHtml(couponCode)}</strong>` : ""} has been applied to your registration as a part payment.</p>
+      ${eventDetailsHtml({ eventName, eventDate, eventTime, location, registrationNumber })}
+      ${couponBreakdownHtml({ totalFee, couponAmount, amountDue })}
+      <p style="font-size:14px;">To confirm your booking and receive your tickets, please pay the remaining <strong>$${Number(amountDue).toFixed(2)}</strong> by credit/debit card or bank transfer.</p>
+      ${payButton}
+      ${bankDetailsHtml(registrationNumber)}
+      <p style="font-size:13px;color:#555;">Your registration stays pending until the balance is received. If it isn't paid in time, the registration may be cancelled and the coupon payment will lapse.</p>
+      <p style="font-size:13px;color:#555;">Already paid the balance? Thank you — please ignore this email; bank transfers can take a little while to show.</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
+    </div>`;
+  return send({ to, subject: `Thank you for your part payment - balance due for ${eventName}`, html, attachments: logoAttachment() });
+}
+
+/**
+ * Sent to the email entered when an admin creates coupon(s) (Admin →
+ * Coupons), and again on "Resend email". `coupons` is one or more
+ * { code, amount, qrDataUrl, validFrom, validUntil, notes } for the same
+ * event — a batch generated in one go arrives as ONE email listing every
+ * code, rather than up to 100 separate emails. QR images are attached
+ * (inline) for up to 10 coupons.
+ */
+export async function sendCouponIssuedEmail({ to, recipientName, eventName, eventYear, coupons, eventsUrl }) {
+  const list = Array.isArray(coupons) ? coupons : [];
+  if (!list.length) return { sent: false, error: "No coupons to send" };
+  const fmt = (d) => {
+    if (!d) return null;
+    const dt = new Date(d);
+    return isNaN(dt) ? String(d) : dt.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  };
+  const validityOf = (c) => {
+    const from = fmt(c.validFrom);
+    const until = fmt(c.validUntil);
+    return from && until ? `${from} to ${until}` : until ? `until ${until}` : from ? `from ${from}` : "No expiry";
+  };
+  const attachments = [...logoAttachment()];
+  const withQr = list.length <= 10;
+  const blocks = list.map((c, i) => {
+    let qrHtml = "";
+    const m = withQr && typeof c.qrDataUrl === "string" && c.qrDataUrl.match(/^data:image\/png;base64,(.+)$/);
+    if (m) {
+      const cid = `coupon-qr-${i}`;
+      attachments.push({ filename: `kutumb-coupon-${c.code}.png`, content: Buffer.from(m[1], "base64"), cid });
+      qrHtml = `<p style="margin:10px 0 0;"><img src="cid:${cid}" alt="QR code for ${escapeHtml(c.code)}" width="140" height="140" /></p>`;
+    }
+    return `
+      <div style="border:2px dashed #ea580c;background:#fff7ed;border-radius:10px;padding:14px 18px;margin:12px 0;text-align:center;">
+        <p style="margin:0;font-size:13px;color:#9a3412;">Coupon code${list.length > 1 ? ` ${i + 1} of ${list.length}` : ""}</p>
+        <p style="margin:4px 0 8px;font-size:24px;font-weight:800;letter-spacing:2px;font-family:monospace;">${escapeHtml(c.code)}</p>
+        <p style="margin:0;font-size:15px;">Value: <strong>$${Number(c.amount).toFixed(2)}</strong> &middot; Valid: ${escapeHtml(validityOf(c))}</p>
+        ${c.notes ? `<p style="margin:6px 0 0;font-size:13px;">${escapeHtml(c.notes)}</p>` : ""}
+        ${qrHtml}
+      </div>`;
+  });
+  const plural = list.length > 1;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">Your Kutumb event coupon${plural ? "s" : ""} 🎟️</h2>
+      <p style="font-size:14px;">Hi ${escapeHtml(recipientName || "there")}, ${plural ? `${list.length} coupons have` : "a coupon has"} been issued to you for:</p>
+      <p style="font-size:16px;margin:4px 0;"><strong>${escapeHtml(eventName)}${eventYear ? ` (${escapeHtml(eventYear)})` : ""}</strong></p>
+      ${blocks.join("")}
+      <p style="font-size:14px;"><strong>How to use ${plural ? "a coupon" : "it"}:</strong> register for the event${eventsUrl ? ` on the <a href="${eventsUrl}">Kutumb Events page</a>` : " on the Kutumb website"}, then type the code into the <em>"Have an event coupon?"</em> box on the payment screen and press <em>Apply</em>.
+      If the coupon is worth less than the registration fee, the balance is calculated automatically and can be paid by card or bank transfer.</p>
+      <p style="font-size:13px;color:#555;">Each coupon can be used once only, and only for this event. Please keep this email safe.</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
+    </div>`;
+  const subject = plural
+    ? `Your ${list.length} Kutumb coupons - ${eventName}`
+    : `Your Kutumb coupon ${list[0].code} - ${eventName}`;
+  return send({ to, subject, html, attachments });
 }
 
 export async function sendEventWelcomeEmail({
