@@ -180,6 +180,7 @@ const BankDashboard = () => {
   const months: Month[] = summary?.months || [];
   const t = summary?.totals;
   const es = summary?.eventSummary;
+  const pb = summary?.periodBalances;
   const eventName = events.find((e) => e.key === event);
 
   return (
@@ -282,8 +283,31 @@ const BankDashboard = () => {
           <Card><CardContent className="pt-6"><Stat label={`Money in (${t.creditCount})`} value={money(t.credits)} tone="in" /></CardContent></Card>
           <Card><CardContent className="pt-6"><Stat label={`Money out (${t.debitCount})`} value={money(t.debits)} tone="out" /></CardContent></Card>
           <Card><CardContent className="pt-6"><Stat label="Net" value={money(t.net)} /></CardContent></Card>
-          <Card><CardContent className="pt-6"><Stat label="Months" value={String(months.length)} /></CardContent></Card>
+          <Card><CardContent className="pt-6"><Stat label="Bank data held from" value={pb?.firstDataDay ? pb.firstDataDay.split("-").reverse().join("/") : "—"} /></CardContent></Card>
         </div>
+      )}
+
+      {/* Balance reconciliation for the period (whole account, not per event) */}
+      {pb && (!event || event === "") && (
+        <Card>
+          <CardContent className="pt-6 text-sm">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>Opening balance{pb.openingDate ? ` (${pb.openingDate.split("-").reverse().join("/")})` : ""}</span>
+              <strong>{money(pb.opening)}</strong>
+              <span className="text-green-700">+ money in {money(t.credits)}</span>
+              <span className="text-red-700">− money out {money(t.debits)}</span>
+              <span>=</span>
+              <span>Closing balance{pb.closingDate ? ` (${pb.closingDate.split("-").reverse().join("/")})` : " (today)"}</span>
+              <strong>{money(pb.closing)}</strong>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Net is only the movement within the period; the bank balance also includes money held before it.
+              Balances are worked back from today's live NAB balance using the stored transactions
+              {pb.startsBeforeData ? " — the opening figure is the balance before the earliest transaction openfeed has provided" : ""}.
+              Pending (not yet posted) transactions aren't included.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Chart */}
