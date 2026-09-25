@@ -42,3 +42,31 @@ If credits run out, syncing pauses with a clear message until topped up.
 - "Kutumb NAB account not found" → Connect again and tick that account on openfeed.
 - NAB data on openfeed refreshes about every 4 hours, so a transfer made minutes ago may not
   show yet — the Bank File Drop Box remains available for anything urgent.
+
+## Bank dashboard (Admin → Bank, super admins only)
+
+Every NAB transaction pulled through openfeed — money in and out — is kept for the
+dashboard (the first sync reads a year of history).
+
+- Current balance, last sync and **Sync now**.
+- **Monthly chart and table** of money in / money out / net for the chosen period
+  (last 12 months, this or last Australian financial year, all, or custom dates).
+- **Drill-down**: click a month (bar or row), or "All transactions", to list every
+  transaction, filter money in/out, search, and **Export CSV**.
+- **Event view**: pick an event to see its registrations, fees due, money received (all
+  payment methods), outstanding and pending, plus the bank credits and debits linked to it.
+- **PDF reports**: "Download PDF report" gives a printable A4 report for the chosen event
+  and/or period — summary, the event's registration money, monthly chart and table, money
+  by category and (optionally) every transaction. The **PDF** button in the transaction list
+  does the same for just the selected month, money in/out or search.
+- Credits are linked to events automatically when they're reconciled to a registration
+  ("auto"). Use **Tag** on any line — e.g. a hall-hire debit — to link it to an event and
+  give it a category and notes. A manual tag overrides the automatic one.
+
+## Automatic reconciliation for upcoming events
+
+Admin → Key Settings & Access → **Settings → Payment Reconciliation** (on by default):
+new NAB transactions are pulled every 4 hours, and every hour stored bank credits that
+haven't been matched yet are checked again against upcoming events (and events that
+ended in the last 7 days) that still have pending payments. Manual syncs, uploads and
+the Bank File Drop Box still reconcile every event with unpaid registrations.
