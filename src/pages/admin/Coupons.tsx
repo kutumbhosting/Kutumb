@@ -411,7 +411,16 @@ const Coupons = ({ groupedEvents }: CouponsProps) => {
                           {c.qr_code && <img src={c.qr_code} alt={c.code} className="w-12 h-12 border rounded bg-white" />}
                         </td>
                         <td className="p-2 font-mono font-medium">{c.code}</td>
-                        <td className="p-2">${Number(c.amount).toFixed(2)}</td>
+                        <td className="p-2">
+                          ${Number(c.amount).toFixed(2)}
+                          {/* A partially-redeemed coupon keeps its leftover balance
+                              usable, so show what it originally covered too. */}
+                          {c.original_amount != null && Number(c.original_amount) !== Number(c.amount) && (
+                            <div className="text-xs text-muted-foreground">
+                              of ${Number(c.original_amount).toFixed(2)} original
+                            </div>
+                          )}
+                        </td>
                         <td className="p-2">
                           {c.recipient_name || c.recipient_email ? (
                             <>
@@ -424,7 +433,14 @@ const Coupons = ({ groupedEvents }: CouponsProps) => {
                         </td>
                         <td className="p-2">
                           {c.status === "active" ? (
-                            <span className="text-green-700 font-medium">Active</span>
+                            <span className="text-green-700 font-medium">
+                              Active
+                              {c.redeemed_at && (
+                                <div className="text-xs text-muted-foreground font-normal">
+                                  Partly used — {new Date(c.redeemed_at).toLocaleDateString("en-AU")}
+                                </div>
+                              )}
+                            </span>
                           ) : c.status === "used" ? (
                             <span className="text-muted-foreground">Used{c.redeemed_at ? ` — ${new Date(c.redeemed_at).toLocaleDateString("en-AU")}` : ""}</span>
                           ) : (

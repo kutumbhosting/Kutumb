@@ -68,6 +68,13 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
   const [couponCode, setCouponCode] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [couponResult, setCouponResult] = useState<{ remaining: number; applied: number } | null>(null);
+  // Set after "Apply" is clicked the first time, which only CHECKS the
+  // coupon's current value (doesn't redeem it) so the person can see what
+  // it's worth before committing. Clicking "Apply" again while this still
+  // matches the typed code is the actual redeem. Cleared whenever the code
+  // is edited, so a stale preview can never be confirmed against a
+  // different coupon.
+  const [couponPreview, setCouponPreview] = useState<{ code: string; balance: number; original: number } | null>(null);
 
   // Which payment methods are currently offered, set by an admin under
   // Settings & Access → Payment Methods. Bank transfer is on by default so
@@ -231,10 +238,39 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
   };
 
   const handleApplyCoupon = async () => {
-    if (!couponCode.trim()) {
+    const trimmedCode = couponCode.trim();
+    if (!trimmedCode) {
       toast({ title: "Enter a coupon code", variant: "destructive" });
       return;
     }
+
+    // Step 1: nothing checked yet (or the code changed since the last
+    // check) — look up the coupon's current value WITHOUT redeeming it,
+    // so the person can see what it's worth before committing.
+    if (!couponPreview || couponPreview.code.toUpperCase() !== trimmedCode.toUpperCase()) {
+      setApplyingCoupon(true);
+      try {
+        const params = new URLSearchParams({
+          code: trimmedCode,
+          eventName: data.eventName,
+          eventYear: data.eventYear || "",
+        });
+        const res = await fetch(`/api/coupons/check?${params.toString()}`);
+        const result = await res.json();
+        if (!res.ok || !result.ok) throw new Error(result.message || "That coupon code isn't valid for this event");
+        setCouponPreview({ code: trimmedCode, balance: Number(result.amount) || 0, original: Number(result.originalAmount) || 0 });
+      } catch (err: any) {
+        setCouponPreview(null);
+        toast({ title: "Coupon couldn't be checked", description: err.message, variant: "destructive" });
+      } finally {
+        setApplyingCoupon(false);
+      }
+      return;
+    }
+
+    // Step 2: same code as what was just previewed — actually redeem it.
+    // Only what's still owed gets deducted; any leftover balance stays on
+    // the coupon (still active) for a future booking against this event.
     setApplyingCoupon(true);
     try {
       const res = await fetch("/api/events/apply-coupon", {
@@ -244,7 +280,7 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
           eventName: data.eventName,
           eventYear: data.eventYear,
           email: data.email,
-          couponCode: couponCode.trim(),
+          couponCode: trimmedCode,
         }),
       });
       const result = await res.json();
@@ -255,9 +291,11 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
         applied: (prev?.applied || 0) + (Number(result.amountApplied) || 0),
       }));
       setCouponCode("");
+      setCouponPreview(null);
       toast({ title: "Coupon applied 🎟️", description: result.message });
       if (Number(result.remaining) <= 0) onPaid();
     } catch (err: any) {
+      setCouponPreview(null);
       toast({ title: "Coupon couldn't be applied", description: err.message, variant: "destructive" });
     } finally {
       setApplyingCoupon(false);
@@ -367,13 +405,35 @@ export default function RegistrationPaymentPanel({ data, anchorEl, preferredMeth
           <Input
             id="event-coupon-code"
             value={couponCode}
-            onChange={(e) => setCouponCode(e.target.value)}
+            onChange={(e) => {
+              setCouponCode(e.target.value);
+              // A previously-checked preview only applies to the code it was
+              // checked for — editing the field invalidates it, so "Apply"
+              // always re-checks before it will redeem anything.
+              setCouponPreview(null);
+            }}
             placeholder="e.g. KUT-7F3QK2"
           />
           <Button type="button" variant="secondary" onClick={handleApplyCoupon} disabled={applyingCoupon}>
-            {applyingCoupon ? "Applying..." : "Apply"}
+            {applyingCoupon
+              ? "Checking..."
+              : couponPreview && couponPreview.code.toUpperCase() === couponCode.trim().toUpperCase()
+              ? `Confirm $${Math.min(couponPreview.balance, remaining).toFixed(2)}`
+              : "Apply"}
           </Button>
         </div>
+        {couponPreview && couponPreview.code.toUpperCase() === couponCode.trim().toUpperCase() && (
+          <p className="text-sm text-muted-foreground">
+            This coupon has <span className="font-semibold text-foreground">${couponPreview.balance.toFixed(2)}</span> available
+            {couponPreview.original > couponPreview.balance && ` (of $${couponPreview.original.toFixed(2)} originally)`}.{" "}
+            {couponPreview.balance >= remaining ? (
+              <>Applying it will cover your ${remaining.toFixed(2)} balance in full{couponPreview.balance > remaining && `, leaving $${(couponPreview.balance - remaining).toFixed(2)} on the coupon for next time`}.</>
+            ) : (
+              <>Applying it will cover ${couponPreview.balance.toFixed(2)} of your ${remaining.toFixed(2)} balance — you'll still owe ${(remaining - couponPreview.balance).toFixed(2)}.</>
+            )}{" "}
+            Click <span className="font-semibold text-foreground">Confirm</span> above to redeem it now.
+          </p>
+        )}
       </div>
 
       {methods.card && (
