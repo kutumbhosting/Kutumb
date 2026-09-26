@@ -80,8 +80,8 @@ router.post("/admin", requireAdmin, async (req, res) => {
           const qrCode = await buildCouponQrDataUrl(code);
           const { rows } = await pool.query(
             `INSERT INTO kutumb_event_coupons
-               (code, event_name, event_year, amount, qr_code, recipient_name, recipient_email, notes, valid_from, valid_until, created_by)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+               (code, event_name, event_year, amount, original_amount, qr_code, recipient_name, recipient_email, notes, valid_from, valid_until, created_by)
+             VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
             [
               code, eventName.trim(), eventYear.trim(), Number(amount), qrCode,
               recipientName?.trim() || null, recipientEmail?.trim() || null, notes?.trim() || null,
@@ -223,7 +223,14 @@ router.get("/check", async (req, res) => {
   const { code, eventName, eventYear } = req.query;
   const result = await findValidCoupon(code, eventName, eventYear);
   if (!result.ok) return res.status(400).json({ ok: false, message: result.message });
-  res.json({ ok: true, amount: Number(result.coupon.amount) });
+  // `amount` is the coupon's current remaining balance (what redeeming it
+  // right now is actually worth); `originalAmount` is what it was first
+  // issued for, shown so a partially-spent coupon's history makes sense.
+  res.json({
+    ok: true,
+    amount: Number(result.coupon.amount),
+    originalAmount: Number(result.coupon.original_amount ?? result.coupon.amount),
+  });
 });
 
 export default router;

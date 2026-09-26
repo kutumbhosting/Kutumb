@@ -38,17 +38,22 @@ router.post("/apply-coupon", async (req, res) => {
       return res.status(404).json({ message: "Registration not found" });
     }
 
-    const redemption = await redeemCouponForRegistration(client, couponCode, eventName, eventYear, registration.id);
+    const alreadyPaid = Number(registration.payment_amount) || 0;
+    const fee = Number(registration.fee) || 0;
+    const amountDue = Math.max(fee - alreadyPaid, 0);
+
+    // Only ever deducts up to what's actually still owed — if the coupon is
+    // worth more than that, the leftover balance stays on the coupon
+    // (still 'active') for a future booking against this same event.
+    const redemption = await redeemCouponForRegistration(client, couponCode, eventName, eventYear, registration.id, amountDue);
     if (!redemption.ok) {
       await client.query("ROLLBACK");
       return res.status(400).json({ message: redemption.message });
     }
 
     const coupon = redemption.coupon;
-    const alreadyPaid = Number(registration.payment_amount) || 0;
-    const couponAmount = Number(coupon.amount);
-    const newAmountPaid = alreadyPaid + couponAmount;
-    const fee = Number(registration.fee) || 0;
+    const couponApplied = redemption.applied;
+    const newAmountPaid = alreadyPaid + couponApplied;
     const fullyPaid = newAmountPaid >= fee;
 
     const { rows: updated } = await client.query(
@@ -61,7 +66,7 @@ router.post("/apply-coupon", async (req, res) => {
          payment_status = CASE WHEN $4 THEN 'Paid' ELSE payment_status END,
          registration_status = CASE WHEN $4 THEN 'confirmed' ELSE registration_status END
        WHERE id = $5 RETURNING *`,
-      [newAmountPaid, coupon.code, couponAmount, fullyPaid, registration.id]
+      [newAmountPaid, coupon.code, couponApplied, fullyPaid, registration.id]
     );
 
     await client.query("COMMIT");
@@ -79,12 +84,16 @@ router.post("/apply-coupon", async (req, res) => {
       sendEventTickets(updated[0].id).catch((err) => console.error("Ticket email error:", err));
     }
 
+    const couponLeftover = redemption.remainingBalance;
     res.json({
       message: fullyPaid
-        ? "Coupon applied — your registration is fully paid."
+        ? couponLeftover > 0
+          ? `Coupon applied — your registration is fully paid. $${couponLeftover.toFixed(2)} remains on this coupon for a future booking.`
+          : "Coupon applied — your registration is fully paid."
         : `Coupon applied. $${(fee - newAmountPaid).toFixed(2)} still remaining.`,
-      amountApplied: couponAmount,
+      amountApplied: couponApplied,
       remaining: Math.max(fee - newAmountPaid, 0),
+      couponRemainingBalance: couponLeftover,
       registration: updated[0],
     });
   } catch (err) {

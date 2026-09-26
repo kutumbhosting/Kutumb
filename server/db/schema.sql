@@ -382,10 +382,17 @@ ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS under5_free BOOLEAN 
 ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS child_member_fee NUMERIC(10,2);
 ALTER TABLE kutumb_upcoming_events ADD COLUMN IF NOT EXISTS child_non_member_fee NUMERIC(10,2);
 
--- Event-specific coupons. Single-use by default (redeemed_by_registration_id
--- is set the moment it's applied, and the application layer refuses to
--- apply an already-redeemed/void/expired coupon again) — a coupon cannot
--- be reused once it has been used on a registration.
+-- Event-specific coupons. `amount` is the coupon's CURRENT remaining
+-- balance — redeeming it only ever deducts what a booking actually still
+-- owes (never more than the balance), so a $100 coupon spent on a $40
+-- booking leaves $60 on the coupon, still 'active', for a later booking
+-- against the same event. `original_amount` is fixed at creation and never
+-- changes, purely so the admin console and emails can still show what the
+-- coupon was originally worth. A coupon only flips to 'used' once its
+-- balance reaches zero; the application layer refuses to apply an
+-- already-void/expired/zero-balance coupon again. redeemed_by_registration_id
+-- / redeemed_at reflect the most recent redemption only — with partial,
+-- repeatable use this is a "last touched by" pointer, not a full history.
 CREATE TABLE IF NOT EXISTS kutumb_event_coupons (
   id SERIAL PRIMARY KEY,
   code TEXT UNIQUE NOT NULL,
@@ -405,6 +412,11 @@ CREATE TABLE IF NOT EXISTS kutumb_event_coupons (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_kutumb_coupons_event ON kutumb_event_coupons(event_name, event_year);
+ALTER TABLE kutumb_event_coupons ADD COLUMN IF NOT EXISTS original_amount NUMERIC(10,2);
+-- Backfill: for any coupon created before this column existed, its original
+-- face value is simply whatever `amount` holds right now (nothing had
+-- partial-redemption behaviour yet, so amount was never partially spent).
+UPDATE kutumb_event_coupons SET original_amount = amount WHERE original_amount IS NULL;
 
 -- Temporary check-in login codes. Generated 5 at a time, on demand, for a
 -- specific event's door volunteers to log in to the check-in scanner

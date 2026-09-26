@@ -58,11 +58,17 @@ export async function findValidCoupon(code, eventName, eventYear) {
 /**
  * Redeems a coupon against a registration inside the caller's transaction.
  * Locks the coupon row (FOR UPDATE) so two simultaneous redemption attempts
- * on the same coupon can never both succeed — the second one always sees
- * it already marked 'used' and is rejected. This is the actual enforcement
- * of "a coupon cannot be reused"; findValidCoupon above is just a preview.
+ * on the same coupon can never both succeed on more than the balance that's
+ * actually left. This is the actual enforcement of "a coupon can't be
+ * overspent"; findValidCoupon above is just a preview.
+ *
+ * `amountDue` is how much the registration still owes right now. Only
+ * min(coupon balance, amountDue) is ever deducted — a $100 coupon applied
+ * to a $40 balance due only spends $40, leaving $60 on the coupon (still
+ * 'active') so it can be used again on a future booking for this event.
+ * The coupon only becomes 'used' once its balance hits zero.
  */
-export async function redeemCouponForRegistration(client, code, eventName, eventYear, registrationId) {
+export async function redeemCouponForRegistration(client, code, eventName, eventYear, registrationId, amountDue) {
   const { rows } = await client.query(
     `SELECT * FROM kutumb_event_coupons
      WHERE upper(code) = upper($1) AND event_name = $2 AND event_year = $3
@@ -72,17 +78,27 @@ export async function redeemCouponForRegistration(client, code, eventName, event
   const coupon = rows[0];
   if (!coupon) return { ok: false, message: "That coupon code isn't valid for this event" };
   if (coupon.status !== "active") {
-    return { ok: false, message: coupon.status === "used" ? "This coupon has already been used" : "This coupon is no longer valid" };
+    return { ok: false, message: coupon.status === "used" ? "This coupon has already been fully used" : "This coupon is no longer valid" };
   }
   const now = new Date();
   if (coupon.valid_from && new Date(coupon.valid_from) > now) return { ok: false, message: "This coupon isn't valid yet" };
   if (coupon.valid_until && couponExpiresAt(coupon.valid_until) < now) return { ok: false, message: "This coupon has expired" };
 
+  const balance = Number(coupon.amount);
+  const due = Math.max(Number(amountDue) || 0, 0);
+  const applied = Math.min(balance, due);
+  // Round to cents to avoid floating-point remainders like $59.999999996.
+  const remainingBalance = Math.round((balance - applied) * 100) / 100;
+  const fullyConsumed = remainingBalance <= 0;
+
   const { rows: updated } = await client.query(
     `UPDATE kutumb_event_coupons
-     SET status = 'used', redeemed_by_registration_id = $1, redeemed_at = now()
-     WHERE id = $2 RETURNING *`,
-    [registrationId, coupon.id]
+     SET amount = $1,
+         status = CASE WHEN $2 THEN 'used' ELSE 'active' END,
+         redeemed_by_registration_id = $3,
+         redeemed_at = now()
+     WHERE id = $4 RETURNING *`,
+    [remainingBalance, fullyConsumed, registrationId, coupon.id]
   );
-  return { ok: true, coupon: updated[0] };
+  return { ok: true, coupon: updated[0], applied, remainingBalance };
 }
