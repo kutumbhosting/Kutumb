@@ -772,6 +772,36 @@ export async function sendCouponIssuedEmail({ to, recipientName, eventName, even
   return send({ to, subject, html, attachments });
 }
 
+export async function sendCheckinCodesEmail({ to, eventName, eventYear, eventDateText, codes, expiresAt }) {
+  const expiryText = (() => {
+    const dt = new Date(expiresAt);
+    return isNaN(dt)
+      ? "the end of the event day"
+      : dt.toLocaleString("en-AU", { dateStyle: "medium", timeStyle: "short", timeZone: "Australia/Sydney" });
+  })();
+  const codeBlocks = (codes || [])
+    .map(
+      (code) => `
+      <div style="display:inline-block;border:2px dashed #ea580c;background:#fff7ed;border-radius:10px;padding:10px 22px;margin:6px;text-align:center;">
+        <span style="font-size:22px;font-weight:800;letter-spacing:3px;font-family:monospace;">${escapeHtml(code)}</span>
+      </div>`
+    )
+    .join("");
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
+      ${LOGO_HTML}
+      <h2 style="color:#7c3f00;">Check-in codes 🎫</h2>
+      <p style="font-size:14px;">${codes?.length || 0} temporary check-in login code(s) have been generated for:</p>
+      <p style="font-size:16px;margin:4px 0;"><strong>${escapeHtml(eventName)}${eventYear ? ` (${escapeHtml(eventYear)})` : ""}</strong>${eventDateText ? ` &mdash; ${escapeHtml(eventDateText)}` : ""}</p>
+      <div style="text-align:center;margin:16px 0;">${codeBlocks}</div>
+      <p style="font-size:14px;">Give one code to each door volunteer's device. At <a href="https://kutumb.org.au/checkin">kutumb.org.au/checkin</a>, choose <strong>"Log in with a code"</strong> and type it in — no email or password needed.</p>
+      <p style="font-size:14px;font-weight:600;color:#9a3412;">These codes stop working after ${escapeHtml(expiryText)} and are then deleted automatically.</p>
+      <p style="font-size:13px;color:#555;">Any of the 5 codes can be used by more than one device at the same time, so hand them out freely to everyone helping on the day.</p>
+      <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
+    </div>`;
+  return send({ to, subject: `Check-in codes — ${eventName}`, html, attachments: logoAttachment() });
+}
+
 export async function sendEventWelcomeEmail({
   to, name, eventName, eventDate, eventTime, location, registrationNumber, peopleCount, ticketsPdfBuffer, when = "tomorrow",
 }) {

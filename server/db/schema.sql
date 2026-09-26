@@ -406,6 +406,31 @@ CREATE TABLE IF NOT EXISTS kutumb_event_coupons (
 );
 CREATE INDEX IF NOT EXISTS idx_kutumb_coupons_event ON kutumb_event_coupons(event_name, event_year);
 
+-- Temporary check-in login codes. Generated 5 at a time, on demand, for a
+-- specific event's door volunteers to log in to the check-in scanner
+-- (kutumb.org.au/checkin) without needing a real admin email/password.
+-- Every code:
+--   - only ever grants a check-in session (scan tickets / mark attendees
+--     checked in for THIS event) - never full admin access, see
+--     server/lib/auth.js's requireAdminOrCheckinSession,
+--   - expires at the end of the event's day (not single-use - several
+--     volunteers/devices can share the 5 codes across the day),
+--   - is deleted outright once expired (a lazy delete the moment an expired
+--     code is tried, plus a periodic sweep - see cleanupExpiredCheckinCodes
+--     in registrationScheduler.js), so no stray login codes accumulate.
+CREATE TABLE IF NOT EXISTS kutumb_checkin_codes (
+  id SERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  event_name TEXT NOT NULL,
+  event_year TEXT,
+  event_date_text TEXT,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_kutumb_checkin_codes_expires ON kutumb_checkin_codes(expires_at);
+
 -- ============================================================
 -- Square / PayPal payment tracking for the Event Registration flow.
 -- Deliberately separate from kutumb_orders (which is entangled with the

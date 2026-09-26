@@ -47,6 +47,7 @@ import {
 } from "./mailer.js";
 import { buildTicketsPdfForRegistration } from "./tickets.js";
 import { reconcileOpenEvents } from "./bankLedger.js";
+import { cleanupExpiredCheckinCodes } from "./checkinCodes.js";
 
 export const CANCELLED_MESSAGE =
   "This registration was cancelled because payment wasn't received in time. " +
@@ -634,6 +635,11 @@ export function startRegistrationScheduler() {
   const tick = () => {
     runCouponPartPaymentEmails().catch((err) => console.error("Coupon part-payment email error:", err.message));
     runRegistrationEmails().catch((err) => console.error("Registration email scheduler error:", err.message));
+    // Temporary check-in login codes (see server/lib/checkinCodes.js) are
+    // also lazily deleted the moment an expired one is actually tried, but
+    // this sweep catches the ones nobody ever tries again after expiry, so
+    // the table never quietly accumulates stale rows.
+    cleanupExpiredCheckinCodes().catch((err) => console.error("Check-in code cleanup error:", err.message));
   };
   timer = setInterval(tick, 10 * 60_000);
   timer.unref?.();

@@ -1,10 +1,51 @@
 import { Router } from "express";
 import { pool } from "../db/pool.js";
-import { requireAdmin } from "../lib/auth.js";
+import { requireAdmin, requireAdminOrCheckinSession } from "../lib/auth.js";
 import { logAudit } from "../lib/audit.js";
+import { generateCheckinCodes } from "../lib/checkinCodes.js";
+import { sendCheckinCodesEmail } from "../lib/mailer.js";
 
 const router = Router();
-router.use(requireAdmin);
+
+// A temporary check-in code's session (see server/lib/auth.js) is allowed
+// through every route in this file — scanning tickets and viewing the
+// attendee list is exactly what those codes are for. Generating new codes
+// (below) is deliberately re-guarded with the stricter requireAdmin, since
+// that's an admin-only action, not something a check-in session itself
+// should be able to do.
+router.use(requireAdminOrCheckinSession);
+
+// Generates 5 fresh temporary login codes for one event and emails them to
+// info@kutumb.org.au. Admin-only (not usable from a check-in-code session).
+router.post("/generate-codes", requireAdmin, async (req, res) => {
+  try {
+    const { eventName, eventYear, eventDateText } = req.body || {};
+    if (!eventName) return res.status(400).json({ message: "eventName is required" });
+
+    const { codes, expiresAt } = await generateCheckinCodes({
+      eventName,
+      eventYear,
+      eventDateText,
+      createdBy: req.admin?.email,
+    });
+
+    const sent = await sendCheckinCodesEmail({
+      to: "info@kutumb.org.au",
+      eventName,
+      eventYear,
+      eventDateText,
+      codes,
+      expiresAt,
+    });
+
+    await logAudit(req.admin, "checkin.generate_codes", eventName, { count: codes.length, expiresAt, emailSent: sent.sent });
+
+    res.json({ codes, expiresAt, emailSent: sent.sent, emailError: sent.sent ? undefined : sent.error });
+  } catch (err) {
+    console.error("GENERATE CHECKIN CODES ERROR:", err);
+    res.status(500).json({ message: "Failed to generate check-in codes" });
+  }
+});
 
 // Every attendee, from BOTH the Stripe-ticketing system (kutumb_attendees)
 // and the main Event Registration table's individual attendees
@@ -126,7 +167,7 @@ router.post("/scan", async (req, res) => {
   if (!found) return res.status(404).json({ message: "No ticket/attendee found for this QR code" });
   const { source, row } = found;
 
-  const updated = await markCheckedIn({ source, id: row.id, checkedInBy: req.admin?.email || null, override });
+  const updated = await markCheckedIn({ source, id: row.id, checkedInBy: req.admin?.scope === "checkin_code" ? req.admin?.name : (req.admin?.email || null), override });
 
   if (!updated) {
     // The conditional UPDATE matched nothing — someone (possibly a
@@ -172,7 +213,7 @@ router.post("/manual/:attendeeId", async (req, res) => {
   const source = prefix === "reg" ? "registration" : "ticket";
   const override = !!req.body?.override;
 
-  const updated = await markCheckedIn({ source, id, checkedInBy: req.admin?.email || null, override });
+  const updated = await markCheckedIn({ source, id, checkedInBy: req.admin?.scope === "checkin_code" ? req.admin?.name : (req.admin?.email || null), override });
 
   if (!updated) {
     // Either the attendee doesn't exist, or (far more likely) they're
