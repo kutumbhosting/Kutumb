@@ -44,6 +44,16 @@ export default function CheckInStaff() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Code-based login (first/default option) — a volunteer types one of the
+  // 5 temporary per-event codes an admin generated and emailed to
+  // info@kutumb.org.au, no email/password needed. Password login (below)
+  // is kept as a fallback second option, e.g. if the codes weren't handed
+  // out or have expired.
+  const [loginMode, setLoginMode] = useState<"code" | "password">("code");
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState("");
+  const [loggingInWithCode, setLoggingInWithCode] = useState(false);
+
   const [banner, setBanner] = useState<Banner>(null);
   const [count, setCount] = useState(0);
   const [cameraError, setCameraError] = useState("");
@@ -81,10 +91,31 @@ export default function CheckInStaff() {
     }
   };
 
+  const handleCodeLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCodeError("");
+    setLoggingInWithCode(true);
+    try {
+      const data = await api("/api/admin-auth/login-code", {
+        method: "POST",
+        body: JSON.stringify({ code: codeInput }),
+      });
+      setIsLoggedIn(true);
+      setAdminName(data.admin?.name || data.admin?.email || "");
+    } catch (err: any) {
+      setCodeError(err.message || "That code wasn't recognised");
+    } finally {
+      setLoggingInWithCode(false);
+    }
+  };
+
   const handleLogout = async () => {
     await api("/api/admin-auth/logout", { method: "POST" }).catch(() => {});
     setIsLoggedIn(false);
     setLoginData({ email: DEFAULT_CHECKIN_EMAIL, password: "" });
+    setCodeInput("");
+    setCodeError("");
+    setLoginMode("code");
     setBanner(null);
     setCount(0);
   };
@@ -171,50 +202,84 @@ export default function CheckInStaff() {
   if (!isLoggedIn) {
     return (
       <div style={styles.centerScreen}>
-        <form onSubmit={handleLogin} style={styles.loginCard}>
+        <div style={styles.loginCard}>
           <h1 style={styles.title}>Kutumb Check-in</h1>
           <p style={styles.subtitle}>Sign in to start scanning tickets</p>
-          <input
-            style={styles.input}
-            type="email"
-            placeholder="Email"
-            autoComplete="username"
-            value={loginData.email}
-            onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-            required
-          />
-          <div style={styles.passwordWrap}>
-            <input
-              style={{ ...styles.input, width: "100%", boxSizing: "border-box", paddingRight: 52 }}
-              type={showPassword ? "text" : "password"}
-              placeholder="Password"
-              autoComplete="current-password"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              value={loginData.password}
-              onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              style={styles.eyeButton}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              aria-pressed={showPassword}
-            >
-              {showPassword ? (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-              ) : (
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-              )}
-            </button>
-          </div>
-          {loginError && <p style={styles.errorText}>{loginError}</p>}
-          <button type="submit" style={styles.primaryButton} disabled={loggingIn}>
-            {loggingIn ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
+
+          {loginMode === "code" ? (
+            <form onSubmit={handleCodeLogin} style={styles.loginFormGap}>
+              <input
+                style={{ ...styles.input, ...styles.codeInput }}
+                type="text"
+                inputMode="text"
+                placeholder="Event code"
+                autoComplete="one-time-code"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={8}
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
+                autoFocus
+                required
+              />
+              <p style={styles.hintSmall}>Ask an event admin for today's check-in code.</p>
+              {codeError && <p style={styles.errorText}>{codeError}</p>}
+              <button type="submit" style={styles.primaryButton} disabled={loggingInWithCode || !codeInput}>
+                {loggingInWithCode ? "Signing in…" : "Sign in with code"}
+              </button>
+              <button type="button" style={styles.linkButton} onClick={() => { setLoginMode("password"); setCodeError(""); }}>
+                Use email &amp; password instead
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} style={styles.loginFormGap}>
+              <input
+                style={styles.input}
+                type="email"
+                placeholder="Email"
+                autoComplete="username"
+                value={loginData.email}
+                onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                required
+              />
+              <div style={styles.passwordWrap}>
+                <input
+                  style={{ ...styles.input, width: "100%", boxSizing: "border-box", paddingRight: 52 }}
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={loginData.password}
+                  onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  style={styles.eyeButton}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                  ) : (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  )}
+                </button>
+              </div>
+              {loginError && <p style={styles.errorText}>{loginError}</p>}
+              <button type="submit" style={styles.primaryButton} disabled={loggingIn}>
+                {loggingIn ? "Signing in…" : "Sign in"}
+              </button>
+              <button type="button" style={styles.linkButton} onClick={() => { setLoginMode("code"); setLoginError(""); }}>
+                Use a check-in code instead
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     );
   }
@@ -277,6 +342,26 @@ const styles: Record<string, React.CSSProperties> = {
   },
   title: { margin: 0, fontSize: 24, fontWeight: 800, textAlign: "center", color: "#1e293b" },
   subtitle: { margin: "0 0 8px", fontSize: 14, textAlign: "center", color: "#64748b" },
+  loginFormGap: { display: "flex", flexDirection: "column", gap: 12 },
+  codeInput: {
+    textAlign: "center",
+    fontSize: 26,
+    fontWeight: 800,
+    letterSpacing: 6,
+    fontFamily: "monospace",
+    textTransform: "uppercase",
+  },
+  hintSmall: { margin: "-4px 0 0", fontSize: 12, textAlign: "center", color: "#94a3b8" },
+  linkButton: {
+    background: "transparent",
+    border: "none",
+    color: "#ea580c",
+    fontSize: 13,
+    fontWeight: 600,
+    textAlign: "center",
+    cursor: "pointer",
+    padding: 4,
+  },
   passwordWrap: {
     position: "relative",
     display: "flex",

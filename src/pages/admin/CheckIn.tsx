@@ -35,9 +35,46 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
   const scannerRef = useRef<any>(null);
   const lastScanRef = useRef<{ token: string; at: number } | null>(null);
 
+  // ── Temporary check-in login codes ───────────────────────────────────
+  // date_text lives on kutumb_upcoming_events, not on the registration rows
+  // groupedEvents is built from — so it's fetched separately here, purely
+  // to work out when a generated code should expire (end of the event day).
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([]);
+  const [generatingCodes, setGeneratingCodes] = useState(false);
+  const [generatedCodes, setGeneratedCodes] = useState<{ codes: string[]; expiresAt: string; emailSent: boolean } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/upcoming-events").then((r) => r.json()).then(setUpcomingEvents).catch(() => {});
+  }, []);
+
   const eventOptions = Array.from(
     new Set(Object.values(groupedEvents).map((rows: any) => rows[0]?.eventName).filter(Boolean))
   );
+
+  const selectedEventRows = Object.values(groupedEvents).find((rows: any) => rows[0]?.eventName === eventId) as any[] | undefined;
+  const selectedEventYear = selectedEventRows?.[0]?.eventYear;
+  const selectedEventDateText = upcomingEvents.find((e) => e.title === eventId)?.date;
+
+  const generateCodes = async () => {
+    if (!eventId) return;
+    setGeneratingCodes(true);
+    setGeneratedCodes(null);
+    try {
+      const data = await api("/api/checkin/generate-codes", {
+        method: "POST",
+        body: JSON.stringify({ eventName: eventId, eventYear: selectedEventYear, eventDateText: selectedEventDateText }),
+      });
+      setGeneratedCodes(data);
+      toast({
+        title: "5 check-in codes generated",
+        description: data.emailSent ? "Emailed to info@kutumb.org.au." : "Could not send the email — copy the codes below manually.",
+      });
+    } catch (err: any) {
+      toast({ title: "Couldn't generate codes", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingCodes(false);
+    }
+  };
 
   const load = async (id: string) => {
     if (!id) return;
@@ -156,6 +193,37 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
 
       {eventId && (
         <>
+          <div className="border rounded-lg p-4 max-w-lg space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <Label>Door volunteer login codes</Label>
+                <p className="text-xs text-muted-foreground">
+                  Generates 5 temporary codes for this event so volunteers can log in to kutumb.org.au/checkin without an
+                  admin email/password. They expire at the end of {selectedEventDateText || "the event's day"} and are
+                  deleted automatically.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={generateCodes} disabled={generatingCodes} className="shrink-0">
+                {generatingCodes ? "Generating…" : "Generate 5 codes"}
+              </Button>
+            </div>
+            {generatedCodes && (
+              <div className="rounded-md bg-muted/50 p-3 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  {generatedCodes.codes.map((c) => (
+                    <span key={c} className="font-mono font-bold tracking-wider text-sm border-2 border-dashed border-orange-400 bg-orange-50 rounded-md px-3 py-1">
+                      {c}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {generatedCodes.emailSent ? "✅ Emailed to info@kutumb.org.au." : "⚠️ Email could not be sent — share these codes directly."}{" "}
+                  Expires {new Date(generatedCodes.expiresAt).toLocaleString()}.
+                </p>
+              </div>
+            )}
+          </div>
+
           <div className="border rounded-lg p-4 max-w-lg space-y-3">
             <div className="flex items-center justify-between">
               <Label>Scan attendee QR code</Label>

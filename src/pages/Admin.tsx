@@ -43,7 +43,7 @@ const Admin = () => {
   // guards on the server for Members, Database Tables, API Keys and Settings.
   const [adminRole, setAdminRole] = useState<string>("admin");
   const isSuperAdmin = adminRole === "superadmin";
-  const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [loginData, setLoginData] = useState({ email: "admin@kutumb.org.au", password: "" });
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
 
@@ -167,7 +167,7 @@ const Admin = () => {
     await fetch("/api/admin-auth/logout", { method: "POST" }).catch(() => {});
     setIsLoggedIn(false);
     setAdminRole("admin");
-    setLoginData({ email: "", password: "" });
+    setLoginData({ email: "admin@kutumb.org.au", password: "" });
     toast({ title: "Logged Out", description: "You have been logged out." });
   };
 
