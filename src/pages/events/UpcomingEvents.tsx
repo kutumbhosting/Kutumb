@@ -12,7 +12,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Calendar, MapPin, Users, Clock, Sparkles } from "lucide-react";
+
+// Fixed set of options for "How did you hear about this event?" — shared
+// between the dropdown here and the reset/draft-restore defaults below.
+export const HEARD_ABOUT_OPTIONS = [
+  "Kutumb WhatsApp communication",
+  "Kutumb Yoga Group",
+  "Kutumb Facebook",
+  "Kutumb Instagram",
+  "Other",
+] as const;
 
 // Key used to stash the in-progress registration form while the registrant
 // pops over to the Membership page, so we can restore it on return.
@@ -25,6 +42,8 @@ interface FormData {
   email: string;
   phone: string;
   comments: string;
+  heardAboutSource: string;
+  heardAboutOther: string;
   adults: number;
   children: number;
   childrenUnder5: number;
@@ -237,6 +256,8 @@ const UpcomingEvents = ({
                             email: "",
                             phone: "",
                             comments: "",
+                            heardAboutSource: "",
+                            heardAboutOther: "",
                             adults: 0,
                             children: 0,
                             childrenUnder5: 0,
@@ -535,6 +556,51 @@ const UpcomingEvents = ({
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+
+              <div>
+                <Label htmlFor="heardAboutSource">How did you hear about this event?</Label>
+                <Select
+                  value={formData.heardAboutSource}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      heardAboutSource: value,
+                      // Clear any previously typed detail when switching
+                      // away from "Other" so a stale value can't sneak in.
+                      heardAboutOther: value === "Other" ? formData.heardAboutOther : "",
+                    })
+                  }
+                >
+                  <SelectTrigger id="heardAboutSource" className="mt-2">
+                    <SelectValue placeholder="Select an option" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HEARD_ABOUT_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.heardAboutSource === "Other" && (
+                <div>
+                  <Label htmlFor="heardAboutOther">Please provide details</Label>
+                  <Input
+                    id="heardAboutOther"
+                    value={formData.heardAboutOther}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        heardAboutOther: e.target.value,
+                      })
+                    }
+                    placeholder="Tell us how you heard about this event"
+                    className="mt-2"
+                  />
                 </div>
               )}
 

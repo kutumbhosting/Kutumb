@@ -33,6 +33,8 @@ const Events = () => {
     email: "",
     phone: "",
     comments: "",
+    heardAboutSource: "",
+    heardAboutOther: "",
     adults: 0,
     children: 0,
     childrenUnder5: 0,
@@ -110,6 +112,24 @@ const Events = () => {
       toast({
         title: "Invalid Email",
         description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.heardAboutSource) {
+      toast({
+        title: "Missing Information",
+        description: "Please tell us how you heard about this event.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.heardAboutSource === "Other" && !formData.heardAboutOther.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide details for \"Other\".",
         variant: "destructive",
       });
       return;
@@ -217,6 +237,8 @@ const Events = () => {
         email: "",
         phone: "",
         comments: "",
+        heardAboutSource: "",
+        heardAboutOther: "",
         adults: 0,
         children: 0,
         childrenUnder5: 0,

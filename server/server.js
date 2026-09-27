@@ -289,10 +289,30 @@ app.post("/api/events", async (req, res) => {
     // or a ticket PDF; any missing/blank entry is just an empty string,
     // and syncRegistrationAttendees falls back to a generic label for it.
     adultNames, childrenUnder5Names, children5PlusNames,
+    // "How did you hear about this event?" — one of a fixed set of options,
+    // plus a free-text detail that's only meaningful (and only required)
+    // when heardAboutSource is "Other".
+    heardAboutSource, heardAboutOther,
   } = req.body;
 
   if (!eventName || !name || !email || !phone) {
     return res.status(400).json({ message: "Name, email and phone are required" });
+  }
+
+  const HEARD_ABOUT_OPTIONS = [
+    "Kutumb WhatsApp communication",
+    "Kutumb Yoga Group",
+    "Kutumb Facebook",
+    "Kutumb Instagram",
+    "Other",
+  ];
+  if (!heardAboutSource || !HEARD_ABOUT_OPTIONS.includes(heardAboutSource)) {
+    return res.status(400).json({ message: "Please tell us how you heard about this event" });
+  }
+  const sanitizedHeardAboutOther =
+    heardAboutSource === "Other" ? String(heardAboutOther || "").trim().slice(0, 500) : null;
+  if (heardAboutSource === "Other" && !sanitizedHeardAboutOther) {
+    return res.status(400).json({ message: "Please provide details for \"Other\"" });
   }
 
   const sanitizeNames = (arr, count) =>
@@ -413,13 +433,14 @@ app.post("/api/events", async (req, res) => {
              (event_name, event_year, name, email, phone, adults, children, children_under5, children_5plus, child_fee,
               comments, registration_number, is_member, membership_number, fee, per_person_fee,
               bank_transferred, transaction_number, payment_status, registration_status, pay_token,
-              adult_names, children_under5_names, children_5plus_names)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,NULL,$17,$18,$19,$20,$21,$22) RETURNING *`,
+              adult_names, children_under5_names, children_5plus_names, heard_about_source, heard_about_other)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,NULL,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING *`,
           [
             eventName, eventYear, name, email, phone, numAdults, numChildrenTotal, numChildrenUnder5, numChildren5Plus, childFeeApplied,
             comments || null, registrationNumber, isMember, matchedMember?.membership_number || null,
             applicableFee, perPersonFee, applicableFee > 0 ? "Pending" : "N/A", registrationStatus, payToken,
             JSON.stringify(sanitizedAdultNames), JSON.stringify(sanitizedChildrenUnder5Names), JSON.stringify(sanitizedChildren5PlusNames),
+            heardAboutSource, sanitizedHeardAboutOther,
           ]
         );
         newRegistration = inserted[0];
@@ -702,6 +723,8 @@ app.get("/api/all-registrations", requireAdmin, async (req, res) => {
         children5Plus: r.children_5plus,
         childFee: r.child_fee !== null ? Number(r.child_fee) : 0,
         comments: r.comments,
+        heardAboutSource: r.heard_about_source,
+        heardAboutOther: r.heard_about_other,
         registrationNumber: r.registration_number,
         isMember: r.is_member,
         membershipNumber: r.membership_number,

@@ -170,7 +170,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
       if (statusFilter && (m.paymentStatus || "N/A") !== statusFilter) return false;
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
-      return [m.registrationNumber, m.name, m.email, m.phone, m.transactionNumber, m.membershipNumber, m.comments]
+      return [m.registrationNumber, m.name, m.email, m.phone, m.transactionNumber, m.membershipNumber, m.comments, m.heardAboutSource, m.heardAboutOther]
         .some((field: any) => String(field || "").toLowerCase().includes(q));
     })
     .sort((a: any, b: any) => {
@@ -663,6 +663,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                     <th className="p-2 text-left">Registration Status</th>
                     <th className="p-2 text-left">Payment Method</th>
                     <th className="p-2 text-left">Match Confidence</th>
+                    <th className="p-2 text-left">Heard About</th>
                     <th className="p-2 text-left">Comments</th>
                     <th className="p-2 text-left">Attendees / QR</th>
                   </tr>
@@ -750,6 +751,13 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                           "-"
                         )}
                       </td>
+                      <td className="p-2">
+                        {item.heardAboutSource
+                          ? item.heardAboutSource === "Other" && item.heardAboutOther
+                            ? `Other: ${item.heardAboutOther}`
+                            : item.heardAboutSource
+                          : "-"}
+                      </td>
                       <td className="p-2">{item.comments || "-"}</td>
                       <td className="p-2">
                         <Button size="sm" variant="outline" onClick={() => openAttendeesDialog(item)}>
@@ -760,7 +768,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                   ))}
                   {visibleRegistrations.length === 0 && (
                     <tr>
-                      <td colSpan={17} className="p-4 text-center text-muted-foreground">
+                      <td colSpan={18} className="p-4 text-center text-muted-foreground">
                         No registrations match your search/filter.
                       </td>
                     </tr>

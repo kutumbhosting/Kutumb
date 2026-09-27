@@ -207,6 +207,11 @@ ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_date TIM
 ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_match_confidence TEXT;
 ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS payment_match_note TEXT;
 
+-- "How did you hear about this event?" dropdown on the public registration
+-- form. heard_about_other only holds a value when heard_about_source = 'Other'.
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS heard_about_source TEXT;
+ALTER TABLE kutumb_event_registrations ADD COLUMN IF NOT EXISTS heard_about_other TEXT;
+
 -- One row per "Upload Bank Statement" run on the Event Registration page.
 -- `report` holds the full per-registration match detail and the list of
 -- unmatched bank credits at the time of the run, so the "Download Excel

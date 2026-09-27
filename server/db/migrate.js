@@ -51,6 +51,17 @@ async function run() {
     }
   }
 
+  // Backfill any activity image1 values that were still NULL because this
+  // database was originally seeded before seed.sql's images were fixed.
+  // Guarded by "IS NULL" on every row, so it's a no-op once already applied
+  // and safe to run on every single deploy, forever.
+  const fixImagesPath = path.join(__dirname, "fix-activity-images.sql");
+  if (fs.existsSync(fixImagesPath)) {
+    const fixImagesSql = fs.readFileSync(fixImagesPath, "utf-8");
+    await pool.query(fixImagesSql);
+    console.log("🖼️  Activity image backfill checked (fix-activity-images.sql).");
+  }
+
   // Import any flyer/past-event media files still sitting on disk into the
   // database. Naturally idempotent (checked per filename), so this is safe
   // to run on every launch — it only ever imports genuinely new files.

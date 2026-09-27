@@ -164,6 +164,8 @@ router.post("/export-excel", requireAdmin, async (req, res) => {
       { header: "Transaction No", key: "transactionNumber", width: 16 },
       { header: "Coupon Code", key: "couponCode", width: 14 },
       { header: "Membership No", key: "membershipNumber", width: 14 },
+      { header: "Heard About", key: "heardAboutSource", width: 22 },
+      { header: "Heard About (Other)", key: "heardAboutOther", width: 26 },
       { header: "Comments", key: "comments", width: 30 },
     ];
     sheet.getRow(1).font = { bold: true };
@@ -186,6 +188,8 @@ router.post("/export-excel", requireAdmin, async (req, res) => {
         transactionNumber: r.transactionNumber || "",
         couponCode: r.couponCode || "",
         membershipNumber: r.membershipNumber || "",
+        heardAboutSource: r.heardAboutSource || "",
+        heardAboutOther: r.heardAboutOther || "",
         comments: r.comments || "",
       });
     }
