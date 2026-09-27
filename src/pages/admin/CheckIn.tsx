@@ -43,9 +43,88 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
   const [generatingCodes, setGeneratingCodes] = useState(false);
   const [generatedCodes, setGeneratedCodes] = useState<{ codes: string[]; expiresAt: string; emailSent: boolean } | null>(null);
 
+  // ── Existing code batches (management table) ────────────────────────
+  interface CodeBatch {
+    event_name: string;
+    event_year: string | null;
+    event_date_text: string | null;
+    expires_at: string;
+    generated_at: string;
+    codes: string[];
+  }
+  const [codeBatches, setCodeBatches] = useState<CodeBatch[]>([]);
+  const [loadingBatches, setLoadingBatches] = useState(false);
+  const [editingBatch, setEditingBatch] = useState<string | null>(null); // key = event_name + "|" + event_year
+  const [editExpiresAt, setEditExpiresAt] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingBatch, setDeletingBatch] = useState<string | null>(null);
+
+  const batchKey = (b: CodeBatch) => `${b.event_name}|${b.event_year || ""}`;
+
+  const loadCodeBatches = async () => {
+    setLoadingBatches(true);
+    try {
+      const data = await api("/api/checkin/codes");
+      setCodeBatches(data);
+    } catch (err: any) {
+      toast({ title: "Couldn't load check-in codes", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingBatches(false);
+    }
+  };
+
   useEffect(() => {
     fetch("/api/upcoming-events").then((r) => r.json()).then(setUpcomingEvents).catch(() => {});
+    loadCodeBatches();
   }, []);
+
+  const startEditBatch = (b: CodeBatch) => {
+    setEditingBatch(batchKey(b));
+    // Format the ISO expiry as the value a <input type="datetime-local"> expects (local time, no seconds/zone).
+    const d = new Date(b.expires_at);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setEditExpiresAt(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`);
+  };
+
+  const cancelEditBatch = () => {
+    setEditingBatch(null);
+    setEditExpiresAt("");
+  };
+
+  const saveEditBatch = async (b: CodeBatch) => {
+    if (!editExpiresAt) return;
+    setSavingEdit(true);
+    try {
+      await api("/api/checkin/codes/update-expiry", {
+        method: "PUT",
+        body: JSON.stringify({ eventName: b.event_name, eventYear: b.event_year, expiresAt: new Date(editExpiresAt).toISOString() }),
+      });
+      toast({ title: "Expiry updated" });
+      cancelEditBatch();
+      loadCodeBatches();
+    } catch (err: any) {
+      toast({ title: "Couldn't update expiry", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deleteBatch = async (b: CodeBatch) => {
+    if (!window.confirm(`Delete all ${b.codes.length} check-in codes for "${b.event_name}"? Door volunteers using them will be logged out immediately.`)) return;
+    setDeletingBatch(batchKey(b));
+    try {
+      await api("/api/checkin/codes/delete", {
+        method: "POST",
+        body: JSON.stringify({ eventName: b.event_name, eventYear: b.event_year }),
+      });
+      toast({ title: "Codes deleted" });
+      loadCodeBatches();
+    } catch (err: any) {
+      toast({ title: "Couldn't delete codes", description: err.message, variant: "destructive" });
+    } finally {
+      setDeletingBatch(null);
+    }
+  };
 
   const eventOptions = Array.from(
     new Set(Object.values(groupedEvents).map((rows: any) => rows[0]?.eventName).filter(Boolean))
@@ -69,6 +148,7 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
         title: "5 check-in codes generated",
         description: data.emailSent ? "Emailed to info@kutumb.org.au." : "Could not send the email — copy the codes below manually.",
       });
+      loadCodeBatches();
     } catch (err: any) {
       toast({ title: "Couldn't generate codes", description: err.message, variant: "destructive" });
     } finally {
@@ -221,6 +301,95 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
                   Expires {new Date(generatedCodes.expiresAt).toLocaleString()}.
                 </p>
               </div>
+            )}
+          </div>
+
+          <div className="border rounded-lg p-4 max-w-4xl space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Active check-in codes</Label>
+              <Button size="sm" variant="ghost" onClick={loadCodeBatches} disabled={loadingBatches}>
+                {loadingBatches ? "Refreshing…" : "↻ Refresh"}
+              </Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="py-1 pr-2">Event Name</th>
+                    <th className="py-1 pr-2">Event Date</th>
+                    <th className="py-1 pr-2">Generated</th>
+                    <th className="py-1 pr-2">Expires</th>
+                    <th className="py-1 pr-2">Codes</th>
+                    <th className="py-1"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {codeBatches.map((b) => {
+                    const key = batchKey(b);
+                    const isEditing = editingBatch === key;
+                    return (
+                      <tr key={key} className="border-b align-top">
+                        <td className="py-2 pr-2 font-medium">
+                          {b.event_name}
+                          {b.event_year ? ` (${b.event_year})` : ""}
+                        </td>
+                        <td className="py-2 pr-2">{b.event_date_text || "—"}</td>
+                        <td className="py-2 pr-2">{new Date(b.generated_at).toLocaleString()}</td>
+                        <td className="py-2 pr-2">
+                          {isEditing ? (
+                            <Input
+                              type="datetime-local"
+                              className="h-8 text-xs"
+                              value={editExpiresAt}
+                              onChange={(e) => setEditExpiresAt(e.target.value)}
+                            />
+                          ) : (
+                            new Date(b.expires_at).toLocaleString()
+                          )}
+                        </td>
+                        <td className="py-2 pr-2">
+                          <div className="flex flex-wrap gap-1">
+                            {b.codes.map((c) => (
+                              <span key={c} className="font-mono text-xs border rounded px-1.5 py-0.5">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-2">
+                          {isEditing ? (
+                            <div className="flex gap-1 shrink-0">
+                              <Button size="sm" onClick={() => saveEditBatch(b)} disabled={savingEdit}>
+                                {savingEdit ? "Saving…" : "Save"}
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={cancelEditBatch} disabled={savingEdit}>
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1 shrink-0">
+                              <Button size="sm" variant="outline" onClick={() => startEditBatch(b)}>
+                                Edit
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => deleteBatch(b)}
+                                disabled={deletingBatch === key}
+                              >
+                                {deletingBatch === key ? "Deleting…" : "Delete"}
+                              </Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {!loadingBatches && codeBatches.length === 0 && (
+              <p className="text-sm text-muted-foreground">No active check-in codes right now.</p>
             )}
           </div>
 
