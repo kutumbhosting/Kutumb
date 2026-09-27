@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { safeFetch, normalizeInterests, downloadCSV } from "./safeFetch";
 import { useToast } from "@/hooks/use-toast";
+import { ColumnFilterHeader } from "@/components/admin/ColumnFilterHeader";
+
+type MemberColumnKey = "membershipNumber" | "name" | "email" | "phone" | "address" | "interests";
 
 interface MembersProps {
   memberData: any[];
@@ -33,9 +36,22 @@ const Members = ({ memberData, onReload }: MembersProps) => {
 
   // ── Search / filter / sort ──────────────────────────────────────────────
   const [search, setSearch] = useState("");
-  const [interestFilter, setInterestFilter] = useState("");
   const [sortKey, setSortKey] = useState<"membershipNumber" | "name" | "email" | "phone" | "address">("membershipNumber");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  // Per-column dropdown filters (Excel-style: pick one or more values from
+  // that column). Empty array for a column = no filter applied on it.
+  const [columnFilters, setColumnFilters] = useState<Record<MemberColumnKey, string[]>>({
+    membershipNumber: [],
+    name: [],
+    email: [],
+    phone: [],
+    address: [],
+    interests: [],
+  });
+  const setColumnFilter = (key: MemberColumnKey, values: string[]) =>
+    setColumnFilters((prev) => ({ ...prev, [key]: values }));
+  const anyColumnFilterActive = Object.values(columnFilters).some((v) => v.length > 0);
 
   // Handles the three shapes `interests` shows up in across the app
   // (array, {label: true} object, or a plain string) and always returns a
@@ -50,9 +66,19 @@ const Members = ({ memberData, onReload }: MembersProps) => {
     return [];
   };
 
-  const interestOptions = Array.from(
-    new Set(memberData.flatMap((m) => interestsArray(m.interests)))
-  ).sort((a, b) => a.localeCompare(b));
+  // Distinct values per column, used to populate each dropdown's checklist.
+  const columnOptions = useMemo<Record<MemberColumnKey, string[]>>(() => {
+    const uniq = (values: (string | undefined | null)[]) =>
+      Array.from(new Set(values.map((v) => String(v ?? "").trim()).filter((v) => v !== "")));
+    return {
+      membershipNumber: uniq(memberData.map((m) => m.membershipNumber)),
+      name: uniq(memberData.map((m) => m.name)),
+      email: uniq(memberData.map((m) => m.email)),
+      phone: uniq(memberData.map((m) => m.phone)),
+      address: uniq(memberData.map((m) => m.address)),
+      interests: uniq(memberData.flatMap((m) => interestsArray(m.interests))),
+    };
+  }, [memberData]);
 
   const toggleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
@@ -65,7 +91,19 @@ const Members = ({ memberData, onReload }: MembersProps) => {
 
   const visibleMembers = memberData
     .filter((m) => {
-      if (interestFilter && !interestsArray(m.interests).includes(interestFilter)) return false;
+      if (
+        columnFilters.membershipNumber.length &&
+        !columnFilters.membershipNumber.includes(String(m.membershipNumber ?? ""))
+      ) return false;
+      if (columnFilters.name.length && !columnFilters.name.includes(String(m.name ?? ""))) return false;
+      if (columnFilters.email.length && !columnFilters.email.includes(String(m.email ?? ""))) return false;
+      if (columnFilters.phone.length && !columnFilters.phone.includes(String(m.phone ?? ""))) return false;
+      if (columnFilters.address.length && !columnFilters.address.includes(String(m.address ?? ""))) return false;
+      if (
+        columnFilters.interests.length &&
+        !interestsArray(m.interests).some((i) => columnFilters.interests.includes(i))
+      ) return false;
+
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
       return [m.membershipNumber, m.name, m.email, m.phone, m.address]
@@ -396,7 +434,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
         </div>
 
         <p className="text-sm text-muted-foreground mb-4">
-          {search.trim() || interestFilter ? (
+          {search.trim() || anyColumnFilterActive ? (
             <>
               Showing <span className="font-semibold text-foreground">{visibleMembers.length}</span> of{" "}
               <span className="font-semibold text-foreground">{memberData.length}</span> members
@@ -415,22 +453,14 @@ const Members = ({ memberData, onReload }: MembersProps) => {
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
           />
-          <select
-            className="border rounded-md px-3 py-2 text-sm bg-background"
-            value={interestFilter}
-            onChange={(e) => setInterestFilter(e.target.value)}
-          >
-            <option value="">All interests</option>
-            {interestOptions.map((interest) => (
-              <option key={interest} value={interest}>{interest}</option>
-            ))}
-          </select>
-          {(search.trim() || interestFilter) && (
+          {(search.trim() || anyColumnFilterActive) && (
             <Button
               variant="ghost"
               onClick={() => {
                 setSearch("");
-                setInterestFilter("");
+                setColumnFilters({
+                  membershipNumber: [], name: [], email: [], phone: [], address: [], interests: [],
+                });
               }}
             >
               Clear filters
@@ -541,19 +571,24 @@ const Members = ({ memberData, onReload }: MembersProps) => {
                   { key: "address" as const, label: "Address" },
                 ].map(({ key, label }) => (
                   <th key={key} className="p-2 text-left">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort(key)}
-                      className="flex items-center gap-1 font-medium hover:text-primary"
-                    >
-                      {label}
-                      <span className="text-xs text-muted-foreground">
-                        {sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
-                      </span>
-                    </button>
+                    <ColumnFilterHeader
+                      label={label}
+                      options={columnOptions[key]}
+                      selected={columnFilters[key]}
+                      onChange={(values) => setColumnFilter(key, values)}
+                      sortDir={sortKey === key ? sortDir : null}
+                      onSortClick={() => toggleSort(key)}
+                    />
                   </th>
                 ))}
-                <th className="p-2 text-left">Interests</th>
+                <th className="p-2 text-left">
+                  <ColumnFilterHeader
+                    label="Interests"
+                    options={columnOptions.interests}
+                    selected={columnFilters.interests}
+                    onChange={(values) => setColumnFilter("interests", values)}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>

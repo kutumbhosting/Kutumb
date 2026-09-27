@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,38 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { safeFetch, downloadCSV } from "./safeFetch";
+import { ColumnFilterHeader } from "@/components/admin/ColumnFilterHeader";
+
+type RegistrationColumnKey =
+  | "registrationNumber" | "name" | "email" | "phone" | "adults" | "children"
+  | "fee" | "paymentStatus" | "paymentAmount" | "paymentDate" | "transactionNumber"
+  | "membershipNumber" | "registrationStatus" | "paymentMethod" | "paymentMatchConfidence"
+  | "heardAbout" | "comments";
+
+// Display-string extractor for each filterable column — used both to build
+// the dropdown's checklist and to test a row against the active filter.
+const REGISTRATION_COLUMNS: { key: RegistrationColumnKey; label: string; getValue: (m: any) => string }[] = [
+  { key: "registrationNumber", label: "Reg. No", getValue: (m) => String(m.registrationNumber ?? "") },
+  { key: "name", label: "Name", getValue: (m) => m.name || "" },
+  { key: "email", label: "Email", getValue: (m) => m.email || "" },
+  { key: "phone", label: "Phone", getValue: (m) => m.phone || "" },
+  { key: "adults", label: "Adults", getValue: (m) => String(m.adults ?? "") },
+  { key: "children", label: "Children", getValue: (m) => String(m.children ?? "") },
+  { key: "fee", label: "Fee", getValue: (m) => (typeof m.fee === "number" ? `$${m.fee}` : "-") },
+  { key: "paymentStatus", label: "Payment Status", getValue: (m) => m.paymentStatus || "N/A" },
+  { key: "paymentAmount", label: "Amount Paid", getValue: (m) => (typeof m.paymentAmount === "number" && m.paymentAmount > 0 ? `$${m.paymentAmount}` : "-") },
+  { key: "paymentDate", label: "Date Paid", getValue: (m) => (m.paymentDate ? new Date(m.paymentDate).toLocaleDateString("en-AU") : "-") },
+  { key: "transactionNumber", label: "Transaction No", getValue: (m) => m.transactionNumber || "" },
+  { key: "membershipNumber", label: "Membership No", getValue: (m) => m.membershipNumber || "" },
+  { key: "registrationStatus", label: "Registration Status", getValue: (m) => m.registrationStatus || "-" },
+  { key: "paymentMethod", label: "Payment Method", getValue: (m) =>
+      m.paymentMethod === "card" ? "Card" :
+      m.paymentMethod === "bank_transfer" ? "Bank Transfer" :
+      m.paymentMethod === "coupon" ? "Coupon" : "-" },
+  { key: "paymentMatchConfidence", label: "Match Confidence", getValue: (m) => m.paymentMatchConfidence || "-" },
+  { key: "heardAbout", label: "Heard About", getValue: (m) => m.heardAboutSource || "-" },
+  { key: "comments", label: "Comments", getValue: (m) => m.comments || "-" },
+];
 
 interface EventRegistrationProps {
   groupedEvents: Record<string, any[]>;
@@ -119,7 +151,23 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
 
   // ── Search / filter / sort ──────────────────────────────────────────────
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+
+  // Per-column dropdown filters (Excel-style, with a search box in each
+  // dropdown) — one entry per column in REGISTRATION_COLUMNS. An empty
+  // array for a column means "no filter applied" on it.
+  const emptyRegistrationFilters = (): Record<RegistrationColumnKey, string[]> => ({
+    registrationNumber: [], name: [], email: [], phone: [], adults: [], children: [],
+    fee: [], paymentStatus: [], paymentAmount: [], paymentDate: [], transactionNumber: [],
+    membershipNumber: [], registrationStatus: [], paymentMethod: [], paymentMatchConfidence: [],
+    heardAbout: [], comments: [],
+  });
+  const [columnFilters, setColumnFilters] = useState<Record<RegistrationColumnKey, string[]>>(
+    emptyRegistrationFilters()
+  );
+  const setColumnFilter = (key: RegistrationColumnKey, values: string[]) =>
+    setColumnFilters((prev) => ({ ...prev, [key]: values }));
+  const anyColumnFilterActive = Object.values(columnFilters).some((v) => v.length > 0);
+
   const [sortKey, setSortKey] = useState<
     "registrationNumber" | "name" | "email" | "phone" | "adults" | "children" | "fee" | "paymentStatus" | "paymentAmount" | "paymentDate" | "transactionNumber" | "membershipNumber"
   >("registrationNumber");
@@ -165,9 +213,23 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
         }
       : null;
 
+  // Distinct values per column, scoped to the currently selected event, used
+  // to populate each column's filter dropdown.
+  const columnOptions = useMemo(() => {
+    const options = {} as Record<RegistrationColumnKey, string[]>;
+    const rows = selectedEvent?.members || [];
+    for (const col of REGISTRATION_COLUMNS) {
+      options[col.key] = Array.from(new Set(rows.map((m: any) => col.getValue(m))));
+    }
+    return options;
+  }, [selectedEvent]);
+
   const visibleRegistrations = (selectedEvent?.members || [])
     .filter((m: any) => {
-      if (statusFilter && (m.paymentStatus || "N/A") !== statusFilter) return false;
+      for (const col of REGISTRATION_COLUMNS) {
+        const active = columnFilters[col.key];
+        if (active.length > 0 && !active.includes(col.getValue(m))) return false;
+      }
       if (!search.trim()) return true;
       const q = search.trim().toLowerCase();
       return [m.registrationNumber, m.name, m.email, m.phone, m.transactionNumber, m.membershipNumber, m.comments, m.heardAboutSource, m.heardAboutOther]
@@ -447,7 +509,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
             setEditingEvent(null);
             setEventActionMessage("");
             setSearch("");
-            setStatusFilter("");
+            setColumnFilters(emptyRegistrationFilters());
             const first = groupedEvents[e.target.value]?.[0];
             fetchLatestReconciliation(first?.eventName, first?.eventYear);
           }}
@@ -591,33 +653,26 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                 onChange={(e) => setSearch(e.target.value)}
                 className="max-w-sm"
               />
-              <select
-                className="border rounded-md px-3 py-2 text-sm bg-background"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-              >
-                <option value="">All payment statuses</option>
-                <option value="N/A">N/A (no fee)</option>
-                <option value="Pending">Pending</option>
-                <option value="Paid">Paid</option>
-              </select>
-              {(search.trim() || statusFilter) && (
+              {(search.trim() || anyColumnFilterActive) && (
                 <Button
                   variant="ghost"
                   onClick={() => {
                     setSearch("");
-                    setStatusFilter("");
+                    setColumnFilters(emptyRegistrationFilters());
                   }}
                 >
                   Clear filters
                 </Button>
               )}
-              {(search.trim() || statusFilter) && (
+              {(search.trim() || anyColumnFilterActive) && (
                 <span className="text-sm text-muted-foreground self-center">
                   Showing {visibleRegistrations.length} of {selectedEvent.members.length}
                 </span>
               )}
             </div>
+            <p className="text-xs text-muted-foreground -mt-2 mb-3">
+              Use the funnel icon in each column header below to filter by that field (each has its own search box).
+            </p>
 
             {/* Table */}
             <div className="overflow-x-auto">
@@ -633,38 +688,46 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                         title="Select all currently shown rows"
                       />
                     </th>
-                    {[
-                      { key: "registrationNumber" as const, label: "Reg. No" },
-                      { key: "name" as const, label: "Name" },
-                      { key: "email" as const, label: "Email" },
-                      { key: "phone" as const, label: "Phone" },
-                      { key: "adults" as const, label: "Adults" },
-                      { key: "children" as const, label: "Children" },
-                      { key: "fee" as const, label: "Fee" },
-                      { key: "paymentStatus" as const, label: "Payment Status" },
-                      { key: "paymentAmount" as const, label: "Amount Paid" },
-                      { key: "paymentDate" as const, label: "Date Paid" },
-                      { key: "transactionNumber" as const, label: "Transaction No" },
-                      { key: "membershipNumber" as const, label: "Membership No" },
-                    ].map(({ key, label }) => (
-                      <th key={key} className="p-2 text-left">
-                        <button
-                          type="button"
-                          onClick={() => toggleSort(key)}
-                          className="flex items-center gap-1 font-medium hover:text-primary whitespace-nowrap"
-                        >
-                          {label}
-                          <span className="text-xs text-muted-foreground">
-                            {sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "↕"}
-                          </span>
-                        </button>
-                      </th>
-                    ))}
-                    <th className="p-2 text-left">Registration Status</th>
-                    <th className="p-2 text-left">Payment Method</th>
-                    <th className="p-2 text-left">Match Confidence</th>
-                    <th className="p-2 text-left">Heard About</th>
-                    <th className="p-2 text-left">Comments</th>
+                    {(
+                      [
+                        "registrationNumber", "name", "email", "phone", "adults", "children",
+                        "fee", "paymentStatus", "paymentAmount", "paymentDate",
+                        "transactionNumber", "membershipNumber",
+                      ] as RegistrationColumnKey[]
+                    ).map((key) => {
+                      const col = REGISTRATION_COLUMNS.find((c) => c.key === key)!;
+                      const sortableKey = key as typeof sortKey;
+                      return (
+                        <th key={key} className="p-2 text-left">
+                          <ColumnFilterHeader
+                            label={col.label}
+                            options={columnOptions[key] || []}
+                            selected={columnFilters[key]}
+                            onChange={(values) => setColumnFilter(key, values)}
+                            sortDir={sortKey === sortableKey ? sortDir : null}
+                            onSortClick={() => toggleSort(sortableKey)}
+                          />
+                        </th>
+                      );
+                    })}
+                    {(
+                      [
+                        "registrationStatus", "paymentMethod", "paymentMatchConfidence",
+                        "heardAbout", "comments",
+                      ] as RegistrationColumnKey[]
+                    ).map((key) => {
+                      const col = REGISTRATION_COLUMNS.find((c) => c.key === key)!;
+                      return (
+                        <th key={key} className="p-2 text-left">
+                          <ColumnFilterHeader
+                            label={col.label}
+                            options={columnOptions[key] || []}
+                            selected={columnFilters[key]}
+                            onChange={(values) => setColumnFilter(key, values)}
+                          />
+                        </th>
+                      );
+                    })}
                     <th className="p-2 text-left">Attendees / QR</th>
                   </tr>
                 </thead>
@@ -768,7 +831,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                   ))}
                   {visibleRegistrations.length === 0 && (
                     <tr>
-                      <td colSpan={18} className="p-4 text-center text-muted-foreground">
+                      <td colSpan={19} className="p-4 text-center text-muted-foreground">
                         No registrations match your search/filter.
                       </td>
                     </tr>
@@ -961,7 +1024,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                   <RadioGroupItem value="filtered" id="ev-audience-filtered" />
                   <Label htmlFor="ev-audience-filtered" className="font-normal cursor-pointer">
                     Everyone matching current filter ({visibleRegistrations.length})
-                    {statusFilter ? ` — Payment Status: ${statusFilter}` : ""}
+                    {anyColumnFilterActive ? " — column filters active" : ""}
                   </Label>
                 </div>
                 <div className="flex items-center space-x-2">

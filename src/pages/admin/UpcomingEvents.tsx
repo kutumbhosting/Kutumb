@@ -1,9 +1,52 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { safeFetch, downloadCSV } from "./safeFetch";
+import { ColumnFilterHeader } from "@/components/admin/ColumnFilterHeader";
+
+type EventColumnKey =
+  | "isActive"
+  | "title"
+  | "date"
+  | "time"
+  | "location"
+  | "capacity"
+  | "memberFee"
+  | "nonMemberFee"
+  | "under5Free"
+  | "childMemberFee"
+  | "childNonMemberFee"
+  | "description"
+  | "flyerImage";
+
+// One place to describe every filterable/sortable column: its header label
+// and how to turn a raw event row into the display string used both in the
+// filter dropdown's checklist and for matching against the active filter.
+const EVENT_COLUMNS: { key: EventColumnKey; label: string; getValue: (e: any) => string }[] = [
+  { key: "isActive", label: "Active", getValue: (e) => (e.isActive ? "Yes" : "No") },
+  { key: "title", label: "Title", getValue: (e) => e.title || "" },
+  { key: "date", label: "Date", getValue: (e) => e.date || "" },
+  { key: "time", label: "Time", getValue: (e) => e.time || "" },
+  { key: "location", label: "Location", getValue: (e) => e.location || "" },
+  { key: "capacity", label: "Capacity", getValue: (e) => String(e.capacity ?? "") },
+  { key: "memberFee", label: "Member Fee", getValue: (e) => String(e.memberFee ?? 0) },
+  { key: "nonMemberFee", label: "Non-Member Fee", getValue: (e) => String(e.nonMemberFee ?? 0) },
+  { key: "under5Free", label: "Under-5 Free", getValue: (e) => (e.under5Free !== false ? "Yes" : "No") },
+  { key: "childMemberFee", label: "Child Member Fee", getValue: (e) => (e.childMemberFee ?? "") === "" ? "(same as Member Fee)" : String(e.childMemberFee) },
+  { key: "childNonMemberFee", label: "Child Non-Member Fee", getValue: (e) => (e.childNonMemberFee ?? "") === "" ? "(same as Non-Member Fee)" : String(e.childNonMemberFee) },
+  { key: "description", label: "Description", getValue: (e) => e.description || "" },
+  { key: "flyerImage", label: "Flyer", getValue: (e) => (e.flyerImage ? "Has flyer" : "No flyer") },
+];
 
 const UpcomingEvents = () => {
   const { toast } = useToast();
@@ -27,7 +70,123 @@ const UpcomingEvents = () => {
     childNonMemberFee: "",
   });
 
-  // ─── flyer preview ──────────────────────────────────────────────────────
+  // ── Per-column dropdown filters (Excel-style, search box included) ──────
+  const [columnFilters, setColumnFilters] = useState<Record<EventColumnKey, string[]>>({
+    isActive: [], title: [], date: [], time: [], location: [], capacity: [],
+    memberFee: [], nonMemberFee: [], under5Free: [], childMemberFee: [],
+    childNonMemberFee: [], description: [], flyerImage: [],
+  });
+  const setColumnFilter = (key: EventColumnKey, values: string[]) =>
+    setColumnFilters((prev) => ({ ...prev, [key]: values }));
+  const anyColumnFilterActive = Object.values(columnFilters).some((v) => v.length > 0);
+  const clearAllColumnFilters = () =>
+    setColumnFilters({
+      isActive: [], title: [], date: [], time: [], location: [], capacity: [],
+      memberFee: [], nonMemberFee: [], under5Free: [], childMemberFee: [],
+      childNonMemberFee: [], description: [], flyerImage: [],
+    });
+
+  const columnOptions = useMemo(() => {
+    const options = {} as Record<EventColumnKey, string[]>;
+    for (const col of EVENT_COLUMNS) {
+      options[col.key] = Array.from(new Set(upcomingEvents.map((e) => col.getValue(e))));
+    }
+    return options;
+  }, [upcomingEvents]);
+
+  const visibleEvents = upcomingEvents.filter((e) =>
+    EVENT_COLUMNS.every((col) => {
+      const active = columnFilters[col.key];
+      return active.length === 0 || active.includes(col.getValue(e));
+    })
+  );
+
+  // ── Edit-in-popup ─────────────────────────────────────────────────────
+  const [editingEvent, setEditingEvent] = useState<any | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editFlyerFile, setEditFlyerFile] = useState<File | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEditDialog = (event: any) => {
+    setEditingEvent({
+      ...event,
+      memberFee: event.memberFee ?? 0,
+      nonMemberFee: event.nonMemberFee ?? 0,
+      under5Free: event.under5Free !== false,
+      childMemberFee: event.childMemberFee ?? "",
+      childNonMemberFee: event.childNonMemberFee ?? "",
+    });
+    setEditFlyerFile(null);
+    setEditOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    setEditOpen(false);
+    setEditingEvent(null);
+    setEditFlyerFile(null);
+  };
+
+  const removeEditFlyer = async () => {
+    if (!editingEvent?.flyerImage) return;
+    if (!confirm("Delete flyer?")) return;
+    try {
+      const res = await fetch("/api/delete-flyer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editingEvent.title,
+          date: editingEvent.date,
+          fileName: editingEvent.flyerImage,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setEditingEvent((prev: any) => ({ ...prev, flyerImage: "" }));
+      toast({ title: "Deleted", description: "Flyer removed" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const saveEditDialog = async () => {
+    if (!editingEvent) return;
+    if (!editingEvent.title?.trim()) {
+      toast({ title: "Title required", description: "Event title can't be empty.", variant: "destructive" });
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const res = await fetch("/api/upcoming-events/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingEvent),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message || "Update failed");
+
+      if (editFlyerFile) {
+        const formData = new FormData();
+        formData.append("flyer", editFlyerFile);
+        formData.append("title", editingEvent.title);
+        formData.append("event", JSON.stringify(editingEvent));
+        formData.append("eventYear", editingEvent.date?.split("-")[0]);
+        const flyerRes = await fetch("/api/upload-flyer", { method: "POST", body: formData });
+        const flyerData = await flyerRes.json();
+        if (!flyerRes.ok) throw new Error(flyerData.message || "Flyer upload failed");
+      }
+
+      toast({ title: "Saved", description: `"${editingEvent.title}" was updated.` });
+      closeEditDialog();
+      fetchUpcomingEvents();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  // ─── flyer preview (Add New Event form) ─────────────────────────────────
   useEffect(() => {
     if (!newFlyer) { setPreviewUrl(null); return; }
     const url = URL.createObjectURL(newFlyer);
@@ -55,31 +214,46 @@ const UpcomingEvents = () => {
             </Button>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <p className="text-sm text-muted-foreground">
+              {anyColumnFilterActive ? (
+                <>
+                  Showing <span className="font-semibold text-foreground">{visibleEvents.length}</span> of{" "}
+                  <span className="font-semibold text-foreground">{upcomingEvents.length}</span> events
+                </>
+              ) : (
+                <>
+                  Total Upcoming Events: <span className="font-semibold text-foreground">{upcomingEvents.length}</span>
+                </>
+              )}
+            </p>
+            {anyColumnFilterActive && (
+              <Button variant="ghost" size="sm" onClick={clearAllColumnFilters}>
+                Clear filters
+              </Button>
+            )}
+          </div>
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="p-2 text-left">Active</th>
-                  <th className="p-2 text-left">Title</th>
-                  <th className="p-2 text-left">Date</th>
-                  <th className="p-2 text-left">Time</th>
-                  <th className="p-2 text-left">Location</th>
-                  <th className="p-2 text-left">Capacity</th>
-                  <th className="p-2 text-left">Member Fee</th>
-                  <th className="p-2 text-left">Non-Member Fee</th>
-                  <th className="p-2 text-left">Under-5 Free</th>
-                  <th className="p-2 text-left">Child Member Fee</th>
-                  <th className="p-2 text-left">Child Non-Member Fee</th>
-                  <th className="p-2 text-left">Description</th>
-                  <th className="p-2 text-left">Flyer</th>
+                  {EVENT_COLUMNS.map((col) => (
+                    <th key={col.key} className="p-2 text-left">
+                      <ColumnFilterHeader
+                        label={col.label}
+                        options={columnOptions[col.key] || []}
+                        selected={columnFilters[col.key]}
+                        onChange={(values) => setColumnFilter(col.key, values)}
+                      />
+                    </th>
+                  ))}
                   <th className="p-2 text-left">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {upcomingEvents.map((event, index) => (
-                  <tr key={index} className="border-b">
-
-                    {/* ACTIVE toggle */}
+                {visibleEvents.map((event, index) => (
+                  <tr key={event.title ? `${event.title}-${index}` : index} className="border-b align-top">
                     <td className="p-2 text-center">
                       <input
                         type="checkbox"
@@ -92,259 +266,250 @@ const UpcomingEvents = () => {
                           });
                           fetchUpcomingEvents();
                         }}
+                        title="Quick toggle — active events are shown publicly"
                       />
                     </td>
-
-                    {/* TITLE */}
+                    <td className="p-2 font-medium max-w-[180px] truncate" title={event.title}>{event.title}</td>
+                    <td className="p-2 whitespace-nowrap">{event.date}</td>
+                    <td className="p-2 whitespace-nowrap">{event.time}</td>
+                    <td className="p-2 max-w-[160px] truncate" title={event.location}>{event.location}</td>
+                    <td className="p-2">{event.capacity}</td>
+                    <td className="p-2">${event.memberFee ?? 0}</td>
+                    <td className="p-2">${event.nonMemberFee ?? 0}</td>
+                    <td className="p-2 text-center">{event.under5Free !== false ? "Yes" : "No"}</td>
                     <td className="p-2">
-                      <Input
-                        value={event.title}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, title: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* DATE */}
-                    <td className="p-2">
-                      <Input
-                        value={event.date}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, date: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* TIME */}
-                    <td className="p-2">
-                      <Input
-                        value={event.time}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, time: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* LOCATION */}
-                    <td className="p-2">
-                      <Input
-                        value={event.location}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, location: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* CAPACITY */}
-                    <td className="p-2">
-                      <Input
-                        value={event.capacity}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, capacity: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* MEMBER FEE */}
-                    <td className="p-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={event.memberFee ?? 0}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, memberFee: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* NON-MEMBER FEE */}
-                    <td className="p-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={event.nonMemberFee ?? 0}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, nonMemberFee: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* UNDER-5 FREE */}
-                    <td className="p-2 text-center">
-                      <input
-                        type="checkbox"
-                        checked={event.under5Free !== false}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, under5Free: e.target.checked } : ev)
-                          )
-                        }
-                        title="Children under 5 register for free"
-                      />
-                    </td>
-
-                    {/* CHILD MEMBER FEE (blank = same as Member Fee) */}
-                    <td className="p-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder={String(event.memberFee ?? 0)}
-                        value={event.childMemberFee ?? ""}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, childMemberFee: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* CHILD NON-MEMBER FEE (blank = same as Non-Member Fee) */}
-                    <td className="p-2">
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder={String(event.nonMemberFee ?? 0)}
-                        value={event.childNonMemberFee ?? ""}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, childNonMemberFee: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* DESCRIPTION */}
-                    <td className="p-2">
-                      <Input
-                        value={event.description}
-                        onChange={(e) =>
-                          setUpcomingEvents((prev) =>
-                            prev.map((ev, i) => i === index ? { ...ev, description: e.target.value } : ev)
-                          )
-                        }
-                      />
-                    </td>
-
-                    {/* FLYER */}
-                    <td className="p-2 space-y-2">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const formData = new FormData();
-                          formData.append("flyer", file);
-                          formData.append("title", event.title);
-                          formData.append("event", JSON.stringify(event));
-                          formData.append("eventYear", event.date?.split("-")[0]);
-                          try {
-                            const res = await fetch("/api/upload-flyer", { method: "POST", body: formData });
-                            const data = await res.json();
-                            if (!res.ok) {
-                              toast({ title: "Upload Failed", description: data.message || "Something went wrong", variant: "destructive" });
-                              return;
-                            }
-                            setUpcomingEvents((prev) =>
-                              prev.map((ev) =>
-                                ev.title === event.title ? { ...ev, flyerImage: data.fileName } : ev
-                              )
-                            );
-                            toast({ title: "Success 🎉", description: "Flyer uploaded successfully" });
-                          } catch {
-                            toast({ title: "Error", description: "Upload failed", variant: "destructive" });
-                          }
-                        }}
-                      />
-
-                      {event.flyerImage && (
-                        <div className="relative group inline-block mt-2">
-                          <img
-                            src={`/api/media/${event.flyerImage}?t=${Date.now()}`}
-                            className="max-h-[80px] rounded border"
-                            alt="flyer"
-                          />
-                          {/* Delete flyer button (hover reveal) */}
-                          <button
-                            className="absolute top-1 right-1 bg-black/70 text-white text-xs px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition"
-                            onClick={async () => {
-                              if (!confirm("Delete flyer?")) return;
-                              try {
-                                const res = await fetch("/api/delete-flyer", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    title: event.title,
-                                    date: event.date,
-                                    fileName: event.flyerImage,
-                                  }),
-                                });
-                                const data = await res.json();
-                                if (!res.ok) throw new Error(data.message);
-                                setUpcomingEvents((prev) =>
-                                  prev.map((ev, i) => i === index ? { ...ev, flyerImage: "" } : ev)
-                                );
-                                toast({ title: "Deleted", description: "Flyer removed" });
-                              } catch (err: any) {
-                                toast({ title: "Error", description: err.message, variant: "destructive" });
-                              }
-                            }}
-                          >
-                            ✕
-                          </button>
-                        </div>
+                      {(event.childMemberFee ?? "") === "" ? (
+                        <span className="text-muted-foreground text-xs">same</span>
+                      ) : (
+                        `$${event.childMemberFee}`
                       )}
                     </td>
-
-                    {/* ACTIONS */}
-                    <td className="p-2 flex gap-2">
-                      <Button
-                        onClick={async () => {
-                          await safeFetch("/api/upcoming-events/update", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify(event),
-                          });
-                          fetchUpcomingEvents();
-                        }}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={async () => {
-                          await safeFetch("/api/upcoming-events/delete", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ title: event.title }),
-                          });
-                          fetchUpcomingEvents();
-                        }}
-                      >
-                        Delete
-                      </Button>
+                    <td className="p-2">
+                      {(event.childNonMemberFee ?? "") === "" ? (
+                        <span className="text-muted-foreground text-xs">same</span>
+                      ) : (
+                        `$${event.childNonMemberFee}`
+                      )}
+                    </td>
+                    <td className="p-2 max-w-[200px] truncate" title={event.description}>{event.description}</td>
+                    <td className="p-2">
+                      {event.flyerImage ? (
+                        <img
+                          src={`/api/media/${event.flyerImage}?t=${Date.now()}`}
+                          className="max-h-[48px] rounded border"
+                          alt="flyer"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground text-xs">No flyer</span>
+                      )}
+                    </td>
+                    <td className="p-2">
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => openEditDialog(event)}>
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={async () => {
+                            if (!confirm(`Delete "${event.title}"? This can't be undone.`)) return;
+                            await safeFetch("/api/upcoming-events/delete", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ title: event.title }),
+                            });
+                            fetchUpcomingEvents();
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
+                {visibleEvents.length === 0 && (
+                  <tr>
+                    <td colSpan={EVENT_COLUMNS.length + 1} className="p-4 text-center text-muted-foreground">
+                      No events match your filters.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Edit Event popup ── */}
+      <Dialog open={editOpen} onOpenChange={(open) => (open ? setEditOpen(true) : closeEditDialog())}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-4 shrink-0">
+            <DialogTitle>Edit Event</DialogTitle>
+            <DialogDescription>
+              Update the details for this upcoming event.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingEvent && (
+            <div className="space-y-3 overflow-y-auto px-6 py-1 min-h-0">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Title</label>
+                <Input
+                  value={editingEvent.title}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, title: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Date</label>
+                  <Input
+                    value={editingEvent.date}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Time</label>
+                  <Input
+                    value={editingEvent.time}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, time: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Location</label>
+                <Input
+                  value={editingEvent.location}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, location: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Capacity</label>
+                <Input
+                  value={editingEvent.capacity}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, capacity: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Member Fee ($)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={editingEvent.memberFee}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, memberFee: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Non-Member Fee ($)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={editingEvent.nonMemberFee}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, nonMemberFee: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded border p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="edit-event-under5free"
+                    type="checkbox"
+                    checked={editingEvent.under5Free}
+                    onChange={(e) => setEditingEvent({ ...editingEvent, under5Free: e.target.checked })}
+                  />
+                  <label htmlFor="edit-event-under5free" className="text-sm font-medium">
+                    Children under 5 register for free
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Child Member Fee ($)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder={`Same as Member Fee (${editingEvent.memberFee || 0})`}
+                      value={editingEvent.childMemberFee}
+                      onChange={(e) => setEditingEvent({ ...editingEvent, childMemberFee: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground block mb-1">Child Non-Member Fee ($)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder={`Same as Non-Member Fee (${editingEvent.nonMemberFee || 0})`}
+                      value={editingEvent.childNonMemberFee}
+                      onChange={(e) => setEditingEvent({ ...editingEvent, childNonMemberFee: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Leave a child fee blank to charge children (5 and over) the same rate as adults.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Description</label>
+                <Input
+                  value={editingEvent.description}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, description: e.target.value })}
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="edit-event-active"
+                  type="checkbox"
+                  checked={!!editingEvent.isActive}
+                  onChange={(e) => setEditingEvent({ ...editingEvent, isActive: e.target.checked })}
+                />
+                <label htmlFor="edit-event-active" className="text-sm font-medium">
+                  Active (visible to the public)
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Flyer Image</label>
+                {editingEvent.flyerImage && !editFlyerFile && (
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={`/api/media/${editingEvent.flyerImage}?t=${Date.now()}`}
+                      className="max-h-[64px] rounded border"
+                      alt="current flyer"
+                    />
+                    <Button type="button" size="sm" variant="outline" onClick={removeEditFlyer}>
+                      Remove flyer
+                    </Button>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="w-full text-sm"
+                  onChange={(e) => { const file = e.target.files?.[0]; if (file) setEditFlyerFile(file); }}
+                />
+                {editFlyerFile && (
+                  <div className="flex items-center gap-2">
+                    <img src={URL.createObjectURL(editFlyerFile)} className="max-h-[64px] rounded border" alt="new flyer preview" />
+                    <p className="text-xs text-green-600">Will replace on save: {editFlyerFile.name}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="p-6 pt-4 shrink-0 border-t">
+            <Button variant="outline" onClick={closeEditDialog} disabled={savingEdit}>
+              Cancel
+            </Button>
+            <Button onClick={saveEditDialog} disabled={savingEdit}>
+              {savingEdit ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Add New Event ── */}
       <div className="mb-8 p-4 border rounded space-y-3">
