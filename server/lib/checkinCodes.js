@@ -90,3 +90,50 @@ export async function cleanupExpiredCheckinCodes() {
   const { rowCount } = await pool.query("DELETE FROM kutumb_checkin_codes WHERE expires_at < now()");
   return rowCount;
 }
+
+/**
+ * Lists every currently-issued batch of codes (one row per event/year the
+ * codes were generated for), most recently generated first. All 5 codes in
+ * a batch share the same event_name + event_year + expires_at, so grouping
+ * on those also gives us a natural "generated at" timestamp (the earliest
+ * created_at in the batch — in practice all 5 land within milliseconds of
+ * each other).
+ */
+export async function listCheckinCodeBatches() {
+  const { rows } = await pool.query(
+    `SELECT event_name, event_year, event_date_text, expires_at,
+            MIN(created_at) AS generated_at,
+            array_agg(code ORDER BY code) AS codes
+     FROM kutumb_checkin_codes
+     GROUP BY event_name, event_year, event_date_text, expires_at
+     ORDER BY MIN(created_at) DESC`
+  );
+  return rows;
+}
+
+/**
+ * Changes the expiry date/time for every code in one batch — e.g. an event
+ * ran later than expected and the door volunteers still need their codes.
+ * Returns the number of codes updated (0 means no such batch).
+ */
+export async function updateCheckinCodeExpiry({ eventName, eventYear, expiresAt }) {
+  const { rowCount } = await pool.query(
+    `UPDATE kutumb_checkin_codes SET expires_at = $3
+     WHERE event_name = $1 AND COALESCE(event_year, '') = COALESCE($2, '')`,
+    [eventName, eventYear || null, expiresAt]
+  );
+  return rowCount;
+}
+
+/**
+ * Deletes every code in one batch immediately — e.g. an event was cancelled
+ * or the codes were shared somewhere they shouldn't have been. Returns the
+ * number of codes deleted.
+ */
+export async function deleteCheckinCodeBatch({ eventName, eventYear }) {
+  const { rowCount } = await pool.query(
+    `DELETE FROM kutumb_checkin_codes WHERE event_name = $1 AND COALESCE(event_year, '') = COALESCE($2, '')`,
+    [eventName, eventYear || null]
+  );
+  return rowCount;
+}

@@ -2,7 +2,12 @@ import { Router } from "express";
 import { pool } from "../db/pool.js";
 import { requireAdmin, requireAdminOrCheckinSession } from "../lib/auth.js";
 import { logAudit } from "../lib/audit.js";
-import { generateCheckinCodes } from "../lib/checkinCodes.js";
+import {
+  generateCheckinCodes,
+  listCheckinCodeBatches,
+  updateCheckinCodeExpiry,
+  deleteCheckinCodeBatch,
+} from "../lib/checkinCodes.js";
 import { sendCheckinCodesEmail } from "../lib/mailer.js";
 
 const router = Router();
@@ -44,6 +49,52 @@ router.post("/generate-codes", requireAdmin, async (req, res) => {
   } catch (err) {
     console.error("GENERATE CHECKIN CODES ERROR:", err);
     res.status(500).json({ message: "Failed to generate check-in codes" });
+  }
+});
+
+// Lists every currently-issued batch of door-volunteer codes, across all
+// events, for the management table on the admin Check-in page. Admin-only.
+router.get("/codes", requireAdmin, async (req, res) => {
+  try {
+    const batches = await listCheckinCodeBatches();
+    res.json(batches);
+  } catch (err) {
+    console.error("LIST CHECKIN CODES ERROR:", err);
+    res.status(500).json({ message: "Failed to load check-in codes" });
+  }
+});
+
+// Edits a batch's expiry date/time (e.g. an event overran). eventName/
+// eventYear are sent in the body rather than the URL since event names can
+// contain characters ('/', etc.) that don't survive as a path segment.
+router.put("/codes/update-expiry", requireAdmin, async (req, res) => {
+  try {
+    const { eventName, eventYear, expiresAt } = req.body || {};
+    if (!eventName || !expiresAt) return res.status(400).json({ message: "eventName and expiresAt are required" });
+
+    const count = await updateCheckinCodeExpiry({ eventName, eventYear, expiresAt });
+    if (!count) return res.status(404).json({ message: "No codes found for this event" });
+
+    await logAudit(req.admin, "checkin.codes.update_expiry", eventName, { eventYear, expiresAt });
+    res.json({ message: "Updated", expiresAt });
+  } catch (err) {
+    console.error("UPDATE CHECKIN CODES ERROR:", err);
+    res.status(500).json({ message: "Failed to update the expiry date" });
+  }
+});
+
+// Deletes an entire batch of codes for an event immediately.
+router.post("/codes/delete", requireAdmin, async (req, res) => {
+  try {
+    const { eventName, eventYear } = req.body || {};
+    if (!eventName) return res.status(400).json({ message: "eventName is required" });
+
+    const count = await deleteCheckinCodeBatch({ eventName, eventYear });
+    await logAudit(req.admin, "checkin.codes.delete", eventName, { eventYear, count });
+    res.json({ message: "Deleted", count });
+  } catch (err) {
+    console.error("DELETE CHECKIN CODES ERROR:", err);
+    res.status(500).json({ message: "Failed to delete the codes" });
   }
 });
 
