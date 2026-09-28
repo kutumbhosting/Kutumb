@@ -16,12 +16,20 @@ import { cn } from "@/lib/utils";
 export interface ColumnFilterHeaderProps {
   /** Column heading shown to the user */
   label: string;
+  /**
+   * Set to false for columns where nearly every row holds a different value
+   * (email, membership number, transaction number, free-text comments…) —
+   * a checklist of hundreds of one-off values isn't a useful filter. The
+   * funnel icon is hidden and only the label (plus sort arrow, if any) shows.
+   * Defaults to true.
+   */
+  filterable?: boolean;
   /** Every distinct value available for this column (pre-formatted for display) */
-  options: string[];
+  options?: string[];
   /** Currently checked values. Empty array = no filter applied (show everything). */
-  selected: string[];
+  selected?: string[];
   /** Called with the new selection whenever the user checks/unchecks a value */
-  onChange: (values: string[]) => void;
+  onChange?: (values: string[]) => void;
   /** Optional: enables the little sort arrow next to the label */
   sortDir?: "asc" | "desc" | null;
   onSortClick?: () => void;
@@ -37,9 +45,10 @@ export interface ColumnFilterHeaderProps {
  */
 export function ColumnFilterHeader({
   label,
-  options,
-  selected,
-  onChange,
+  filterable = true,
+  options = [],
+  selected = [],
+  onChange = () => {},
   sortDir,
   onSortClick,
   className,
@@ -77,6 +86,7 @@ export function ColumnFilterHeader({
         <span className="font-medium">{label}</span>
       )}
 
+      {filterable && (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
@@ -137,6 +147,7 @@ export function ColumnFilterHeader({
           </Command>
         </PopoverContent>
       </Popover>
+      )}
     </div>
   );
 }

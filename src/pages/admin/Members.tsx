@@ -573,9 +573,7 @@ const Members = ({ memberData, onReload }: MembersProps) => {
                   <th key={key} className="p-2 text-left">
                     <ColumnFilterHeader
                       label={label}
-                      options={columnOptions[key]}
-                      selected={columnFilters[key]}
-                      onChange={(values) => setColumnFilter(key, values)}
+                      filterable={false}
                       sortDir={sortKey === key ? sortDir : null}
                       onSortClick={() => toggleSort(key)}
                     />

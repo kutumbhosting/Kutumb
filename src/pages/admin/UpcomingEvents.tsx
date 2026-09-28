@@ -32,6 +32,10 @@ type EventColumnKey =
 // One place to describe every filterable/sortable column: its header label
 // and how to turn a raw event row into the display string used both in the
 // filter dropdown's checklist and for matching against the active filter.
+// Title and description are effectively unique per event, so a filter
+// checklist on them isn't useful — no funnel is shown for these.
+const UNIQUE_VALUE_COLUMNS: EventColumnKey[] = ["title", "description"];
+
 const EVENT_COLUMNS: { key: EventColumnKey; label: string; getValue: (e: any) => string }[] = [
   { key: "isActive", label: "Active", getValue: (e) => (e.isActive ? "Yes" : "No") },
   { key: "title", label: "Title", getValue: (e) => e.title || "" },
@@ -242,6 +246,7 @@ const UpcomingEvents = () => {
                     <th key={col.key} className="p-2 text-left">
                       <ColumnFilterHeader
                         label={col.label}
+                        filterable={!UNIQUE_VALUE_COLUMNS.includes(col.key)}
                         options={columnOptions[col.key] || []}
                         selected={columnFilters[col.key]}
                         onChange={(values) => setColumnFilter(col.key, values)}

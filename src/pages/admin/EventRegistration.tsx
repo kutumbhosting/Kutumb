@@ -25,6 +25,13 @@ type RegistrationColumnKey =
 
 // Display-string extractor for each filterable column — used both to build
 // the dropdown's checklist and to test a row against the active filter.
+// Columns where practically every row holds a different value — a filter
+// checklist would just be a long list of one-offs, so no filter is offered
+// (sorting still works where it did before).
+const UNIQUE_VALUE_COLUMNS: RegistrationColumnKey[] = [
+  "registrationNumber", "name", "email", "phone", "transactionNumber", "membershipNumber", "comments",
+];
+
 const REGISTRATION_COLUMNS: { key: RegistrationColumnKey; label: string; getValue: (m: any) => string }[] = [
   { key: "registrationNumber", label: "Reg. No", getValue: (m) => String(m.registrationNumber ?? "") },
   { key: "name", label: "Name", getValue: (m) => m.name || "" },
@@ -701,6 +708,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                         <th key={key} className="p-2 text-left">
                           <ColumnFilterHeader
                             label={col.label}
+                            filterable={!UNIQUE_VALUE_COLUMNS.includes(key)}
                             options={columnOptions[key] || []}
                             selected={columnFilters[key]}
                             onChange={(values) => setColumnFilter(key, values)}
@@ -721,6 +729,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                         <th key={key} className="p-2 text-left">
                           <ColumnFilterHeader
                             label={col.label}
+                            filterable={!UNIQUE_VALUE_COLUMNS.includes(key)}
                             options={columnOptions[key] || []}
                             selected={columnFilters[key]}
                             onChange={(values) => setColumnFilter(key, values)}
