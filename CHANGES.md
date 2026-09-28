@@ -448,3 +448,12 @@ Also added: a **Donate** button in the homepage hero section (`src/pages/Home.ts
 - "Pagination + selection" (test #19): the Event Registration table doesn't paginate today (it never did), so select-all is scoped to the filtered set rather than a page.
 - Donation payments via Card/Square/PayPal are all-or-nothing (a donation's amount is fixed by the donor at submission, unlike a registration's fee) — there's no partial-donation-payment concept.
 - Neither Square, PayPal, nor the donation-payment endpoints have been exercised against real sandbox credentials in this environment — the request/response shapes follow each provider's published API docs, but, as with Stripe/Square/PayPal for event registrations, haven't been fired against a live sandbox account. Treat "pay $1 through each provider end-to-end" as the first thing to test before going live.
+
+## Single-use, name-based check-in codes
+
+- Check-in login codes are now **single-use**. The volunteer enters their **name + code**; the code is burned on first use and linked to that name (`kutumb_checkin_codes.used_at`, `used_by_name`).
+- Every check-in (QR scan or manual) now stores **who** did it and **which code** they used: `checked_in_by` / `checked_in_code` on `kutumb_registration_attendees` and `kutumb_attendees`.
+- Admin › Check-in: the code list shows each code as unused / used by <name>; the attendee table has a "Checked in by" column.
+- Admin › Event Registration › Attendees dialog: shows "by <name> (code XXXXXX)" under the check-in time.
+- Audit log entries for code logins and scans include the volunteer name and code.
+- Run `node server/db/migrate.js` (or your usual app.cmd launch) to apply the new columns — they are added with `IF NOT EXISTS`.

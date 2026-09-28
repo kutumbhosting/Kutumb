@@ -1235,6 +1235,15 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                         ✅ Checked in
                         <br />
                         {new Date(a.checkedInAt).toLocaleString("en-AU")}
+                        {a.checkedInBy && (
+                          <>
+                            <br />
+                            <span className="font-normal text-muted-foreground">
+                              by {a.checkedInBy}
+                              {a.checkedInCode ? ` (code ${a.checkedInCode})` : ""}
+                            </span>
+                          </>
+                        )}
                       </p>
                     ) : (
                       <Button size="sm" onClick={() => manualCheckInAttendee(a.id)}>

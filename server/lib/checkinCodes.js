@@ -25,7 +25,7 @@ function computeExpiry(eventDateText) {
 }
 
 /**
- * Generates 5 fresh temporary login codes for one event, replacing any
+ * Generates 5 fresh single-use login codes for one event, replacing any
  * still-active codes already issued for that same event (so re-clicking the
  * button doesn't silently pile up old codes alongside new ones — the
  * previous batch simply stops working the moment a new batch is generated).
@@ -62,27 +62,46 @@ export async function generateCheckinCodes({ eventName, eventYear, eventDateText
   return { codes, expiresAt };
 }
 
+export const MAX_VOLUNTEER_NAME_LENGTH = 60;
+
 /**
- * Looks up a code. Returns:
+ * Redeems a single-use code for a named volunteer. Returns:
+ *   - { error: "name" }          — name missing/too short/too long
  *   - null                       — no such code (never existed, or already cleaned up)
  *   - { expired: true }          — existed but is past its expiry (deleted as a side effect)
- *   - { row }                    — valid, still-active code (last_used_at is bumped)
+ *   - { used: true, usedBy }     — code was already used by someone
+ *   - { row }                    — success; the code is now burned and tied to `name`
+ *
+ * The "is it unused?" check and the write are ONE conditional UPDATE
+ * (... WHERE used_at IS NULL), so two people typing the same code at the same
+ * moment can never both get in — Postgres serialises the row update and only
+ * one UPDATE matches.
  */
-export async function redeemCheckinCode(code) {
+export async function redeemCheckinCode(code, name) {
   const normalized = String(code || "").trim().toUpperCase();
   if (!normalized) return null;
 
-  const { rows } = await pool.query("SELECT * FROM kutumb_checkin_codes WHERE code = $1", [normalized]);
-  const row = rows[0];
-  if (!row) return null;
+  const cleanName = String(name || "").replace(/\s+/g, " ").trim();
+  if (cleanName.length < 2 || cleanName.length > MAX_VOLUNTEER_NAME_LENGTH) return { error: "name" };
 
-  if (new Date(row.expires_at).getTime() <= Date.now()) {
-    await pool.query("DELETE FROM kutumb_checkin_codes WHERE id = $1", [row.id]);
+  const { rows } = await pool.query("SELECT * FROM kutumb_checkin_codes WHERE code = $1", [normalized]);
+  const existing = rows[0];
+  if (!existing) return null;
+
+  if (new Date(existing.expires_at).getTime() <= Date.now()) {
+    await pool.query("DELETE FROM kutumb_checkin_codes WHERE id = $1", [existing.id]);
     return { expired: true };
   }
 
-  await pool.query("UPDATE kutumb_checkin_codes SET last_used_at = now() WHERE id = $1", [row.id]);
-  return { row };
+  const { rows: claimed } = await pool.query(
+    `UPDATE kutumb_checkin_codes
+     SET used_at = now(), used_by_name = $2, last_used_at = now()
+     WHERE id = $1 AND used_at IS NULL
+     RETURNING *`,
+    [existing.id, cleanName]
+  );
+  if (!claimed[0]) return { used: true, usedBy: existing.used_by_name };
+  return { row: claimed[0] };
 }
 
 /** Deletes every code whose expiry has already passed. Safe to call often. */
@@ -103,7 +122,8 @@ export async function listCheckinCodeBatches() {
   const { rows } = await pool.query(
     `SELECT event_name, event_year, event_date_text, expires_at,
             MIN(created_at) AS generated_at,
-            array_agg(code ORDER BY code) AS codes
+            array_agg(code ORDER BY code) AS codes,
+            json_agg(json_build_object('code', code, 'used_at', used_at, 'used_by_name', used_by_name) ORDER BY code) AS code_details
      FROM kutumb_checkin_codes
      GROUP BY event_name, event_year, event_date_text, expires_at
      ORDER BY MIN(created_at) DESC`

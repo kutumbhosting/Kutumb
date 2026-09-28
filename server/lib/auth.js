@@ -27,12 +27,12 @@ export function signAdminToken(admin) {
 // never outlives the code itself - expiresIn is capped to whatever time is
 // actually left until the code's own expiry, not a fixed window, so a
 // captured token can't be replayed after the code has expired/been deleted.
-export function signCheckinCodeToken({ eventName, eventYear, code, expiresAt }) {
+export function signCheckinCodeToken({ eventName, eventYear, code, expiresAt, volunteerName }) {
   const secondsLeft = Math.max(60, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
   return jwt.sign(
     {
       email: "info@kutumb.org.au",
-      name: `Check-in code — ${eventName}`,
+      name: volunteerName,
       role: "checkin",
       scope: "checkin_code",
       checkinEventName: eventName,

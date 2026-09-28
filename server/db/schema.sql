@@ -448,6 +448,20 @@ CREATE TABLE IF NOT EXISTS kutumb_checkin_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_kutumb_checkin_codes_expires ON kutumb_checkin_codes(expires_at);
 
+-- Codes are now SINGLE-USE and tied to a named volunteer: the first person to
+-- log in with a code must type their name; the code is then burned
+-- (used_at set) and can never start another session. used_by_name records
+-- who that was.
+ALTER TABLE kutumb_checkin_codes ADD COLUMN IF NOT EXISTS used_at TIMESTAMPTZ;
+ALTER TABLE kutumb_checkin_codes ADD COLUMN IF NOT EXISTS used_by_name TEXT;
+
+-- Who checked each attendee in, and with which login code. checked_in_by
+-- already exists on registration attendees (holds an admin email, or now a
+-- volunteer's name for code logins); ticketed attendees get it too.
+ALTER TABLE kutumb_registration_attendees ADD COLUMN IF NOT EXISTS checked_in_code TEXT;
+ALTER TABLE kutumb_attendees ADD COLUMN IF NOT EXISTS checked_in_by TEXT;
+ALTER TABLE kutumb_attendees ADD COLUMN IF NOT EXISTS checked_in_code TEXT;
+
 -- ============================================================
 -- Square / PayPal payment tracking for the Event Registration flow.
 -- Deliberately separate from kutumb_orders (which is entangled with the

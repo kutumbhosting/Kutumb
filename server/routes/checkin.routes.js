@@ -12,6 +12,16 @@ import { sendCheckinCodesEmail } from "../lib/mailer.js";
 
 const router = Router();
 
+// Who is performing this check-in? A code session records the volunteer's
+// typed name plus the code they logged in with; a real admin session records
+// the admin's email (code is null).
+function checkinActor(req) {
+  if (req.admin?.scope === "checkin_code") {
+    return { by: req.admin.name || "Unknown volunteer", code: req.admin.checkinCode || null };
+  }
+  return { by: req.admin?.email || null, code: null };
+}
+
 // A temporary check-in code's session (see server/lib/auth.js) is allowed
 // through every route in this file — scanning tickets and viewing the
 // attendee list is exactly what those codes are for. Generating new codes
@@ -20,7 +30,7 @@ const router = Router();
 // should be able to do.
 router.use(requireAdminOrCheckinSession);
 
-// Generates 5 fresh temporary login codes for one event and emails them to
+// Generates 5 fresh single-use login codes for one event and emails them to
 // info@kutumb.org.au. Admin-only (not usable from a check-in-code session).
 router.post("/generate-codes", requireAdmin, async (req, res) => {
   try {
@@ -105,7 +115,7 @@ router.post("/codes/delete", requireAdmin, async (req, res) => {
 // per source so the two tables' own numeric ids can never collide.
 router.get("/:eventId/attendees", async (req, res) => {
   const { rows: ticketed } = await pool.query(
-    `SELECT a.id, a.name, a.email, a.qr_token, a.checked_in_at, tt.name AS ticket_type_name
+    `SELECT a.id, a.name, a.email, a.qr_token, a.checked_in_at, a.checked_in_by, a.checked_in_code, tt.name AS ticket_type_name
      FROM kutumb_attendees a
      JOIN kutumb_order_items oi ON oi.id = a.order_item_id
      JOIN kutumb_ticket_types tt ON tt.id = oi.ticket_type_id
@@ -118,7 +128,7 @@ router.get("/:eventId/attendees", async (req, res) => {
   // system's slug), so match case-insensitively against every event whose
   // slugified title equals :eventId.
   const { rows: regAttendees } = await pool.query(
-    `SELECT ra.id, ra.name, ra.category, ra.qr_token, ra.checked_in_at, ra.checked_in_by,
+    `SELECT ra.id, ra.name, ra.category, ra.qr_token, ra.checked_in_at, ra.checked_in_by, ra.checked_in_code,
             r.email, r.registration_number, r.payment_status, r.registration_status
      FROM kutumb_registration_attendees ra
      JOIN kutumb_event_registrations r ON r.id = ra.registration_id
@@ -134,6 +144,8 @@ router.get("/:eventId/attendees", async (req, res) => {
       email: a.email,
       ticket_type_name: a.ticket_type_name,
       checked_in_at: a.checked_in_at,
+      checked_in_by: a.checked_in_by,
+      checked_in_code: a.checked_in_code,
       source: "ticket",
     })),
     ...regAttendees.map((a) => ({
@@ -147,6 +159,7 @@ router.get("/:eventId/attendees", async (req, res) => {
         : "Child (5+)",
       checked_in_at: a.checked_in_at,
       checked_in_by: a.checked_in_by,
+      checked_in_code: a.checked_in_code,
       registrationNumber: a.registration_number,
       paymentStatus: a.payment_status,
       registrationStatus: a.registration_status,
@@ -188,21 +201,21 @@ async function findByToken(qrToken) {
 // no longer null) and it updates zero rows, which is what we check below.
 // `override: true` is the only way to check someone in again after that —
 // a deliberate admin action, not something that can happen by accident.
-async function markCheckedIn({ source, id, checkedInBy, override }) {
+async function markCheckedIn({ source, id, checkedInBy, checkedInCode, override }) {
   if (source === "registration") {
     const query = override
-      ? `UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1
+      ? `UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1, checked_in_code = $3
          WHERE id = $2 RETURNING *`
-      : `UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1
+      : `UPDATE kutumb_registration_attendees SET checked_in_at = now(), checked_in_by = $1, checked_in_code = $3
          WHERE id = $2 AND checked_in_at IS NULL RETURNING *`;
-    const { rows } = await pool.query(query, [checkedInBy, id]);
+    const { rows } = await pool.query(query, [checkedInBy, id, checkedInCode]);
     return rows[0] || null;
   }
 
   const query = override
-    ? `UPDATE kutumb_attendees SET checked_in_at = now() WHERE id = $1 RETURNING *`
-    : `UPDATE kutumb_attendees SET checked_in_at = now() WHERE id = $1 AND checked_in_at IS NULL RETURNING *`;
-  const { rows } = await pool.query(query, [id]);
+    ? `UPDATE kutumb_attendees SET checked_in_at = now(), checked_in_by = $2, checked_in_code = $3 WHERE id = $1 RETURNING *`
+    : `UPDATE kutumb_attendees SET checked_in_at = now(), checked_in_by = $2, checked_in_code = $3 WHERE id = $1 AND checked_in_at IS NULL RETURNING *`;
+  const { rows } = await pool.query(query, [id, checkedInBy, checkedInCode]);
   return rows[0] || null;
 }
 
@@ -218,7 +231,8 @@ router.post("/scan", async (req, res) => {
   if (!found) return res.status(404).json({ message: "No ticket/attendee found for this QR code" });
   const { source, row } = found;
 
-  const updated = await markCheckedIn({ source, id: row.id, checkedInBy: req.admin?.scope === "checkin_code" ? req.admin?.name : (req.admin?.email || null), override });
+  const actor = checkinActor(req);
+  const updated = await markCheckedIn({ source, id: row.id, checkedInBy: actor.by, checkedInCode: actor.code, override });
 
   if (!updated) {
     // The conditional UPDATE matched nothing — someone (possibly a
@@ -239,6 +253,8 @@ router.post("/scan", async (req, res) => {
     attendeeId: row.id,
     registrationNumber: source === "registration" ? row.registration_number : undefined,
     override: !!override,
+    checkedInBy: actor.by,
+    code: actor.code,
   });
 
   res.json({
@@ -264,7 +280,8 @@ router.post("/manual/:attendeeId", async (req, res) => {
   const source = prefix === "reg" ? "registration" : "ticket";
   const override = !!req.body?.override;
 
-  const updated = await markCheckedIn({ source, id, checkedInBy: req.admin?.scope === "checkin_code" ? req.admin?.name : (req.admin?.email || null), override });
+  const actor = checkinActor(req);
+  const updated = await markCheckedIn({ source, id, checkedInBy: actor.by, checkedInCode: actor.code, override });
 
   if (!updated) {
     // Either the attendee doesn't exist, or (far more likely) they're
@@ -284,6 +301,8 @@ router.post("/manual/:attendeeId", async (req, res) => {
   await logAudit(req.admin, "checkin.manual", source === "registration" ? updated.event_name : updated.event_id, {
     attendeeId: id,
     override,
+    checkedInBy: actor.by,
+    code: actor.code,
   });
   res.json({ message: "Checked in", attendee: updated });
 });

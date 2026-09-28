@@ -51,6 +51,7 @@ export default function CheckInStaff() {
   // out or have expired.
   const [loginMode, setLoginMode] = useState<"code" | "password">("code");
   const [codeInput, setCodeInput] = useState("");
+  const [nameInput, setNameInput] = useState("");
   const [codeError, setCodeError] = useState("");
   const [loggingInWithCode, setLoggingInWithCode] = useState(false);
 
@@ -98,7 +99,7 @@ export default function CheckInStaff() {
     try {
       const data = await api("/api/admin-auth/login-code", {
         method: "POST",
-        body: JSON.stringify({ code: codeInput }),
+        body: JSON.stringify({ code: codeInput, name: nameInput.trim() }),
       });
       setIsLoggedIn(true);
       setAdminName(data.admin?.name || data.admin?.email || "");
@@ -114,6 +115,7 @@ export default function CheckInStaff() {
     setIsLoggedIn(false);
     setLoginData({ email: DEFAULT_CHECKIN_EMAIL, password: "" });
     setCodeInput("");
+    setNameInput("");
     setCodeError("");
     setLoginMode("code");
     setBanner(null);
@@ -209,6 +211,18 @@ export default function CheckInStaff() {
           {loginMode === "code" ? (
             <form onSubmit={handleCodeLogin} style={styles.loginFormGap}>
               <input
+                style={styles.input}
+                type="text"
+                placeholder="Your full name"
+                autoComplete="name"
+                autoCapitalize="words"
+                maxLength={60}
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                autoFocus
+                required
+              />
+              <input
                 style={{ ...styles.input, ...styles.codeInput }}
                 type="text"
                 inputMode="text"
@@ -220,12 +234,11 @@ export default function CheckInStaff() {
                 maxLength={8}
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                autoFocus
                 required
               />
-              <p style={styles.hintSmall}>Ask an event admin for today's check-in code.</p>
+              <p style={styles.hintSmall}>Enter your name and the check-in code an event admin gave you. Each code works once and is linked to your name.</p>
               {codeError && <p style={styles.errorText}>{codeError}</p>}
-              <button type="submit" style={styles.primaryButton} disabled={loggingInWithCode || !codeInput}>
+              <button type="submit" style={styles.primaryButton} disabled={loggingInWithCode || !codeInput || nameInput.trim().length < 2}>
                 {loggingInWithCode ? "Signing in…" : "Sign in with code"}
               </button>
               <button type="button" style={styles.linkButton} onClick={() => { setLoginMode("password"); setCodeError(""); }}>

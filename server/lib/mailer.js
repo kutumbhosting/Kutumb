@@ -794,9 +794,9 @@ export async function sendCheckinCodesEmail({ to, eventName, eventYear, eventDat
       <p style="font-size:14px;">${codes?.length || 0} temporary check-in login code(s) have been generated for:</p>
       <p style="font-size:16px;margin:4px 0;"><strong>${escapeHtml(eventName)}${eventYear ? ` (${escapeHtml(eventYear)})` : ""}</strong>${eventDateText ? ` &mdash; ${escapeHtml(eventDateText)}` : ""}</p>
       <div style="text-align:center;margin:16px 0;">${codeBlocks}</div>
-      <p style="font-size:14px;">Give one code to each door volunteer's device. At <a href="https://kutumb.org.au/checkin">kutumb.org.au/checkin</a>, choose <strong>"Log in with a code"</strong> and type it in — no email or password needed.</p>
+      <p style="font-size:14px;">Give one code to each door volunteer's device. At <a href="https://kutumb.org.au/checkin">kutumb.org.au/checkin</a>, choose <strong>"Log in with a code"</strong>, enter their own name and the code — no email or password needed.</p>
       <p style="font-size:14px;font-weight:600;color:#9a3412;">These codes stop working after ${escapeHtml(expiryText)} and are then deleted automatically.</p>
-      <p style="font-size:13px;color:#555;">Any of the 5 codes can be used by more than one device at the same time, so hand them out freely to everyone helping on the day.</p>
+      <p style="font-size:13px;color:#555;"><strong>Each code works only once</strong> — the first volunteer to sign in with it enters their name, and that code is then linked to them and cannot be used again. Please give each volunteer a different code. Every check-in is recorded against the volunteer's name.</p>
       <p style="margin-top:24px;color:#555;font-size:13px;">With Best Regards, &middot; Kutumb Executive Team</p>
     </div>`;
   return send({ to, subject: `Check-in codes — ${eventName}`, html, attachments: logoAttachment() });

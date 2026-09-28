@@ -51,6 +51,7 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
     expires_at: string;
     generated_at: string;
     codes: string[];
+    code_details?: { code: string; used_at: string | null; used_by_name: string | null }[];
   }
   const [codeBatches, setCodeBatches] = useState<CodeBatch[]>([]);
   const [loadingBatches, setLoadingBatches] = useState(false);
@@ -301,7 +302,7 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
               <div>
                 <Label>Door volunteer login codes</Label>
                 <p className="text-xs text-muted-foreground">
-                  Generates 5 temporary codes for this event so volunteers can log in to kutumb.org.au/checkin without an
+                  Generates 5 single-use codes for this event so volunteers can log in (each volunteer enters their name, and the code is then tied to them) to kutumb.org.au/checkin without an
                   admin email/password. They expire at the end of {selectedEventDateText || "the event's day"} and are
                   deleted automatically.
                 </p>
@@ -372,9 +373,14 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
                         </td>
                         <td className="py-2 pr-2">
                           <div className="flex flex-wrap gap-1">
-                            {b.codes.map((c) => (
-                              <span key={c} className="font-mono text-xs border rounded px-1.5 py-0.5">
-                                {c}
+                            {(b.code_details || b.codes.map((c) => ({ code: c, used_at: null, used_by_name: null }))).map((d) => (
+                              <span
+                                key={d.code}
+                                className={`font-mono text-xs border rounded px-1.5 py-0.5 ${d.used_at ? "bg-muted text-muted-foreground" : ""}`}
+                                title={d.used_at ? `Used by ${d.used_by_name} at ${new Date(d.used_at).toLocaleString()}` : "Not used yet"}
+                              >
+                                <span className={d.used_at ? "line-through" : ""}>{d.code}</span>
+                                {d.used_at ? ` — ${d.used_by_name}` : " — unused"}
                               </span>
                             ))}
                           </div>
@@ -460,13 +466,14 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="text-left border-b"><th className="py-1">Name</th><th>Ticket</th><th>Status</th><th></th></tr></thead>
+                <thead><tr className="text-left border-b"><th className="py-1">Name</th><th>Ticket</th><th>Status</th><th>Checked in by</th><th></th></tr></thead>
                 <tbody>
                   {filtered.map((a) => (
                     <tr key={a.id} className="border-b">
                       <td className="py-1">{a.name} ({a.email})</td>
                       <td>{a.ticket_type_name}</td>
                       <td>{a.checked_in_at ? `✅ ${new Date(a.checked_in_at).toLocaleTimeString()}` : "—"}</td>
+                      <td>{a.checked_in_at ? `${a.checked_in_by || "—"}${a.checked_in_code ? ` (${a.checked_in_code})` : ""}` : ""}</td>
                       <td>
                         {!a.checked_in_at && (
                           <Button size="sm" onClick={() => manualCheckIn(a.id)}>Check in</Button>

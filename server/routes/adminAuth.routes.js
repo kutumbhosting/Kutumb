@@ -45,25 +45,35 @@ router.post("/login", async (req, res) => {
 // a plain requireAdmin — see server/lib/auth.js.
 router.post("/login-code", async (req, res) => {
   try {
-    const { code } = req.body || {};
+    const { code, name } = req.body || {};
     if (!code) return res.status(400).json({ message: "A check-in code is required" });
+    if (!String(name || "").trim()) return res.status(400).json({ message: "Please enter your name" });
 
-    const result = await redeemCheckinCode(code);
+    const result = await redeemCheckinCode(code, name);
     if (!result) return res.status(401).json({ message: "That code wasn't recognised" });
+    if (result.error === "name") return res.status(400).json({ message: "Please enter your full name (2–60 characters)" });
     if (result.expired) return res.status(401).json({ message: "That code has expired" });
+    if (result.used) return res.status(401).json({ message: "That code has already been used. Ask an event admin for a new one." });
 
     const { row } = result;
     const safeAdmin = {
       email: "info@kutumb.org.au",
-      name: `Check-in code — ${row.event_name}`,
+      name: row.used_by_name,
       role: "checkin",
       scope: "checkin_code",
       checkinEventName: row.event_name,
       checkinEventYear: row.event_year,
+      checkinCode: row.code,
     };
-    const token = signCheckinCodeToken({ eventName: row.event_name, eventYear: row.event_year, code: row.code, expiresAt: row.expires_at });
+    const token = signCheckinCodeToken({
+      eventName: row.event_name,
+      eventYear: row.event_year,
+      code: row.code,
+      expiresAt: row.expires_at,
+      volunteerName: row.used_by_name,
+    });
     res.cookie(ADMIN_COOKIE_NAME, token, { ...COOKIE_OPTIONS, maxAge: Math.max(0, new Date(row.expires_at).getTime() - Date.now()) });
-    await logAudit(safeAdmin, "checkin.code_login", row.event_name, null);
+    await logAudit(safeAdmin, "checkin.code_login", row.event_name, { volunteer: row.used_by_name, code: row.code });
     res.json({ token, admin: safeAdmin });
   } catch (err) {
     console.error("CHECKIN CODE LOGIN ERROR:", err);
@@ -87,6 +97,7 @@ router.get("/me", requireAdminOrCheckinSession, async (req, res) => {
       scope: req.admin.scope,
       checkinEventName: req.admin.checkinEventName,
       checkinEventYear: req.admin.checkinEventYear,
+      checkinCode: req.admin.checkinCode,
     });
   }
   const { rows } = await pool.query("SELECT id, email, name, role, created_at FROM kutumb_admin_users WHERE id = $1", [req.admin.id]);

@@ -127,6 +127,7 @@ router.get("/registration/:id/attendees", requireAdmin, async (req, res) => {
       qrCode: await generateQrDataUrl(a.qr_token),
       checkedInAt: a.checked_in_at,
       checkedInBy: a.checked_in_by,
+      checkedInCode: a.checked_in_code,
     }))
   );
   res.json(withQr);
