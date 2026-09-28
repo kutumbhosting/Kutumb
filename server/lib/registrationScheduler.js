@@ -60,6 +60,7 @@ const LOCK_KEY = "kutumb_registration_scheduler";
 const COUPON_LOCK_KEY = "kutumb_coupon_part_payment_emails";
 
 let timer = null;
+let checkinCodeTimer = null;
 let lastRun = null;
 
 /* ── Sydney calendar helpers ─────────────────────────────────────────── */
@@ -635,14 +636,24 @@ export function startRegistrationScheduler() {
   const tick = () => {
     runCouponPartPaymentEmails().catch((err) => console.error("Coupon part-payment email error:", err.message));
     runRegistrationEmails().catch((err) => console.error("Registration email scheduler error:", err.message));
-    // Temporary check-in login codes (see server/lib/checkinCodes.js) are
-    // also lazily deleted the moment an expired one is actually tried, but
-    // this sweep catches the ones nobody ever tries again after expiry, so
-    // the table never quietly accumulates stale rows.
-    cleanupExpiredCheckinCodes().catch((err) => console.error("Check-in code cleanup error:", err.message));
   };
   timer = setInterval(tick, 10 * 60_000);
   timer.unref?.();
   setTimeout(tick, 60_000).unref?.();
   console.log("⏰ Registration emails: reminders, auto-cancel and day-before welcome and coupon part-payment emails checked every 10 min");
+
+  // Temporary check-in login codes (see server/lib/checkinCodes.js) are also
+  // lazily deleted the moment an expired one is actually tried, but that
+  // only catches codes someone still attempts to use. This sweep runs on
+  // its own, much tighter cadence so a batch's row disappears from the
+  // database within a minute of its expiry, not up to 10 minutes later —
+  // matching the admin table, which hides expired rows client-side the
+  // moment the clock runs out.
+  if (checkinCodeTimer) clearInterval(checkinCodeTimer);
+  const checkinTick = () => {
+    cleanupExpiredCheckinCodes().catch((err) => console.error("Check-in code cleanup error:", err.message));
+  };
+  checkinCodeTimer = setInterval(checkinTick, 60_000);
+  checkinCodeTimer.unref?.();
+  setTimeout(checkinTick, 5_000).unref?.();
 }
