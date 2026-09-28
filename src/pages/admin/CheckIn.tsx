@@ -73,6 +73,29 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
     }
   };
 
+  // Ticks every 15s purely so the table below re-evaluates which batches
+  // have expired and drops them from view the moment their clock runs out,
+  // without waiting on a manual refresh. The rows are actually deleted from
+  // the database by the periodic server-side sweep (see
+  // cleanupExpiredCheckinCodes in registrationScheduler.js) and, failing
+  // that, the moment anyone tries to redeem an expired code — this is just
+  // about hiding a stale row from the admin's screen promptly.
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Also re-pull the batch list periodically so newly-generated codes (from
+  // another admin, say) and rows the server has already cleaned up both
+  // stay in sync without the admin needing to click Refresh.
+  useEffect(() => {
+    const t = setInterval(() => loadCodeBatches(), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const visibleCodeBatches = codeBatches.filter((b) => new Date(b.expires_at).getTime() > nowTick);
+
   useEffect(() => {
     fetch("/api/upcoming-events").then((r) => r.json()).then(setUpcomingEvents).catch(() => {});
     loadCodeBatches();
@@ -324,7 +347,7 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {codeBatches.map((b) => {
+                  {visibleCodeBatches.map((b) => {
                     const key = batchKey(b);
                     const isEditing = editingBatch === key;
                     return (
@@ -388,7 +411,7 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
                 </tbody>
               </table>
             </div>
-            {!loadingBatches && codeBatches.length === 0 && (
+            {!loadingBatches && visibleCodeBatches.length === 0 && (
               <p className="text-sm text-muted-foreground">No active check-in codes right now.</p>
             )}
           </div>

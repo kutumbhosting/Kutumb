@@ -88,7 +88,7 @@ export function ColumnFilterHeader({
             title={`Filter ${label}`}
             aria-label={`Filter ${label}`}
           >
-            <Filter className={cn("h-3.5 w-3.5", isActive && "fill-current")} />
+            <Filter className={cn("h-2.5 w-2.5", isActive && "fill-current")} />
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-56 p-0" align="start">
