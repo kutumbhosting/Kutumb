@@ -15,6 +15,38 @@ import EventRegistrationSuccessDialog, {
 } from "@/components/EventRegistrationSuccessDialog";
 import { Button } from "@/components/ui/button";
 import { HeartHandshake } from "lucide-react";
+import { FieldProblem } from "@/components/MissingFieldsAlert";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Returns every problem with the registration form (empty array = OK).
+const validateRegistration = (f: any): FieldProblem[] => {
+  const out: FieldProblem[] = [];
+  if (!String(f.eventName || "").trim())
+    out.push({ id: "event", label: "Event", message: "No event selected — close this window and choose an event to register for" });
+  if (!String(f.name || "").trim()) out.push({ id: "name", label: "Full Name" });
+  if (!String(f.email || "").trim()) out.push({ id: "email", label: "Email Address" });
+  else if (!EMAIL_RE.test(f.email))
+    out.push({ id: "email", label: "Email Address", message: "Email Address is not valid — please enter a valid email" });
+  if (!String(f.phone || "").trim()) out.push({ id: "phone", label: "Phone Number" });
+  for (let i = 0; i < (Number(f.adults) || 0); i++) {
+    if (!(f.adultNames || [])[i]?.trim() && !out.some((o) => o.id === `adult-name-${i}`))
+      out.push({ id: `adult-name-${i}`, label: `Additional Adult ${i + 1} name`, message: `Name of additional adult ${i + 1} is required` });
+  }
+  for (let i = 0; i < (Number(f.children5Plus) || 0); i++) {
+    if (!(f.children5PlusNames || [])[i]?.trim())
+      out.push({ id: `child5plus-name-${i}`, label: `Child ${i + 1} (5 and over) name`, message: `Name of child ${i + 1} (5 and over) is required` });
+  }
+  for (let i = 0; i < (Number(f.childrenUnder5) || 0); i++) {
+    if (!(f.childrenUnder5Names || [])[i]?.trim())
+      out.push({ id: `childunder5-name-${i}`, label: `Child ${i + 1} (under 5) name`, message: `Name of child ${i + 1} (under 5) is required` });
+  }
+  if (!f.heardAboutSource)
+    out.push({ id: "heardAboutSource", label: "How did you hear about this event", message: "Please tell us how you heard about this event" });
+  else if (f.heardAboutSource === "Other" && !String(f.heardAboutOther || "").trim())
+    out.push({ id: "heardAboutOther", label: "Details for \"Other\"", message: "Please provide details for \"Other\" (how you heard about this event)" });
+  return out;
+};
 
 const Events = () => {
   const { toast } = useToast();
@@ -22,6 +54,7 @@ const Events = () => {
   const location = useLocation();
   const [submitMessage, setSubmitMessage] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
   const [donateOpen, setDonateOpen] = useState(false);
   const [registrationOpen, setRegistrationOpen] = useState(false);
   const [successOpen, setSuccessOpen] = useState(false);
@@ -98,56 +131,21 @@ const Events = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.email || !formData.phone) {
+    // Validate everything and tell the registrant exactly what is missing
+    // (inline list + toast + jump to the first problem) instead of a vague
+    // message that is easy to miss.
+    setShowErrors(true);
+    const problems = validateRegistration(formData);
+    if (problems.length > 0) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields.",
+        description: `Please complete: ${problems.map((p) => p.label).join(", ")}.`,
         variant: "destructive",
       });
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      toast({
-        title: "Invalid Email",
-        description: "Please enter a valid email address.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!formData.heardAboutSource) {
-      toast({
-        title: "Missing Information",
-        description: "Please tell us how you heard about this event.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (formData.heardAboutSource === "Other" && !formData.heardAboutOther.trim()) {
-      toast({
-        title: "Missing Information",
-        description: "Please provide details for \"Other\".",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Every additional adult and child gets their own ticket, so each one
-    // needs an actual name — a blank slot here would otherwise fall back
-    // to a generic "Additional Adult 1" / "Child 1" label on their ticket.
-    const missingName =
-      formData.adultNames.slice(0, formData.adults).some((n) => !n.trim()) ||
-      formData.children5PlusNames.slice(0, formData.children5Plus).some((n) => !n.trim()) ||
-      formData.childrenUnder5Names.slice(0, formData.childrenUnder5).some((n) => !n.trim());
-    if (missingName) {
-      toast({
-        title: "Missing Names",
-        description: "Please enter a name for every additional adult and child so we can issue their tickets correctly.",
-        variant: "destructive",
-      });
+      setTimeout(() => {
+        document.getElementById("missing-fields-alert")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        (document.getElementById(problems[0].id) as HTMLElement | null)?.focus?.();
+      }, 50);
       return;
     }
 
@@ -312,6 +310,7 @@ const Events = () => {
                 submitMessage={submitMessage}
                 handleSubmit={handleSubmit}
                 submitting={submitting}
+                problems={showErrors ? validateRegistration(formData) : []}
                 registrationOpen={registrationOpen}
                 setRegistrationOpen={setRegistrationOpen}
               />

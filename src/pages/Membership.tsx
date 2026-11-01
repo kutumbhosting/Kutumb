@@ -14,6 +14,7 @@ import MembershipCardDialog, {
   MembershipCardData,
 } from "@/components/MembershipCardDialog";
 import DonateDialog from "@/components/DonateDialog";
+import MissingFieldsAlert, { FieldProblem } from "@/components/MissingFieldsAlert";
 import { HeartHandshake } from "lucide-react";
 
 const Membership = () => {
@@ -30,6 +31,24 @@ const Membership = () => {
   const [cardOpen, setCardOpen] = useState(false);
   const [cardData, setCardData] = useState<MembershipCardData | null>(null);
   const [donateOpen, setDonateOpen] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
+
+  // Everything still missing/invalid, recomputed live so the list shrinks as
+  // the applicant fills things in.
+  const getProblems = (): FieldProblem[] => {
+    const out: FieldProblem[] = [];
+    if (!formData.name.trim()) out.push({ id: "name", label: "Full Name" });
+    if (!formData.phone.trim()) out.push({ id: "phone", label: "Phone Number" });
+    if (!formData.email.trim()) out.push({ id: "email", label: "Email Address" });
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
+      out.push({ id: "email", label: "Email Address", message: "Email Address is not valid — please enter a valid email" });
+    if (!formData.address.trim()) out.push({ id: "address", label: "Address" });
+    if (formData.interests.length === 0)
+      out.push({ id: "interests-group", label: "Areas of Interest", message: "Please select at least one Area of Interest" });
+    return out;
+  };
+  const problems = showErrors ? getProblems() : [];
+  const bad = (id: string) => (problems.some((p) => p.id === id) ? " border-red-500 focus-visible:ring-red-500" : "");
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -131,37 +150,18 @@ const Membership = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (
-      !formData.name ||
-      !formData.email ||
-      !formData.phone ||
-      !formData.address
-    ) {
+    setShowErrors(true);
+    const found = getProblems();
+    if (found.length > 0) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields.",
+        description: `Please complete: ${found.map((p) => p.label).join(", ")}.`,
         variant: "destructive",
       });
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      toast({
-        title: "Invalid Email",
-        description: "Please enter a valid email address.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (formData.interests.length === 0) {
-      toast({
-        title: "Select Interests",
-        description:
-          "Please select at least one area of interest.",
-        variant: "destructive",
-      });
+      setTimeout(() => {
+        document.getElementById("missing-fields-alert")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        (document.getElementById(found[0].id) as HTMLElement | null)?.focus?.();
+      }, 50);
       return;
     }
 
@@ -318,7 +318,7 @@ const Membership = () => {
                             })
                           }
                           placeholder="Enter your full name"
-                          className="mt-2"
+                          className={"mt-2"+bad("name")}
                         />
                       </div>
 
@@ -337,7 +337,7 @@ const Membership = () => {
                             })
                           }
                           placeholder="+61 XXX XXX XXX"
-                          className="mt-2"
+                          className={"mt-2"+bad("phone")}
                         />
                       </div>
                     </div>
@@ -357,7 +357,7 @@ const Membership = () => {
                           })
                         }
                         placeholder="your.email@example.com"
-                        className="mt-2"
+                        className={"mt-2"+bad("email")}
                       />
                     </div>
 
@@ -375,7 +375,7 @@ const Membership = () => {
                           })
                         }
                         placeholder="Street address, City, State, Postcode"
-                        className="mt-2"
+                        className={"mt-2"+bad("address")}
                       />
                     </div>
 
@@ -384,7 +384,7 @@ const Membership = () => {
                         Areas of Interest *
                       </Label>
 
-                      <div className="grid md:grid-cols-2 gap-4">
+                      <div id="interests-group" tabIndex={-1} className={"grid md:grid-cols-2 gap-4 rounded-md outline-none"+(problems.some((p) => p.id === "interests-group") ? " ring-2 ring-red-400 p-3" : "")}>
                         {interestOptions.map((interest) => (
                           <div
                             key={interest}
@@ -420,6 +420,8 @@ const Membership = () => {
                         ))}
                       </div>
                     </div>
+
+                    <MissingFieldsAlert problems={problems} />
 
                     <div className="pt-4">
                       <Button

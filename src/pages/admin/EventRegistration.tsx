@@ -37,7 +37,8 @@ const REGISTRATION_COLUMNS: { key: RegistrationColumnKey; label: string; getValu
   { key: "name", label: "Name", getValue: (m) => m.name || "" },
   { key: "email", label: "Email", getValue: (m) => m.email || "" },
   { key: "phone", label: "Phone", getValue: (m) => m.phone || "" },
-  { key: "adults", label: "Adults", getValue: (m) => String(m.adults ?? "") },
+  // Adults includes the registrant themself (stored `adults` = additional adults only).
+  { key: "adults", label: "Adults", getValue: (m) => String(1 + Number(m.adults || 0)) },
   { key: "children", label: "Children", getValue: (m) => String(m.children ?? "") },
   { key: "fee", label: "Fee", getValue: (m) => (typeof m.fee === "number" ? `$${m.fee}` : "-") },
   { key: "paymentStatus", label: "Payment Status", getValue: (m) => m.paymentStatus || "N/A" },
@@ -754,7 +755,7 @@ const EventRegistration = ({ groupedEvents, onReload }: EventRegistrationProps) 
                       <td className="p-2">{item.name}</td>
                       <td className="p-2">{item.email}</td>
                       <td className="p-2">{item.phone}</td>
-                      <td className="p-2">{item.adults}</td>
+                      <td className="p-2">{1 + Number(item.adults || 0)}</td>
                       <td className="p-2">
                         {item.children}
                         {(item.childrenUnder5 > 0 || item.children5Plus > 0) && (

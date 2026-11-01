@@ -1,3 +1,4 @@
+import MissingFieldsAlert, { FieldProblem } from "@/components/MissingFieldsAlert";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
@@ -73,6 +74,8 @@ interface UpcomingEventsProps {
    *  instead of sitting there looking unclicked while the server round-trip
    *  (membership lookup + fee calc) is in flight. */
   submitting?: boolean;
+  /** Live list of what is still missing/invalid after a failed submit attempt. */
+  problems?: FieldProblem[];
   /** Controls the "Register for This Event" popup, lifted up to Events.tsx
       so it can also be opened from "Register Now" links elsewhere on the
       site and reopened automatically after returning from Membership. */
@@ -87,10 +90,12 @@ const UpcomingEvents = ({
   submitMessage,
   handleSubmit,
   submitting = false,
+  problems = [],
   registrationOpen,
   setRegistrationOpen,
 }: UpcomingEventsProps) => {
   const navigate = useNavigate();
+  const bad = (id: string) => (problems.some((p) => p.id === id) ? " border-red-500 focus-visible:ring-red-500" : "");
 
   // ── Live membership lookup as the registrant fills in name + email ───────
   const [membershipNumber, setMembershipNumber] = useState<string | null>(null);
@@ -322,7 +327,7 @@ const UpcomingEvents = ({
                     setFormData({ ...formData, name: e.target.value })
                   }
                   placeholder="Enter your full name"
-                  className="mt-2"
+                  className={"mt-2"+bad("name")}
                 />
               </div>
 
@@ -336,7 +341,7 @@ const UpcomingEvents = ({
                     setFormData({ ...formData, email: e.target.value })
                   }
                   placeholder="your.email@example.com"
-                  className="mt-2"
+                  className={"mt-2"+bad("email")}
                 />
               </div>
 
@@ -350,7 +355,7 @@ const UpcomingEvents = ({
                     setFormData({ ...formData, phone: e.target.value })
                   }
                   placeholder="+61 XXX XXX XXX"
-                  className="mt-2"
+                  className={"mt-2"+bad("phone")}
                 />
               </div>
 
@@ -448,6 +453,8 @@ const UpcomingEvents = ({
                   {Array.from({ length: Number(formData.adults) }).map((_, i) => (
                     <Input
                       key={`adult-name-${i}`}
+                      id={`adult-name-${i}`}
+                      className={bad(`adult-name-${i}`).trim()}
                       placeholder={`Adult ${i + 2} full name`}
                       value={formData.adultNames[i] || ""}
                       onChange={(e) => {
@@ -468,6 +475,8 @@ const UpcomingEvents = ({
                   {Array.from({ length: Number(formData.children5Plus) }).map((_, i) => (
                     <Input
                       key={`child5plus-name-${i}`}
+                      id={`child5plus-name-${i}`}
+                      className={bad(`child5plus-name-${i}`).trim()}
                       placeholder={`Child ${i + 1} full name`}
                       value={formData.children5PlusNames[i] || ""}
                       onChange={(e) => {
@@ -488,6 +497,8 @@ const UpcomingEvents = ({
                   {Array.from({ length: Number(formData.childrenUnder5) }).map((_, i) => (
                     <Input
                       key={`childunder5-name-${i}`}
+                      id={`childunder5-name-${i}`}
+                      className={bad(`childunder5-name-${i}`).trim()}
                       placeholder={`Child ${i + 1} full name`}
                       value={formData.childrenUnder5Names[i] || ""}
                       onChange={(e) => {
@@ -560,7 +571,7 @@ const UpcomingEvents = ({
               )}
 
               <div>
-                <Label htmlFor="heardAboutSource">How did you hear about this event?</Label>
+                <Label htmlFor="heardAboutSource">How did you hear about this event? *</Label>
                 <Select
                   value={formData.heardAboutSource}
                   onValueChange={(value) =>
@@ -573,7 +584,7 @@ const UpcomingEvents = ({
                     })
                   }
                 >
-                  <SelectTrigger id="heardAboutSource" className="mt-2">
+                  <SelectTrigger id="heardAboutSource" className={"mt-2"+bad("heardAboutSource")}>
                     <SelectValue placeholder="Select an option" />
                   </SelectTrigger>
                   <SelectContent>
@@ -588,7 +599,7 @@ const UpcomingEvents = ({
 
               {formData.heardAboutSource === "Other" && (
                 <div>
-                  <Label htmlFor="heardAboutOther">Please provide details</Label>
+                  <Label htmlFor="heardAboutOther">Please provide details *</Label>
                   <Input
                     id="heardAboutOther"
                     value={formData.heardAboutOther}
@@ -599,7 +610,7 @@ const UpcomingEvents = ({
                       })
                     }
                     placeholder="Tell us how you heard about this event"
-                    className="mt-2"
+                    className={"mt-2"+bad("heardAboutOther")}
                   />
                 </div>
               )}
@@ -619,6 +630,8 @@ const UpcomingEvents = ({
                   className="mt-2 min-h-24"
                 />
               </div>
+
+              <MissingFieldsAlert problems={problems} />
 
               <Button
                 type="submit"
