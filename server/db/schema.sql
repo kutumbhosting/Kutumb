@@ -692,3 +692,9 @@ CREATE TABLE IF NOT EXISTS kutumb_bank_statement_lines (
 );
 CREATE INDEX IF NOT EXISTS idx_kutumb_bsl_date ON kutumb_bank_statement_lines(txn_date);
 CREATE INDEX IF NOT EXISTS idx_kutumb_bsl_event ON kutumb_bank_statement_lines(event_name, event_year);
+
+-- Admin Console → Activities tab: admin-uploaded photos/videos (stored in
+-- kutumb_media_files, referenced here by filename as [{type, src}]) and an
+-- optional location. Additive and idempotent.
+ALTER TABLE kutumb_activities ADD COLUMN IF NOT EXISTS media JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE kutumb_activities ADD COLUMN IF NOT EXISTS location TEXT;

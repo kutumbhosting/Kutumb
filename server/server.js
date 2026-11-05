@@ -46,6 +46,7 @@ import squareRoutes, { squareWebhookHandler } from "./routes/square.routes.js";
 import paypalRoutes from "./routes/paypal.routes.js";
 import checkinRoutes from "./routes/checkin.routes.js";
 import mediaRoutes from "./routes/media.routes.js";
+import activitiesAdminRouter from "./routes/activitiesAdmin.routes.js";
 import reconciliationRoutes from "./routes/reconciliation.routes.js";
 import registrationEmailsRoutes from "./routes/registrationEmails.routes.js";
 import openfeedRoutes from "./routes/openfeed.routes.js";
@@ -167,6 +168,7 @@ ensureBundledManuals();
 // (kutumb_media_files), served dynamically instead of as static files.
 app.use("/api/media", mediaRoutes);
 app.use("/api/pastevents", pastEventsRouter);
+app.use("/api/admin-activities", activitiesAdminRouter);
 
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 8080}`;
 
@@ -1628,6 +1630,8 @@ app.get("/api/activities", async (req, res) => {
         title: a.title,
         image1: a.image1,
         image2: a.image2,
+        media: Array.isArray(a.media) ? a.media : [],
+        location: a.location || undefined,
         description: a.description,
         schedule: a.schedule,
         participationOptions: a.participation_options || [],
