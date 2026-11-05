@@ -21,8 +21,11 @@ interface ActivityRow {
   schedule: string;
   location: string;
   participationOptions: string[];
+  onlineYoga: string[];
+  inPersonYoga: string[];
   benefits: string[];
-  legacyImages: string[];
+  sortOrder: number;
+  legacyImages: { slot: "image1" | "image2"; src: string }[];
   media: MediaItem[];
 }
 
@@ -32,7 +35,10 @@ interface FormState {
   schedule: string;
   location: string;
   participationOptions: string; // one per line
+  onlineYoga: string; // one per line
+  inPersonYoga: string; // one per line
   benefits: string; // one per line
+  sortOrder: string;
 }
 
 const emptyForm: FormState = {
@@ -41,7 +47,10 @@ const emptyForm: FormState = {
   schedule: "",
   location: "",
   participationOptions: "",
+  onlineYoga: "",
+  inPersonYoga: "",
   benefits: "",
+  sortOrder: "",
 };
 
 const Activities = () => {
@@ -90,7 +99,10 @@ const Activities = () => {
       schedule: row.schedule,
       location: row.location,
       participationOptions: row.participationOptions.join("\n"),
+      onlineYoga: row.onlineYoga.join("\n"),
+      inPersonYoga: row.inPersonYoga.join("\n"),
       benefits: row.benefits.join("\n"),
+      sortOrder: String(row.sortOrder ?? ""),
     });
     setPendingFiles([]);
     if (fileInput.current) fileInput.current.value = "";
@@ -181,6 +193,23 @@ const Activities = () => {
     }
   };
 
+  const removeLegacy = async (slot: string) => {
+    if (editingId === null || !confirm("Remove this image?")) return;
+    try {
+      const res = await fetch(`/api/admin-activities/${editingId}/legacy-image/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Delete failed");
+      toast({ title: "Removed", description: "Image deleted" });
+      await load();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
   const set = (k: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -221,6 +250,7 @@ const Activities = () => {
                         aria-label="Select all"
                       />
                     </TableHead>
+                    <TableHead className="w-14">Order</TableHead>
                     <TableHead>Title</TableHead>
                     <TableHead>Schedule</TableHead>
                     <TableHead>Location</TableHead>
@@ -241,6 +271,7 @@ const Activities = () => {
                             aria-label={`Select ${r.title}`}
                           />
                         </TableCell>
+                        <TableCell>{r.sortOrder}</TableCell>
                         <TableCell className="font-medium">{r.title}</TableCell>
                         <TableCell className="max-w-[14rem]">{r.schedule || "-"}</TableCell>
                         <TableCell>{r.location || "-"}</TableCell>
@@ -273,9 +304,13 @@ const Activities = () => {
                   <Label htmlFor="act-schedule">Schedule</Label>
                   <Input id="act-schedule" value={form.schedule} onChange={set("schedule")} placeholder="e.g. Every Saturday, 12:00 PM - 3:00 PM" />
                 </div>
-                <div className="space-y-1 sm:col-span-2">
+                <div className="space-y-1">
                   <Label htmlFor="act-location">Location</Label>
                   <Input id="act-location" value={form.location} onChange={set("location")} placeholder="Optional" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="act-order">Display order</Label>
+                  <Input id="act-order" type="number" value={form.sortOrder} onChange={set("sortOrder")} placeholder="Blank = add at the end" />
                 </div>
               </div>
               <div className="space-y-1">
@@ -283,6 +318,14 @@ const Activities = () => {
                 <Textarea id="act-desc" rows={3} value={form.description} onChange={set("description")} />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="act-online">Online details (one per line)</Label>
+                  <Textarea id="act-online" rows={4} value={form.onlineYoga} onChange={set("onlineYoga")} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="act-inperson">In-person details (one per line)</Label>
+                  <Textarea id="act-inperson" rows={4} value={form.inPersonYoga} onChange={set("inPersonYoga")} />
+                </div>
                 <div className="space-y-1">
                   <Label htmlFor="act-part">Participation options (one per line)</Label>
                   <Textarea id="act-part" rows={4} value={form.participationOptions} onChange={set("participationOptions")} />
@@ -300,9 +343,28 @@ const Activities = () => {
                 {editing && (editing.legacyImages.length > 0 || editing.media.length > 0) && (
                   <div className="flex flex-wrap gap-3">
                     {editing.legacyImages.map((img) => (
-                      <div key={img} className="relative">
-                        <img src={`/activity-images/${img}`} alt="" className="w-28 h-28 object-cover rounded border" />
-                        <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[10px] px-1 rounded">original</span>
+                      <div key={img.slot} className="relative">
+                        <img
+                          src={`/activity-images/${img.src}`}
+                          alt=""
+                          className="w-28 h-28 object-cover rounded border"
+                          onError={(e) => {
+                            // not on disk — it may be stored in the database instead
+                            const el = e.currentTarget;
+                            if (!el.dataset.fallback) {
+                              el.dataset.fallback = "1";
+                              el.src = `/api/media/${img.src}`;
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="absolute top-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded"
+                          onClick={() => removeLegacy(img.slot)}
+                          title="Remove"
+                        >
+                          ✕
+                        </button>
                       </div>
                     ))}
                     {editing.media.map((m) => (
