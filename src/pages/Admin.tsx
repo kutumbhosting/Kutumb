@@ -20,6 +20,7 @@ import CheckIn from "./admin/CheckIn";
 import Coupons from "./admin/Coupons";
 import PlatformConsole from "./admin/PlatformConsole";
 import Manuals from "./admin/Manuals";
+import Activities from "./admin/Activities";
 import BankDashboard from "./admin/BankDashboard";
 
 // ─── Shared utilities ────────────────────────────────────────────────────────
@@ -231,7 +232,7 @@ const Admin = () => {
                   Logout
                 </Button>
               </div>
-              {/* Tab order: Members, Events Settings, Events Management, Data
+              {/* Tab order: Members, Bank, Activities, Events Settings, Events Management, Data
                   Management, Key Settings & Access. A limited ("admin") user
                   only sees Events Settings, Events Management and Data
                   Management (File Management only, no Database Tables) — the
@@ -245,6 +246,7 @@ const Admin = () => {
                 <TabsList className="flex flex-wrap h-auto w-full max-w-5xl mx-auto gap-3 mb-12">
                   {isSuperAdmin && <TabsTrigger value="members">Members</TabsTrigger>}
                   {isSuperAdmin && <TabsTrigger value="bank">Bank</TabsTrigger>}
+                  <TabsTrigger value="activities">Activities</TabsTrigger>
                   <TabsTrigger value="events-settings">Events Settings</TabsTrigger>
                   <TabsTrigger value="events-management">Events Management</TabsTrigger>
                   <TabsTrigger value="data-management">Data Management</TabsTrigger>
@@ -268,6 +270,11 @@ const Admin = () => {
                     <BankDashboard />
                   </TabsContent>
                 )}
+
+                {/* ── Activities: table, add/modify form, delete, media upload ── */}
+                <TabsContent value="activities">
+                  <Activities />
+                </TabsContent>
 
                 {/* ── Events Settings: Upcoming Events / Past Events ── */}
                 <TabsContent value="events-settings">

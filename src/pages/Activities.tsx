@@ -13,6 +13,7 @@ interface Activity {
   image?: string;
   image1?: string;
   image2?: string;
+  media?: { type: "image" | "video"; src: string }[];
   description: string;
   schedule: string;
   location?: string;
@@ -149,6 +150,23 @@ const Activities = () => {
                           alt={activity.title}
                           className="w-full h-72 object-cover rounded-xl shadow-lg"
                         />
+                      )}
+                      {(activity.media || []).map((m) =>
+                        m.type === "video" ? (
+                          <video
+                            key={m.src}
+                            src={`/api/media/${m.src}`}
+                            controls
+                            className="w-full h-72 object-cover rounded-xl shadow-lg"
+                          />
+                        ) : (
+                          <img
+                            key={m.src}
+                            src={`/api/media/${m.src}`}
+                            alt={activity.title}
+                            className="w-full h-72 object-cover rounded-xl shadow-lg"
+                          />
+                        )
                       )}
                       {!activity.image1 && activity.image && (
                         <img
