@@ -31,9 +31,16 @@ const toRow = (a) => ({
   schedule: a.schedule || "",
   location: a.location || "",
   participationOptions: a.participation_options || [],
+  onlineYoga: a.online_yoga || [],
+  inPersonYoga: a.in_person_yoga || [],
   benefits: a.benefits || [],
   sortOrder: a.sort_order,
-  legacyImages: [a.image1, a.image2].filter(Boolean), // seeded images stored on disk
+  // image1/image2 columns (seeded or older images, served from /activity-images
+  // or /api/media). `slot` tells the delete endpoint which column to clear.
+  legacyImages: [
+    a.image1 ? { slot: "image1", src: a.image1 } : null,
+    a.image2 ? { slot: "image2", src: a.image2 } : null,
+  ].filter(Boolean),
   media: Array.isArray(a.media) ? a.media : [],
 });
 
@@ -51,15 +58,16 @@ router.get("/", async (_req, res) => {
 // Add a new activity
 router.post("/", async (req, res) => {
   try {
-    const { title, description, schedule, location, participationOptions, benefits } = req.body;
+    const { title, description, schedule, location, participationOptions, onlineYoga, inPersonYoga, benefits, sortOrder } = req.body;
     if (!title || !String(title).trim()) return res.status(400).json({ message: "Title is required" });
 
     const { rows: max } = await pool.query("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM kutumb_activities");
+    const order = Number.isInteger(Number(sortOrder)) && String(sortOrder ?? "").trim() !== "" ? Number(sortOrder) : max[0].next;
     const { rows } = await pool.query(
-      `INSERT INTO kutumb_activities (title, description, schedule, location, participation_options, benefits, sort_order)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      `INSERT INTO kutumb_activities (title, description, schedule, location, participation_options, online_yoga, in_person_yoga, benefits, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [String(title).trim(), description || "", schedule || "", location || null,
-       toList(participationOptions), toList(benefits), max[0].next]
+       toList(participationOptions), toList(onlineYoga), toList(inPersonYoga), toList(benefits), order]
     );
     res.status(201).json(toRow(rows[0]));
   } catch (err) {
@@ -71,15 +79,18 @@ router.post("/", async (req, res) => {
 // Modify an existing activity (text fields only; media has its own endpoints)
 router.put("/:id", async (req, res) => {
   try {
-    const { title, description, schedule, location, participationOptions, benefits } = req.body;
+    const { title, description, schedule, location, participationOptions, onlineYoga, inPersonYoga, benefits, sortOrder } = req.body;
     if (!title || !String(title).trim()) return res.status(400).json({ message: "Title is required" });
+    const hasOrder = String(sortOrder ?? "").trim() !== "" && Number.isInteger(Number(sortOrder));
 
     const { rows } = await pool.query(
       `UPDATE kutumb_activities SET title=$1, description=$2, schedule=$3, location=$4,
-         participation_options=$5, benefits=$6
-       WHERE id=$7 RETURNING *`,
+         participation_options=$5, online_yoga=$6, in_person_yoga=$7, benefits=$8,
+         sort_order = COALESCE($9, sort_order)
+       WHERE id=$10 RETURNING *`,
       [String(title).trim(), description || "", schedule || "", location || null,
-       toList(participationOptions), toList(benefits), Number(req.params.id)]
+       toList(participationOptions), toList(onlineYoga), toList(inPersonYoga), toList(benefits),
+       hasOrder ? Number(sortOrder) : null, Number(req.params.id)]
     );
     if (rows.length === 0) return res.status(404).json({ message: "Activity not found" });
     res.json(toRow(rows[0]));
@@ -148,6 +159,20 @@ router.post("/:id/media/delete", async (req, res) => {
     res.json(toRow(out[0]));
   } catch (err) {
     console.error("ACTIVITIES ADMIN MEDIA DELETE ERROR:", err);
+    res.status(500).json({ message: "Delete failed" });
+  }
+});
+
+// Remove one of the original image1 / image2 images
+router.post("/:id/legacy-image/delete", async (req, res) => {
+  try {
+    const { slot } = req.body;
+    if (slot !== "image1" && slot !== "image2") return res.status(400).json({ message: "Invalid image slot" });
+    const { rows } = await pool.query(`UPDATE kutumb_activities SET ${slot} = NULL WHERE id=$1 RETURNING *`, [Number(req.params.id)]);
+    if (rows.length === 0) return res.status(404).json({ message: "Activity not found" });
+    res.json(toRow(rows[0]));
+  } catch (err) {
+    console.error("ACTIVITIES ADMIN LEGACY IMAGE DELETE ERROR:", err);
     res.status(500).json({ message: "Delete failed" });
   }
 });
