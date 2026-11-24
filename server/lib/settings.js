@@ -86,7 +86,7 @@ export const SETTINGS_SCHEMA = [
   { group: "Bank File Drop Box (Google Drive)", key: "gdrive_after_import", label: "After import: trash (recoverable 30 days) or delete (permanent)", secret: false, default: "trash" },
   { group: "Bank File Drop Box (Google Drive)", key: "gdrive_client_id", label: "Optional server-side polling — Google OAuth Client ID", secret: false },
   { group: "Bank File Drop Box (Google Drive)", key: "gdrive_client_secret", label: "Optional server-side polling — Google OAuth Client Secret", secret: true },
-  { group: "Bank File Drop Box (Google Drive)", key: "gdrive_poll_minutes", label: "Optional server-side polling — check every N minutes", secret: false, default: "5" },
+  { group: "Bank File Drop Box (Google Drive)", key: "gdrive_poll_minutes", label: "Optional server-side polling — check every N minutes (minimum 60, to let the database sleep)", secret: false, default: "60" },
   // Event Media Drop Box: shared Drive folder where volunteers upload event
   // photos/videos, each event in its own sub-folder. Opened from the footer
   // link (after a prompt asking them to create/open the event's folder).

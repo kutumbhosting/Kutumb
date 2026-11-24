@@ -35,6 +35,7 @@ import {
   GOOGLE_SHEET_MIME,
 } from "./googleDrive.js";
 
+const MIN_POLL_MINUTES = 60;
 export const SUPPORTED_EXT = /\.(csv|xlsx|xls)$/i;
 let running = false;
 let timer = null;
@@ -212,8 +213,11 @@ export async function pollDriveFolder({ admin = null } = {}) {
 export async function startDriveWatcher() {
   if (timer) clearInterval(timer);
   timer = null;
-  let minutes = Number(await getSetting("gdrive_poll_minutes").catch(() => null)) || 5;
-  minutes = Math.min(Math.max(minutes, 1), 1440);
+  let minutes = Number(await getSetting("gdrive_poll_minutes").catch(() => null)) || MIN_POLL_MINUTES;
+  // Every poll queries Postgres, and Neon only sleeps after ~5 idle minutes,
+  // so polling faster than hourly keeps the database (and the CU bill) awake
+  // all day. Admins can still use "Check now" for an immediate run.
+  minutes = Math.min(Math.max(minutes, MIN_POLL_MINUTES), 1440);
 
   const tick = () =>
     pollDriveFolder().catch((err) => {

@@ -1,6 +1,6 @@
 // server/lib/registrationScheduler.js
 //
-// Automatic registration emails, checked every 10 minutes and acted on once
+// Automatic registration emails, checked once an hour and acted on once
 // the configured hour (default 10:00 Sydney time) has passed each day:
 //
 //   • Payment reminder — on the reminder days (default Mon & Thu), to every
@@ -60,7 +60,6 @@ const LOCK_KEY = "kutumb_registration_scheduler";
 const COUPON_LOCK_KEY = "kutumb_coupon_part_payment_emails";
 
 let timer = null;
-let checkinCodeTimer = null;
 let lastRun = null;
 
 /* ── Sydney calendar helpers ─────────────────────────────────────────── */
@@ -633,27 +632,21 @@ export async function getSchedulerStatus() {
 
 export function startRegistrationScheduler() {
   if (timer) clearInterval(timer);
+  // Neon suspends an idle database after ~5 minutes, but every query resets
+  // that clock. These jobs therefore run on ONE slow hourly heartbeat (the
+  // other background timers use the same 60-minute cadence, so they all land
+  // inside a single short wake-up) instead of every 1–10 minutes, which kept
+  // the database awake 24/7 and burned the compute-hour (CU) allowance.
   const tick = () => {
     runCouponPartPaymentEmails().catch((err) => console.error("Coupon part-payment email error:", err.message));
     runRegistrationEmails().catch((err) => console.error("Registration email scheduler error:", err.message));
-  };
-  timer = setInterval(tick, 10 * 60_000);
-  timer.unref?.();
-  setTimeout(tick, 60_000).unref?.();
-  console.log("⏰ Registration emails: reminders, auto-cancel and day-before welcome and coupon part-payment emails checked every 10 min");
-
-  // Temporary check-in login codes (see server/lib/checkinCodes.js) are also
-  // lazily deleted the moment an expired one is actually tried, but that
-  // only catches codes someone still attempts to use. This sweep runs on
-  // its own, much tighter cadence so a batch's row disappears from the
-  // database within a minute of its expiry, not up to 10 minutes later —
-  // matching the admin table, which hides expired rows client-side the
-  // moment the clock runs out.
-  if (checkinCodeTimer) clearInterval(checkinCodeTimer);
-  const checkinTick = () => {
+    // Expired check-in login codes are also deleted lazily the moment one is
+    // tried (see checkinCodes.js) and hidden client-side once expired, so a
+    // sweep once an hour is plenty to tidy leftovers.
     cleanupExpiredCheckinCodes().catch((err) => console.error("Check-in code cleanup error:", err.message));
   };
-  checkinCodeTimer = setInterval(checkinTick, 60_000);
-  checkinCodeTimer.unref?.();
-  setTimeout(checkinTick, 5_000).unref?.();
+  timer = setInterval(tick, 60 * 60_000);
+  timer.unref?.();
+  setTimeout(tick, 60_000).unref?.();
+  console.log("⏰ Registration emails, auto-cancel, coupon part-payment emails and check-in code cleanup checked every 60 min");
 }
