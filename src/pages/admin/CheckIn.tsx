@@ -91,7 +91,9 @@ export default function CheckIn({ groupedEvents }: CheckInProps) {
   // another admin, say) and rows the server has already cleaned up both
   // stay in sync without the admin needing to click Refresh.
   useEffect(() => {
-    const t = setInterval(() => loadCodeBatches(), 60_000);
+    const t = setInterval(() => {
+      if (!document.hidden) loadCodeBatches();
+    }, 5 * 60_000);
     return () => clearInterval(t);
   }, []);
 
