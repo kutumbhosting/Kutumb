@@ -53,6 +53,9 @@ import openfeedRoutes from "./routes/openfeed.routes.js";
 import bankDashboardRoutes from "./routes/bankDashboard.routes.js";
 import { startOpenfeedAutoSync } from "./lib/openfeedSync.js";
 import { startDriveWatcher } from "./lib/driveStatementWatcher.js";
+import dbFailoverRoutes from "./routes/dbFailover.routes.js";
+import { failover } from "./db/pool.js";
+import { startDbSync } from "./db/dbsync.js";
 import couponsRoutes from "./routes/coupons.routes.js";
 import registrationExtrasRoutes from "./routes/registrationExtras.routes.js";
 import { syncRegistrationAttendees } from "./lib/attendees.js";
@@ -81,6 +84,7 @@ app.use(cookieParser());
 ------------------------------ */
 app.use("/api/admin-auth", adminAuthRoutes);
 app.use("/api/admin-console", adminConsoleRoutes);
+app.use("/api/db-failover", dbFailoverRoutes);
 app.use("/api/db-tables", dbTablesRoutes);
 app.use("/api/ticketing", ticketingRoutes);
 app.use("/api/checkin", checkinRoutes);
@@ -271,6 +275,24 @@ async function archiveExpiredUpcomingEvents() {
 
 app.get("/ping", (req, res) => {
   res.send("pong");
+});
+
+// Health check. Plain /api/health never touches the database (so an uptime
+// monitor can't keep Neon awake); /api/health?deep=1 also runs SELECT 1.
+app.get("/api/health", async (req, res) => {
+  const body = { status: "ok", database_checked: false, failover: { active: failover.active, count: failover.urls.length } };
+  if (req.query.deep) {
+    body.database_checked = true;
+    try {
+      await pool.query("SELECT 1");
+      body.database = "ok";
+    } catch {
+      body.database = "unavailable";
+      body.status = "degraded";
+    }
+    body.failover = { active: failover.active, count: failover.urls.length };
+  }
+  res.status(body.status === "ok" ? 200 : 503).json(body);
 });
 
 /* -----------------------------
@@ -2115,6 +2137,9 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Server running on", PORT);
 
+  // Standby database failover/fail-back loops (no-op unless DATABASE_STANDBY_URLS is set).
+  startDbSync();
+
   // Bank statement drop folder (Google Drive) — only polls once connected.
   startDriveWatcher().catch((err) => console.error("Drive watcher failed to start:", err.message));
   // Payment reminders, auto-cancellation and day-before welcome emails.
@@ -2129,7 +2154,7 @@ app.listen(PORT, "0.0.0.0", () => {
       console.log(`✅ Email configured and verified (sending from ${status.from})`);
     } else {
       console.warn(`⚠️  Email is configured but the connection failed: ${status.error}`);
-      console.warn("    Double-check SMTP_HOST/PORT/USER/PASS in .env - see EMAIL-SETUP.md");
+      console.warn("    Double-check SMTP_HOST/PORT/USER/PASS in .env - see docs/EMAIL-SETUP.md");
     }
   });
 

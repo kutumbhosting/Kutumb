@@ -6,7 +6,8 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
-import { pool } from "./pool.js";
+import { pool, failover } from "./pool.js";
+import { ensureSchema } from "./dbsync.js";
 import { importAllMedia } from "./importMedia.js";
 import { getNextMembershipNumber } from "../lib/counters.js";
 
@@ -24,6 +25,18 @@ async function run() {
   console.log("🏗️  Applying schema (creating tables if they don't exist)...");
   await pool.query(sql);
   console.log("✅ Schema is up to date.");
+
+  // Keep standby databases (DATABASE_STANDBY_URLS) on the same schema, so a
+  // failover never lands on an older table layout. Never blocks a deploy.
+  for (let i = 0; i < failover.urls.length; i++) {
+    if (i === failover.active) continue;
+    try {
+      await ensureSchema(i);
+      console.log(`✅ Standby database ${i} schema is up to date.`);
+    } catch (err) {
+      console.warn(`⚠️  Could not update the schema of standby database ${i}: ${err.message}`);
+    }
+  }
 
   // One-time seed of the data that used to live in the JSON files. Several
   // of those tables (past events, upcoming events, donations, activities,

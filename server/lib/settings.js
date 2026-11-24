@@ -92,7 +92,7 @@ export const SETTINGS_SCHEMA = [
   // link (after a prompt asking them to create/open the event's folder).
   { group: "Event Media Drop Box", key: "media_dropbox_folder_id", label: "Drive Folder ID (or paste the folder link)", secret: false, default: "1xWnGVgBdTIuBFD2Gj8JjT0y0QgMJijJf" },
   // Live NAB feed via openfeed (Consumer Data Right) — see
-  // server/lib/openfeedClient.js and OPENFEED-SETUP.md. The two IDs come from
+  // server/lib/openfeedClient.js and docs/OPENFEED-SETUP.md. The two IDs come from
   // registering the app at app.openfeed.au; keys, tokens and the grant are
   // created and stored automatically (hidden) by the setup panel.
   { group: "Live Bank Feed (openfeed)", key: "openfeed_client_id", label: "OAuth2 Client ID (app-… from openfeed)", secret: false },

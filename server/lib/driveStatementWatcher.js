@@ -6,7 +6,7 @@
 //
 // Two ways a file reaches importStatementFile(), both ending the same way:
 //
-//   A. Google Apps Script (RECOMMENDED — see DRIVE-STATEMENT-SETUP.md).
+//   A. Google Apps Script (RECOMMENDED — see docs/DRIVE-STATEMENT-SETUP.md).
 //      A small script in kutumbhosting@gmail.com's Google account runs on
 //      Google's servers every 5 minutes, sends each file to
 //      POST /api/events/reconcile/drive/push and bins the file once the
