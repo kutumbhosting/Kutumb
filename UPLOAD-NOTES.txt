@@ -5,10 +5,10 @@ Kutumb update pack - copy these over your repo (same paths, overwrite):
   server/server.js
   server/lib/registrationScheduler.js, driveStatementWatcher.js, settings.js
   src/pages/admin/CheckIn.tsx
-  docs/   (8 setup guides moved here + new DATABASE-FAILOVER.md)
+  docs/   (ALL .md files now live here, incl. README.md + new DATABASE-FAILOVER.md)
 
 Then DELETE these from the repo root (now in docs/ or unneeded):
-  CHANGES.md  README-CHANGES.md  bun.lockb
+  README.md  CHANGES.md  README-CHANGES.md  bun.lockb
   BANK-FEED-SETUP.md  DATABASE-MIGRATION.md  DRIVE-STATEMENT-SETUP.md  EMAIL-SETUP.md
   OPENFEED-SETUP.md  REGISTRATION-EMAILS.md  RUNNING-LOCALLY.md  WHATSAPP-SETUP.md
 
