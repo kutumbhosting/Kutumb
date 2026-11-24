@@ -365,7 +365,16 @@ function AuditLogTab() {
 
 function DatabaseTab() {
   const { toast } = useToast();
-  const [status, setStatus] = useState<{ current: string | null; connected: boolean } | null>(null);
+  const [status, setStatus] = useState<{
+    current: string | null;
+    connected: boolean;
+    active?: number;
+    standbys?: { number: number; masked: string | null; isActive: boolean }[];
+  } | null>(null);
+  const [backupStr, setBackupStr] = useState("");
+  const [backupTest, setBackupTest] = useState<{ ok: boolean; message: string } | null>(null);
+  const [backupBusy, setBackupBusy] = useState<"" | "testing" | "saving">("");
+  const [syncInfo, setSyncInfo] = useState<any>(null);
   const [newConnStr, setNewConnStr] = useState("");
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -373,7 +382,60 @@ function DatabaseTab() {
   const [saveResult, setSaveResult] = useState<string | null>(null);
 
   const load = () => api("/api/admin-console/database").then(setStatus).catch(() => {});
-  useEffect(() => { load(); }, []);
+  const loadSync = () => api("/api/db-failover/status").then(setSyncInfo).catch(() => {});
+  useEffect(() => { load(); loadSync(); }, []);
+
+  const testBackup = async () => {
+    if (!backupStr.trim()) return;
+    setBackupBusy("testing");
+    setBackupTest(null);
+    try {
+      setBackupTest(await api("/api/admin-console/database/test", { method: "POST", body: JSON.stringify({ connectionString: backupStr }) }));
+    } catch (err: any) {
+      setBackupTest({ ok: false, message: err.message });
+    } finally {
+      setBackupBusy("");
+    }
+  };
+
+  const saveBackup = async () => {
+    setBackupBusy("saving");
+    try {
+      const r = await api("/api/admin-console/database/standby", { method: "PUT", body: JSON.stringify({ connectionString: backupStr }) });
+      toast({ title: "Backup database added", description: r.message });
+      setBackupStr("");
+      setBackupTest(null);
+      await load();
+      setTimeout(loadSync, 3000);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setBackupBusy("");
+    }
+  };
+
+  const copyToBackup = async (n: number) => {
+    try {
+      const r = await api(`/api/db-failover/sync?source=0&target=${n}`, { method: "POST" });
+      toast({ title: "Copy started", description: r.message });
+      setTimeout(loadSync, 4000);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const removeBackup = async (n: number) => {
+    if (!window.confirm(`Remove backup database ${n}? The data inside it is not deleted.`)) return;
+    try {
+      const r = await api(`/api/admin-console/database/standby/${n}`, { method: "DELETE" });
+      toast({ title: "Removed", description: r.message });
+      load();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const lastCopy = syncInfo?.last?.results?.length ? syncInfo.last.results[syncInfo.last.results.length - 1] : null;
 
   const test = async () => {
     if (!newConnStr.trim()) return;
@@ -453,6 +515,76 @@ function DatabaseTab() {
         </div>
         {!testResult?.ok && newConnStr.trim() && (
           <p className="text-xs text-muted-foreground mt-1">Test the connection successfully before saving.</p>
+        )}
+      </div>
+
+      <div className="border-t pt-6">
+        <h3 className="font-bold text-lg mb-2">Backup database (automatic failover)</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          Add a second Postgres/Neon database (ideally from a different Neon account). If the main database runs out of
+          quota or can't be reached, the website switches to the backup by itself and switches back when the main
+          one recovers. The main database is copied to the backup once a day, and once right after you add it.
+        </p>
+
+        {status?.standbys?.length ? (
+          <div className="space-y-2 mb-4">
+            {status.standbys.map((sb) => (
+              <div key={sb.number} className="flex flex-wrap items-center gap-2 border rounded-md p-2">
+                <span className="text-sm font-medium">Backup {sb.number}</span>
+                {sb.isActive && <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">in use now</span>}
+                <span className="text-sm text-muted-foreground font-mono break-all">{sb.masked}</span>
+                <span className="ml-auto flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => copyToBackup(sb.number)} disabled={status.active !== 0}>
+                    Copy main → backup now
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => removeBackup(sb.number)} disabled={sb.isActive}>
+                    Remove
+                  </Button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground mb-3">No backup database set up yet.</p>
+        )}
+
+        {status && status.active !== undefined && status.active !== 0 && (
+          <p className="text-sm text-amber-600 mb-3">
+            ⚠️ The main database is not in use — the website is running on backup {status.active}. It moves back
+            automatically (checked every 30 minutes) and merges the data.
+          </p>
+        )}
+
+        <Label>Backup connection string</Label>
+        <PasswordInput
+          placeholder="postgresql://user:password@host/db?sslmode=require"
+          value={backupStr}
+          onChange={(e) => { setBackupStr(e.target.value); setBackupTest(null); }}
+          className="font-mono text-sm"
+        />
+        {backupTest && (
+          <p className={`text-sm mt-2 ${backupTest.ok ? "text-green-600" : "text-destructive"}`}>
+            {backupTest.ok ? "✅ " : "❌ "}{backupTest.message}
+          </p>
+        )}
+        <div className="flex gap-2 mt-3">
+          <Button variant="outline" onClick={testBackup} disabled={backupBusy !== "" || !backupStr.trim()}>
+            {backupBusy === "testing" ? "Testing..." : "Test connection"}
+          </Button>
+          <Button onClick={saveBackup} disabled={backupBusy !== "" || !backupStr.trim() || !backupTest?.ok}>
+            {backupBusy === "saving" ? "Saving..." : "Add as backup database"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Works straight away, no restart needed. If your host (Render, Fly, …) uses its own environment variables,
+          also set <span className="font-mono">DATABASE_STANDBY_URLS</span> there so it survives a redeploy.
+        </p>
+
+        {lastCopy && (
+          <p className="text-xs text-muted-foreground mt-3">
+            Last copy {lastCopy.from} → {lastCopy.to}: {lastCopy.ok ? `✅ ${lastCopy.rows} rows` : `❌ ${lastCopy.error}`}
+            {lastCopy.at ? ` (${new Date(lastCopy.at).toLocaleString()})` : ""}
+          </p>
         )}
       </div>
     </div>

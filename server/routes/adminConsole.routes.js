@@ -1,6 +1,7 @@
 import { Router } from "express";
 import pg from "pg";
-import { pool } from "../db/pool.js";
+import { pool, failover } from "../db/pool.js";
+import { mergeNow } from "../db/dbsync.js";
 import { buildPoolConfig } from "../db/pool.js";
 import { readEnvFile, setEnvVar } from "../lib/envFile.js";
 import { requireSuperAdmin, hashPassword } from "../lib/auth.js";
@@ -136,7 +137,12 @@ router.get("/database", requireSuperAdmin, async (req, res) => {
   } catch {
     connected = false;
   }
-  res.json({ current, connected });
+  res.json({
+    current,
+    connected,
+    active: failover.active,
+    standbys: failover.urls.slice(1).map((u, i) => ({ number: i + 1, masked: maskConnectionString(u), isActive: failover.active === i + 1 })),
+  });
 });
 
 // Tests a candidate connection string against a throwaway pool (never the
@@ -185,6 +191,65 @@ router.put("/database", requireSuperAdmin, async (req, res) => {
     message: "Saved to .env. Restart the server (stop app.cmd and run it again) for this to take effect.",
     requiresRestart: true,
   });
+});
+
+/* -------- Backup (standby) databases --------
+   Stored as DATABASE_STANDBY_URLS (comma separated) in .env. A newly added
+   one is usable immediately (appended to the live list) and gets a first
+   copy of the main database in the background. Removing one needs a restart. */
+function standbyList() {
+  return failover.urls.slice(1);
+}
+
+router.put("/database/standby", async (req, res) => {
+  const trimmed = String(req.body?.connectionString || "").trim();
+  if (!trimmed) return res.status(400).json({ message: "connectionString is required" });
+  if (/[\s,]/.test(trimmed)) return res.status(400).json({ message: "Paste one connection string only (no spaces or commas)." });
+  if (failover.urls.includes(trimmed)) return res.status(400).json({ message: "This database is already configured." });
+
+  const testPool = new pg.Pool({ ...buildPoolConfig(trimmed), max: 1, connectionTimeoutMillis: 8000 });
+  try {
+    await testPool.query("SELECT 1");
+  } catch (err) {
+    return res.status(400).json({ message: `Could not connect with this string: ${err.message}` });
+  } finally {
+    await testPool.end().catch(() => {});
+  }
+
+  try {
+    setEnvVar("DATABASE_STANDBY_URLS", [...standbyList(), trimmed].join(","));
+  } catch (err) {
+    return res.status(500).json({ message: `Connected fine, but couldn't save to .env: ${err.message}` });
+  }
+  failover.urls.push(trimmed); // usable straight away
+  const number = failover.urls.length - 1;
+
+  let copying = false;
+  if (failover.active === 0) {
+    copying = true;
+    mergeNow(0, number).catch((err) => console.error("First copy to the new backup database failed:", err.message));
+  }
+  await logAudit(req.admin, "database.standby_add", null, { host: maskConnectionString(trimmed) });
+  res.json({
+    message: copying
+      ? `Backup database ${number} added. Copying the main database into it now (check the status below). If your host sets DATABASE_STANDBY_URLS as an environment variable, add it there too so it survives a redeploy.`
+      : `Backup database ${number} added.`,
+    number,
+  });
+});
+
+router.delete("/database/standby/:number", async (req, res) => {
+  const n = Number(req.params.number);
+  const list = standbyList();
+  if (!Number.isInteger(n) || n < 1 || n > list.length) return res.status(404).json({ message: "No such backup database." });
+  if (failover.active === n) return res.status(400).json({ message: "The app is running on this database right now — fail back to the main database first." });
+  try {
+    setEnvVar("DATABASE_STANDBY_URLS", list.filter((_, i) => i + 1 !== n).join(","));
+  } catch (err) {
+    return res.status(500).json({ message: `Couldn't update .env: ${err.message}` });
+  }
+  await logAudit(req.admin, "database.standby_remove", null, { number: n });
+  res.json({ message: "Removed from .env. Restart the server for this to take effect (also remove it from your host's environment variables if set there).", requiresRestart: true });
 });
 
 /* -------- Members drop-in import (manual trigger, no restart needed) --------

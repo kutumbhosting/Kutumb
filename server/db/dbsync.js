@@ -312,7 +312,8 @@ export async function warmStandbys() {
 let started = false;
 /** Starts the failover hooks and the (slow) background loops. Safe to call once at boot. */
 export function startDbSync() {
-  if (started || !failover.enabled) return;
+  // Always register: a backup database can be added from the Admin Console without a restart.
+  if (started) return;
   started = true;
 
   failover.events.on("failover", (oldI, newI) => {
@@ -337,8 +338,10 @@ export function startDbSync() {
     t.unref?.();
     setTimeout(tick, 15 * 60_000).unref?.();
   }
-  console.log(
-    `🛟 Database failover on: ${failover.urls.length} databases, active #${failover.active}; ` +
-    `standby sync every ${warmHours || "never"} h, fail-back check every ${failbackMin || "never"} min`
-  );
+  if (failover.enabled) {
+    console.log(
+      `🛟 Database failover on: ${failover.urls.length} databases, active #${failover.active}; ` +
+      `standby sync every ${warmHours || "never"} h, fail-back check every ${failbackMin || "never"} min`
+    );
+  }
 }

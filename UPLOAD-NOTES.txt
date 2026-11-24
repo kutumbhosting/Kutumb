@@ -1,0 +1,15 @@
+Kutumb update pack - copy these over your repo (same paths, overwrite):
+
+  server/db/pool.js, migrate.js, dbsync.js (new), sync-standby.js (new)
+  server/routes/dbFailover.routes.js (new), adminConsole.routes.js
+  server/server.js
+  server/lib/registrationScheduler.js, driveStatementWatcher.js, settings.js
+  src/pages/admin/CheckIn.tsx, PlatformConsole.tsx
+  docs/   (ALL .md files now live here, incl. README.md + new DATABASE-FAILOVER.md)
+
+Then DELETE these from the repo root (now in docs/ or unneeded):
+  README.md  CHANGES.md  README-CHANGES.md  bun.lockb
+  BANK-FEED-SETUP.md  DATABASE-MIGRATION.md  DRIVE-STATEMENT-SETUP.md  EMAIL-SETUP.md
+  OPENFEED-SETUP.md  REGISTRATION-EMAILS.md  RUNNING-LOCALLY.md  WHATSAPP-SETUP.md
+
+Backup database: Admin -> API Keys -> Database -> "Backup database" (see docs/DATABASE-FAILOVER.md).

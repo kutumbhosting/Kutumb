@@ -10,6 +10,15 @@ With no standby configured nothing changes — it behaves like a plain connectio
 
 ## One-time setup
 
+**Easiest — from the Admin Console:** Admin → API Keys → **Database** →
+*Backup database (automatic failover)*. Paste the second database's connection
+string, **Test connection**, then **Add as backup database**. It works straight
+away (no restart) and the main database is copied into it in the background.
+The same section lists your backups, shows when the app is running on one,
+and has **Copy main → backup now** and **Remove** buttons.
+
+**Or by hand:**
+
 1. Create a second Neon project/account. Copy its connection string.
 2. Add to `.env` (and your host's environment variables):
 
@@ -26,8 +35,11 @@ With no standby configured nothing changes — it behaves like a plain connectio
    Numbers: `0` = `DATABASE_URL`, `1` = first standby, `2` = second …
 4. Restart. The log shows `🛟 Database failover on: 2 databases, active #0`.
 
-`node server/db/migrate.js` (run on every deploy) also keeps the standbys on the
-same table layout.
+Note: the Admin Console saves to the `.env` file. If your host (Render, Fly …)
+supplies settings as its own environment variables, also set
+`DATABASE_STANDBY_URLS` there so the backup survives a redeploy.
+
+`node server/db/migrate.js` (run on every deploy) also keeps the standbys on the same table layout.
 
 ## What happens, and when
 
